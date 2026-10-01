@@ -39,6 +39,7 @@ func normalizeStrategy(strategy Strategy) Strategy {
 type ServiceOptions struct {
 	DefaultProvider string
 	RouterModel     string
+	SynthesisModel  string
 	RoutingPolicy   RoutingPolicy
 	Timeout         time.Duration
 	HealthProbe     func(context.Context, string) bool
@@ -105,7 +106,7 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			routing = &decision
 		}
 	case StrategyEnsemble:
-		return nil, appError(ErrInvalidInput, "ensemble strategy is not available", nil)
+		return s.completeEnsemble(callCtx, request)
 	default:
 		return nil, appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
 	}
@@ -129,15 +130,44 @@ func (s *Service) CompleteStream(ctx context.Context, request CompletionRequest,
 	if err := validateMessages(request.Messages); err != nil {
 		return err
 	}
-	provider, model, err := s.selectProvider(request)
-	if err != nil {
-		return err
-	}
 	if callback == nil {
 		return appError(ErrInvalidInput, "stream callback is required", nil)
 	}
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
+	strategy := normalizeStrategy(request.Strategy)
+	var err error
+	if strategy == StrategyEnsemble {
+		response, err := s.completeEnsemble(callCtx, request)
+		if err != nil {
+			return err
+		}
+		provider := s.registry.GetForModel(response.Model)
+		if provider == nil {
+			return appError(ErrRouting, "synthesis provider is unavailable", nil)
+		}
+		messages := synthesisMessages(request.Messages, response.Routing, nil)
+		// The synthesis response is already available. Stream its final answer as one chunk.
+		_ = messages
+		callback(response.Choices[0].Message.Content)
+		return nil
+	}
+	var provider Provider
+	var model string
+	if strategy == StrategyAuto {
+		candidate, _, err := s.selectAutomatic(callCtx, request)
+		if err != nil {
+			return err
+		}
+		provider, model = s.registry.Get(candidate.Provider), candidate.Model
+	} else if strategy == StrategyClassic {
+		provider, model, err = s.selectProvider(request)
+	} else {
+		return appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
+	}
+	if err != nil {
+		return err
+	}
 	if err := provider.ChatCompletionStream(callCtx, request.Messages, model, callback); err != nil {
 		return s.contextOrUpstreamError(callCtx, err)
 	}

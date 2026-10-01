@@ -67,6 +67,7 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 	service, err := app.NewService(registry, app.ServiceOptions{
 		DefaultProvider: cfg.DefaultProvider,
 		RouterModel:     cfg.RouterModel,
+		SynthesisModel:  cfg.SynthesisModel,
 		RoutingPolicy:   policy,
 		Timeout:         cfg.Timeout,
 	})
