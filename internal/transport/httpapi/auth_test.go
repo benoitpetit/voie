@@ -12,7 +12,7 @@ import (
 func TestBearerAuthenticationProtectsAllHTTPRoutes(t *testing.T) {
 	service, _ := httpTestService(t)
 	handler := NewHandler(service, &config.Config{Host: "0.0.0.0", Port: "8080", Timeout: time.Minute, APIToken: "secret"})
-	for _, path := range []string{"/", "/health", "/v1/models", "/v1/providers", "/v1/chat/completions"} {
+	for _, path := range []string{"/", "/health", "/v1/models", "/v1/providers", "/v1/chat/completions", "/v1/conversations", "/v1/conversations/id"} {
 		t.Run(path, func(t *testing.T) {
 			r := httptest.NewRecorder()
 			handler.ServeHTTP(r, httptest.NewRequest(http.MethodGet, path, nil))

@@ -15,10 +15,14 @@ import (
 )
 
 type chatRequest struct {
-	Model    string        `json:"model"`
-	Provider string        `json:"provider,omitempty"`
-	Messages []app.Message `json:"messages"`
-	Stream   bool          `json:"stream,omitempty"`
+	Model          string        `json:"model"`
+	Provider       string        `json:"provider,omitempty"`
+	Strategy       app.Strategy  `json:"strategy,omitempty"`
+	Task           string        `json:"task,omitempty"`
+	Models         []string      `json:"models,omitempty"`
+	ConversationID string        `json:"conversation_id,omitempty"`
+	Messages       []app.Message `json:"messages"`
+	Stream         bool          `json:"stream,omitempty"`
 }
 
 func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
@@ -29,6 +33,8 @@ func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
 	mux.HandleFunc("/v1/chat/completions", handler.chatCompletions)
 	mux.HandleFunc("/v1/models", handler.models)
 	mux.HandleFunc("/v1/providers", handler.providers)
+	mux.HandleFunc("/v1/conversations", handler.conversations)
+	mux.HandleFunc("/v1/conversations/", handler.conversation)
 	var token string
 	if cfg != nil {
 		token = cfg.APIToken
@@ -48,7 +54,7 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Bad request: invalid JSON — "+err.Error())
 		return
 	}
-	appRequest := app.CompletionRequest{Model: request.Model, Provider: request.Provider, Messages: request.Messages}
+	appRequest := app.CompletionRequest{Model: request.Model, Provider: request.Provider, Strategy: request.Strategy, Task: request.Task, Models: request.Models, ConversationID: request.ConversationID, Messages: request.Messages}
 	if !request.Stream {
 		response, err := h.service.Complete(r.Context(), appRequest)
 		if err != nil {
@@ -64,7 +70,7 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, request app.CompletionRequest) {
 	started := false
 	completionID := "chatcmpl-" + randomID()
-	start := func() {
+	start := func(routing *app.RoutingInfo) {
 		if started {
 			return
 		}
@@ -75,13 +81,15 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		w.Header().Set("X-Accel-Buffering", "no")
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: request.Model,
+			ConversationID: request.ConversationID, Routing: routing,
 			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{Role: "assistant"}}},
 		})
 	}
-	err := h.service.CompleteStream(r.Context(), request, func(chunk string) {
-		start()
+	err := h.service.CompleteStreamWithInfo(r.Context(), request, func(chunk string, routing *app.RoutingInfo) {
+		start(routing)
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: request.Model,
+			ConversationID: request.ConversationID, Routing: routing,
 			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{Content: chunk}}},
 		})
 	})
@@ -89,7 +97,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		writeAppError(w, err)
 		return
 	}
-	start()
+	start(nil)
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
 	} else {
@@ -166,6 +174,16 @@ func writeAppError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, app.ErrInvalidInput), errors.Is(err, app.ErrUnknownModel), errors.Is(err, app.ErrProviderModelMismatch):
 		status = http.StatusBadRequest
+	case errors.Is(err, app.ErrRouting), errors.Is(err, app.ErrEnsembleInsufficient):
+		status = http.StatusBadRequest
+	case errors.Is(err, app.ErrConversationNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, app.ErrConversationConflict):
+		status = http.StatusConflict
+	case errors.Is(err, app.ErrConversationExpired):
+		status = http.StatusGone
+	case errors.Is(err, app.ErrConversationStore):
+		status = http.StatusInternalServerError
 	case errors.Is(err, app.ErrUnknownProvider):
 		status = http.StatusNotFound
 	case errors.Is(err, app.ErrProviderDisabled):

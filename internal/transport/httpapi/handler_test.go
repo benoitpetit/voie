@@ -13,6 +13,7 @@ import (
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
+	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
 )
 
 func TestHTTPRoutesPreserveJSONAndSSEShapes(t *testing.T) {
@@ -57,6 +58,77 @@ func TestHTTPRoutesPreserveJSONAndSSEShapes(t *testing.T) {
 	}
 	if !provider.streamCalled {
 		t.Fatal("provider stream method was not called")
+	}
+}
+
+func TestHTTPConversationLifecycle(t *testing.T) {
+	service, _ := httpTestService(t)
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	// A fresh service uses the same fake provider with the concrete local store.
+	registry := app.NewRegistry()
+	provider := &httpTestProvider{}
+	registry.Register("test", provider)
+	service, err = app.NewService(registry, app.ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	created := httptest.NewRecorder()
+	handler.ServeHTTP(created, httptest.NewRequest(http.MethodPost, "/v1/conversations", nil))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create=%d %s", created.Code, created.Body.String())
+	}
+	var conversation app.Conversation
+	if err = json.Unmarshal(created.Body.Bytes(), &conversation); err != nil {
+		t.Fatal(err)
+	}
+	if conversation.ID == "" || conversation.CreatedAt.IsZero() || conversation.ExpiresAt.IsZero() {
+		t.Fatalf("conversation=%+v", conversation)
+	}
+	list := httptest.NewRecorder()
+	handler.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/v1/conversations", nil))
+	if list.Code != http.StatusOK || strings.Contains(list.Body.String(), "turns") {
+		t.Fatalf("list=%d %s", list.Code, list.Body.String())
+	}
+	show := httptest.NewRecorder()
+	handler.ServeHTTP(show, httptest.NewRequest(http.MethodGet, "/v1/conversations/"+conversation.ID, nil))
+	if show.Code != http.StatusOK {
+		t.Fatalf("show=%d %s", show.Code, show.Body.String())
+	}
+	deleted := httptest.NewRecorder()
+	handler.ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/v1/conversations/"+conversation.ID, nil))
+	if deleted.Code != http.StatusNoContent {
+		t.Fatalf("delete=%d", deleted.Code)
+	}
+}
+
+func TestHTTPConversationCompletionReturnsConversationID(t *testing.T) {
+	registry := app.NewRegistry()
+	provider := &httpTestProvider{}
+	registry.Register("test", provider)
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	service, err := app.NewService(registry, app.ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := service.CreateConversation(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	body := `{"model":"model","conversation_id":"` + c.ID + `","messages":[{"role":"user","content":"hi"}]}`
+	r := httptest.NewRecorder()
+	handler.ServeHTTP(r, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), `"conversation_id":"`+c.ID+`"`) {
+		t.Fatalf("completion=%d %s", r.Code, r.Body.String())
 	}
 }
 

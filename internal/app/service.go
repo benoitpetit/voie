@@ -150,6 +150,15 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 }
 
 func (s *Service) CompleteStream(ctx context.Context, request CompletionRequest, callback func(string)) error {
+	if callback == nil {
+		return appError(ErrInvalidInput, "stream callback is required", nil)
+	}
+	return s.CompleteStreamWithInfo(ctx, request, func(chunk string, _ *RoutingInfo) { callback(chunk) })
+}
+
+// CompleteStreamWithInfo emits the route decision with each chunk so transports
+// can include it in their initial streaming event.
+func (s *Service) CompleteStreamWithInfo(ctx context.Context, request CompletionRequest, callback func(string, *RoutingInfo)) error {
 	if err := validateMessages(request.Messages); err != nil {
 		return err
 	}
@@ -165,15 +174,15 @@ func (s *Service) CompleteStream(ctx context.Context, request CompletionRequest,
 	strategy := normalizeStrategy(request.Strategy)
 	var routing *RoutingInfo
 	var streamText strings.Builder
-	streamCallback := func(chunk string) { streamText.WriteString(chunk); callback(chunk) }
+	streamCallback := func(chunk string) { streamText.WriteString(chunk); callback(chunk, routing) }
 	if strategy == StrategyEnsemble {
 		response, err := s.completeEnsemble(callCtx, request)
 		if err != nil {
 			return err
 		}
 		// The synthesis response is already available. Stream its final answer as one chunk.
-		streamCallback(response.Choices[0].Message.Content)
 		routing = response.Routing
+		streamCallback(response.Choices[0].Message.Content)
 	} else {
 		var provider Provider
 		var model string
