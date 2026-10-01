@@ -154,7 +154,7 @@ Returns local registry health without probing provider websites. The response in
 
 ## Local conversations
 
-Conversation storage is local SQLite, configured by `CONVERSATION_DB_PATH` (default `~/.config/voie/conversations.db`). `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days.
+Conversation storage is local SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days.
 
 - `POST /v1/conversations` creates a conversation and returns `201` with its ID and timestamps.
 - `GET /v1/conversations` returns summary rows without transcript contents.
@@ -200,4 +200,4 @@ Errors use this JSON envelope:
 
 Completions use the configured end-to-end `TIMEOUT` (seconds), defaulting to 120 seconds. Unknown model IDs are rejected instead of being silently sent to another provider.
 
-Routing and conversation configuration: `ROUTER_MODEL` chooses among eligible models, `SYNTHESIS_MODEL` produces ensemble output (fallback: router), `ROUTING_CONFIG_PATH` defaults to `~/.config/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `~/.config/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.
+Routing and conversation configuration: `ROUTER_MODEL` chooses among eligible models, `SYNTHESIS_MODEL` produces ensemble output (fallback: router), `ROUTING_CONFIG_PATH` defaults to `<user-config-dir>/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `<user-config-dir>/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.

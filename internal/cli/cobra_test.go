@@ -17,7 +17,7 @@ func TestRootHelpListsCommandsWithoutInitializingRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute root help: %v", err)
 	}
-	for _, expected := range []string{"Usage:", "chat", "conversations", "mcp", "models", "providers", "serve", "help"} {
+	for _, expected := range []string{"Usage:", "chat", "completion", "conversations", "mcp", "models", "providers", "serve", "help"} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("root help missing %q:\n%s", expected, stdout.String())
 		}
@@ -25,8 +25,22 @@ func TestRootHelpListsCommandsWithoutInitializingRuntime(t *testing.T) {
 	if initialized {
 		t.Fatal("root help initialized application runtime")
 	}
-	if strings.Contains(stdout.String(), "\n  completion ") {
-		t.Fatalf("unexpected unconfigured completion command in help:\n%s", stdout.String())
+}
+
+func TestCompletionCommandGeneratesShellScriptWithoutRuntime(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	initialized := false
+	if err := Execute(context.Background(), []string{"completion", "bash"}, nil, &stdout, &stderr, func() (Runtime, error) {
+		initialized = true
+		return nil, nil
+	}); err != nil {
+		t.Fatalf("generate bash completion: %v", err)
+	}
+	if initialized {
+		t.Fatal("completion command initialized application runtime")
+	}
+	if !strings.Contains(stdout.String(), "__complete") || !strings.Contains(stdout.String(), "voie") {
+		t.Fatalf("unexpected bash completion script:\n%s", stdout.String())
 	}
 }
 

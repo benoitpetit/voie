@@ -21,6 +21,7 @@ voie conversations create|list|show|delete
 voie models [--json]
 voie providers [--json]
 voie mcp
+voie completion SHELL
 voie version
 voie [--version|-v]
 voie update
@@ -33,6 +34,7 @@ voie --help
 voie help chat
 voie chat --help
 voie serve --help
+voie completion --help
 ```
 
 The root help includes examples for model discovery, `chat` with an argument or stdin, starting the API, and the MCP client command. The command help also includes focused examples:
@@ -48,9 +50,11 @@ voie serve --host 127.0.0.1 --port 8080
 voie mcp
 ```
 
-`chat` also accepts `-m` for `--model` and `-p` for `--provider`. Invalid commands and flags return an error and display usage. The command tree contains `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `version`, and `update`.
+`chat` also accepts `-m` for `--model` and `-p` for `--provider`. Invalid commands and flags return an error and display usage. The command tree contains `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `completion`, `version`, and `update`.
 
 `version`, `--version`, and `-v` print the executable's embedded build version without initializing providers. `update` checks GitHub for the newest stable release, downloads the matching asset and `checksums.txt`, verifies SHA-256, then replaces the current executable. Run it from a release build; development builds tagged `dev` are refused. Windows stages the checked executable and completes replacement after the current process exits. Updating may require write access to the current executable's directory.
+
+`completion` generates shell completion scripts with Cobra's built-in command. Run `voie completion bash`, `voie completion zsh`, `voie completion fish`, or `voie completion powershell`; generated scripts invoke the CLI's hidden completion endpoint, so install or source the output using your shell's normal completion setup.
 
 `serve` starts the HTTP API using configured `HOST` and `PORT`; flags override them for that run. A non-loopback host still requires `API_TOKEN`. Runtime configuration loads when a command runs, not when help is requested.
 
@@ -88,9 +92,11 @@ The commands use the same environment variables as the HTTP runtime:
 | `API_TOKEN` | empty | Required for non-loopback HTTP binds |
 | `ROUTER_MODEL` | empty | Model used for ambiguous automatic routing and ensemble selection |
 | `SYNTHESIS_MODEL` | empty | Ensemble synthesis model; defaults to `ROUTER_MODEL` |
-| `ROUTING_CONFIG_PATH` | `~/.config/voie/routing.json` | Local routing policy file |
-| `CONVERSATION_DB_PATH` | `~/.config/voie/conversations.db` | Local conversation database |
+| `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local routing policy file |
+| `CONVERSATION_DB_PATH` | `<user-config-dir>/voie/conversations.db` | Local conversation database |
 | `CONVERSATION_TTL` | `720h` | Conversation inactivity lifetime |
+
+On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories.
 
 The MCP transport writes protocol messages to stdout. `voie mcp` sends application logs to stderr, including per-tool start, completion/failure, and duration records. Tool arguments, results, and conversation contents are not included in logs. All log output is monochrome.
 

@@ -42,7 +42,6 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 			return command.Help()
 		},
 	}
-	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(stderr)

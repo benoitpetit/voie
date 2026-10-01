@@ -52,7 +52,7 @@ type chatCompletionInput struct {
 	Messages       []app.Message `json:"messages" jsonschema:"conversation messages"`
 	Provider       string        `json:"provider,omitempty" jsonschema:"optional provider name"`
 	Strategy       app.Strategy  `json:"strategy,omitempty" jsonschema:"classic, auto, or ensemble"`
-	Task           string        `json:"task,omitempty" jsonschema:"optional task hint for auto or ensemble: coding, reasoning, writing, translation, summarization, or general"`
+	Task           string        `json:"task,omitempty" jsonschema:"optional task hint for automatic selection: coding, reasoning, writing, translation, summarization, or general; explicit ensemble models take precedence"`
 	Models         []string      `json:"models,omitempty" jsonschema:"optional explicit ensemble model IDs"`
 	ConversationID string        `json:"conversation_id,omitempty" jsonschema:"optional local conversation ID"`
 }

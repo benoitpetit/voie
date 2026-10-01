@@ -30,7 +30,7 @@ Both install `~/.local/bin/voie` by default. The installer does not add that dir
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/benoitpetit/voie/main/install.sh
-sh install.sh --version 0.0.2 --install-dir /your/bin
+sh install.sh --version 0.0.3 --install-dir /your/bin
 ```
 
 **Windows** (amd64, PowerShell):
@@ -43,7 +43,7 @@ This installs `%LOCALAPPDATA%\Programs\voie\voie.exe`. The installer does not ad
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/benoitpetit/voie/main/install.ps1 -OutFile install.ps1
-./install.ps1 -Version 0.0.2 -InstallDir C:\Tools\voie
+./install.ps1 -Version 0.0.3 -InstallDir C:\Tools\voie
 ```
 
 The release archives are named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS, and `voie_VERSION_windows_amd64.zip` for Windows.
@@ -69,9 +69,11 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `API_TOKEN` | empty | Bearer token required for non-loopback binds |
 | `ROUTER_MODEL` | empty | Model that classifies ambiguous automatic-routing requests |
 | `SYNTHESIS_MODEL` | empty | Model that merges ensemble answers; falls back to `ROUTER_MODEL` |
-| `ROUTING_CONFIG_PATH` | `~/.config/voie/routing.json` | Local model descriptions and task rules |
-| `CONVERSATION_DB_PATH` | `~/.config/voie/conversations.db` | Local SQLite conversation database |
+| `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local model descriptions and task rules |
+| `CONVERSATION_DB_PATH` | `<user-config-dir>/voie/conversations.db` | Local SQLite conversation database |
 | `CONVERSATION_TTL` | `720h` | Inactivity lifetime for local conversations |
+
+On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
 
 The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`.
 
@@ -84,7 +86,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.2 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.2) contains these archives.
+The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.3 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.3) contains these archives.
 
 ## Use the CLI
 
@@ -93,13 +95,14 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 ./voie version
 ./voie update
 ./voie chat --help
+./voie completion --help
 ./voie models --json
 ./voie providers
 ./voie chat --model MODEL_ID "Summarize this text"
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
-The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
+The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts, including the supported `--task` values. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
 
 `chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
 

@@ -11,7 +11,7 @@
 | `providers` | Concrete upstream implementations and the default provider registry |
 | `internal/runtime` | Configuration validation and construction of the registry, service, HTTP server, and MCP server |
 | `internal/transport/httpapi` | OpenAI-compatible JSON/SSE routes, response mapping, CORS, and bearer authentication |
-| `internal/cli` | `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `version`, and `update` command dispatch and formatting |
+| `internal/cli` | `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `completion`, `version`, and `update` command dispatch and formatting |
 | `internal/transport/mcp` | MCP tools and stdio transport using the official Go SDK |
 | `config` | Environment parsing, defaults, and bind validation |
 
@@ -45,7 +45,7 @@ app.Registry → provider
 }
 ```
 
-Conversation state is opt-in through `conversation_id` and stored locally in `CONVERSATION_DB_PATH` (default `~/.config/voie/conversations.db`). The default inactivity TTL is 720 hours. Reads do not extend it; successful turns do. Expired transcripts are deleted and an ID-only tombstone is retained for 30 days. Conversations cap at 200 messages and 2 MiB; concurrent stale turns receive a conflict. Classic calls without a conversation ID do not open the database.
+Conversation state is opt-in through `conversation_id` and stored locally in `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`, typically `~/.config/voie/conversations.db` on Linux). macOS and Windows use their standard per-user configuration directories. The default inactivity TTL is 720 hours. Reads do not extend it; successful turns do. Expired transcripts are deleted and an ID-only tombstone is retained for 30 days. Conversations cap at 200 messages and 2 MiB; concurrent stale turns receive a conflict. Classic calls without a conversation ID do not open the database.
 
 `ROUTER_MODEL`, `SYNTHESIS_MODEL`, `ROUTING_CONFIG_PATH`, `CONVERSATION_DB_PATH`, and `CONVERSATION_TTL` are shared by HTTP, CLI, and MCP. See the API and interface guides for request examples.
 

@@ -68,7 +68,7 @@ The result includes assistant text and structured `text`, `model`, and `provider
 - `get_conversation` takes `{"id":"CONVERSATION_ID"}` and returns the transcript.
 - `delete_conversation` takes `{"id":"CONVERSATION_ID"}` and deletes the transcript and its expiry marker.
 
-Pass a returned ID as `conversation_id` to `chat_completion` to resume the conversation. The local database defaults to `~/.config/voie/conversations.db`; sessions expire after 720 hours of inactivity unless `CONVERSATION_TTL` changes it. Reads do not refresh expiry. Classic requests without `conversation_id` do not touch local storage.
+Pass a returned ID as `conversation_id` to `chat_completion` to resume the conversation. The local database defaults to `<user-config-dir>/voie/conversations.db` (typically `~/.config/voie/conversations.db` on Linux); macOS and Windows use their standard per-user configuration directories. Sessions expire after 720 hours of inactivity unless `CONVERSATION_TTL` changes it. Reads do not refresh expiry. Classic requests without `conversation_id` do not touch local storage.
 
 ## Troubleshooting
 

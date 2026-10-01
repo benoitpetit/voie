@@ -13,7 +13,7 @@ Install voie from a GitHub release.
 Usage: install.sh [--version VERSION] [--install-dir DIR] [--help]
 
 Options:
-  --version VERSION  Install a specific release (for example 0.0.1); default: latest
+  --version VERSION  Install a specific release (for example 0.0.3); default: latest
   --install-dir DIR  Installation directory; default: ~/.local/bin
   --help             Show this help
 
