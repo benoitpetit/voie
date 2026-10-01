@@ -11,7 +11,9 @@ import (
 )
 
 func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
-	var model, provider string
+	var model, provider, task, conversation string
+	var strategy string
+	var models []string
 	command := &cobra.Command{
 		Use:   "chat [prompt...]",
 		Short: "Generate a completion from a prompt",
@@ -21,22 +23,39 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
   voie chat --model MODEL_ID --provider PROVIDER "Hello"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
-			if strings.TrimSpace(model) == "" {
+			if strings.TrimSpace(model) == "" && (strategy == "" || strategy == "classic") {
 				return fmt.Errorf("chat requires --model MODEL")
+			}
+			if strategy != "" && strategy != "classic" && strategy != "auto" && strategy != "ensemble" {
+				return fmt.Errorf("strategy must be classic, auto, or ensemble")
+			}
+			if strategy != "ensemble" && len(models) > 0 {
+				return fmt.Errorf("--models requires --strategy ensemble")
+			}
+			if strategy == "classic" && (task != "" || conversation != "") {
+				return fmt.Errorf("--task and --conversation require auto or ensemble")
 			}
 			service, err := getService()
 			if err != nil {
 				return err
 			}
-			return runChat(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), service, model, provider)
+			return runChatWithOptions(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), service, model, provider, app.Strategy(strategy), task, models, conversation)
 		},
 	}
 	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required)")
 	command.Flags().StringVarP(&provider, "provider", "p", "", "provider to use")
+	command.Flags().StringVar(&strategy, "strategy", "", "completion strategy: classic, auto, or ensemble")
+	command.Flags().StringVar(&task, "task", "", "task category for automatic routing")
+	command.Flags().StringSliceVar(&models, "models", nil, "models to include in an ensemble")
+	command.Flags().StringVar(&conversation, "conversation", "", "local conversation ID to resume")
 	return command
 }
 
 func runChat(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string) error {
+	return runChatWithOptions(ctx, args, stdin, stdout, service, model, provider, app.StrategyClassic, "", nil, "")
+}
+
+func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, conversation string) error {
 	prompt := strings.TrimSpace(strings.Join(args, " "))
 	if prompt == "" {
 		if stdin == nil {
@@ -51,7 +70,7 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout io.Writ
 	if prompt == "" {
 		return fmt.Errorf("chat prompt must not be empty")
 	}
-	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Messages: []app.Message{{Role: "user", Content: prompt}}})
+	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}})
 	if err != nil {
 		return err
 	}

@@ -12,12 +12,16 @@ import (
 )
 
 const (
-	listModelsToolName     = "list_models"
-	listProvidersToolName  = "list_providers"
-	chatCompletionToolName = "chat_completion"
+	listModelsToolName         = "list_models"
+	listProvidersToolName      = "list_providers"
+	chatCompletionToolName     = "chat_completion"
+	createConversationToolName = "create_conversation"
+	listConversationsToolName  = "list_conversations"
+	getConversationToolName    = "get_conversation"
+	deleteConversationToolName = "delete_conversation"
 )
 
-var toolNames = []string{listModelsToolName, listProvidersToolName, chatCompletionToolName}
+var toolNames = []string{listModelsToolName, listProvidersToolName, chatCompletionToolName, createConversationToolName, listConversationsToolName, getConversationToolName, deleteConversationToolName}
 
 type emptyInput struct{}
 
@@ -44,15 +48,25 @@ type providersOutput struct {
 }
 
 type chatCompletionInput struct {
-	Model    string        `json:"model" jsonschema:"explicit model ID from list_models"`
-	Messages []app.Message `json:"messages" jsonschema:"conversation messages"`
-	Provider string        `json:"provider,omitempty" jsonschema:"optional provider name"`
+	Model          string        `json:"model,omitempty" jsonschema:"optional model ID for classic requests; omitted for auto or ensemble"`
+	Messages       []app.Message `json:"messages" jsonschema:"conversation messages"`
+	Provider       string        `json:"provider,omitempty" jsonschema:"optional provider name"`
+	Strategy       app.Strategy  `json:"strategy,omitempty" jsonschema:"classic, auto, or ensemble"`
+	Task           string        `json:"task,omitempty" jsonschema:"optional task category for automatic routing"`
+	Models         []string      `json:"models,omitempty" jsonschema:"optional explicit ensemble model IDs"`
+	ConversationID string        `json:"conversation_id,omitempty" jsonschema:"optional local conversation ID"`
 }
 
 type chatCompletionOutput struct {
-	Text     string `json:"text"`
-	Model    string `json:"model"`
-	Provider string `json:"provider"`
+	Text           string           `json:"text"`
+	Model          string           `json:"model"`
+	Provider       string           `json:"provider"`
+	ConversationID string           `json:"conversation_id,omitempty"`
+	Routing        *app.RoutingInfo `json:"routing,omitempty"`
+}
+
+type conversationIDInput struct {
+	ID string `json:"id" jsonschema:"conversation ID"`
 }
 
 func NewServer(service *app.Service) *mcp.Server {
@@ -93,18 +107,48 @@ func NewServer(service *app.Service) *mcp.Server {
 		return textToolResult("Providers (HTTP reachability):\n" + strings.Join(lines, "\n")), output, nil
 	})
 	mcp.AddTool(server, &mcp.Tool{
-		Name: chatCompletionToolName, Description: "Generate a non-streaming completion using an explicit supported model ID.",
+		Name: chatCompletionToolName, Description: "Generate a non-streaming completion using classic, automatic, or ensemble model routing.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
-		response, err := service.Complete(ctx, app.CompletionRequest{Model: input.Model, Provider: input.Provider, Messages: input.Messages})
+		response, err := service.Complete(ctx, app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, ConversationID: input.ConversationID, Messages: input.Messages})
 		if err != nil {
 			return nil, chatCompletionOutput{}, err
 		}
 		output := chatCompletionOutput{
-			Text:     response.Choices[0].Message.Content,
-			Model:    response.Model,
-			Provider: response.Provider,
+			Text:           response.Choices[0].Message.Content,
+			Model:          response.Model,
+			Provider:       response.Provider,
+			ConversationID: response.ConversationID,
+			Routing:        response.Routing,
 		}
 		return textToolResult(output.Text), output, nil
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: createConversationToolName, Description: "Create a local persistent conversation."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, app.Conversation, error) {
+		c, err := service.CreateConversation(ctx)
+		if err != nil {
+			return nil, app.Conversation{}, err
+		}
+		return textToolResult(c.ID), c, nil
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: listConversationsToolName, Description: "List local conversations without transcript contents."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, struct {
+		Conversations []app.ConversationSummary `json:"conversations"`
+	}, error) { items, err := service.ListConversations(ctx); out := struct {
+		Conversations []app.ConversationSummary `json:"conversations"`
+	}{items}; if err != nil {
+		return nil, out, err
+	}; return textToolResult(fmt.Sprintf("%d conversations", len(items))), out, nil })
+	mcp.AddTool(server, &mcp.Tool{Name: getConversationToolName, Description: "Read a local conversation and its turns."}, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationIDInput) (*mcp.CallToolResult, app.Conversation, error) {
+		c, err := service.GetConversation(ctx, input.ID)
+		if err != nil {
+			return nil, app.Conversation{}, err
+		}
+		return textToolResult(input.ID), c, nil
+	})
+	mcp.AddTool(server, &mcp.Tool{Name: deleteConversationToolName, Description: "Delete a local conversation and its expiration tombstone."}, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationIDInput) (*mcp.CallToolResult, emptyInput, error) {
+		err := service.DeleteConversation(ctx, input.ID)
+		if err != nil {
+			return nil, emptyInput{}, err
+		}
+		return textToolResult("Conversation deleted."), emptyInput{}, nil
 	})
 	return server
 }

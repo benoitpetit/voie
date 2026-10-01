@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/benoitpetit/voie/internal/app"
+	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -26,7 +27,7 @@ func TestMCPToolsExposeStableSchemasAndStructuredResults(t *testing.T) {
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
 	}
-	want := []string{"chat_completion", "list_models", "list_providers"}
+	want := []string{"chat_completion", "create_conversation", "delete_conversation", "get_conversation", "list_conversations", "list_models", "list_providers"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
@@ -62,6 +63,46 @@ func TestMCPToolsExposeStableSchemasAndStructuredResults(t *testing.T) {
 	}
 	if completion.IsError || completion.StructuredContent == nil || len(completion.Content) == 0 {
 		t.Fatalf("completion result = %+v", completion)
+	}
+}
+
+func TestMCPChatCompletionAcceptsAutomaticStrategies(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{"strategy": "auto", "task": "coding", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}})
+	if err != nil || result.IsError || result.StructuredContent == nil {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+func TestMCPConversationToolsCreateResumeAndDelete(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	created, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "create_conversation", Arguments: map[string]any{}})
+	if err != nil || created.IsError || created.StructuredContent == nil {
+		t.Fatalf("create=%+v err=%v", created, err)
+	}
+	data, ok := created.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("create structured=%T %v", created.StructuredContent, created.StructuredContent)
+	}
+	id, _ := data["id"].(string)
+	if id == "" {
+		t.Fatalf("create=%v", data)
+	}
+	listed, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_conversations", Arguments: map[string]any{}})
+	if err != nil || listed.IsError {
+		t.Fatalf("list=%+v err=%v", listed, err)
+	}
+	shown, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "get_conversation", Arguments: map[string]any{"id": id}})
+	if err != nil || shown.IsError || shown.StructuredContent == nil {
+		t.Fatalf("get=%+v err=%v", shown, err)
+	}
+	deleted, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "delete_conversation", Arguments: map[string]any{"id": id}})
+	if err != nil || deleted.IsError {
+		t.Fatalf("delete=%+v err=%v", deleted, err)
 	}
 }
 
@@ -119,7 +160,12 @@ func mcpTestService(t *testing.T, err error, timeout time.Duration) (*app.Servic
 	registry := app.NewRegistry()
 	provider := &mcpTestProvider{err: err, block: timeout <= 10*time.Millisecond}
 	registry.Register("test", provider)
-	service, serviceErr := app.NewService(registry, app.ServiceOptions{Timeout: timeout, HealthProbe: func(context.Context, string) bool { return true }})
+	store, storeErr := sqlitestore.NewSQLiteStore(t.TempDir()+"/mcp.db", time.Hour)
+	if storeErr != nil {
+		t.Fatal(storeErr)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	service, serviceErr := app.NewService(registry, app.ServiceOptions{Timeout: timeout, Conversations: store, HealthProbe: func(context.Context, string) bool { return true }})
 	if serviceErr != nil {
 		t.Fatal(serviceErr)
 	}

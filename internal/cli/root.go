@@ -80,6 +80,7 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 
 	root.AddCommand(newServeCommand(getRuntime))
 	root.AddCommand(newChatCommand(service))
+	root.AddCommand(newConversationsCommand(service))
 	root.AddCommand(newModelsCommand(service))
 	root.AddCommand(newProvidersCommand(service))
 	root.AddCommand(newMCPCommand(getRuntime))

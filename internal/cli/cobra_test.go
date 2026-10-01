@@ -17,7 +17,7 @@ func TestRootHelpListsCommandsWithoutInitializingRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute root help: %v", err)
 	}
-	for _, expected := range []string{"Usage:", "chat", "mcp", "models", "providers", "serve", "help"} {
+	for _, expected := range []string{"Usage:", "chat", "conversations", "mcp", "models", "providers", "serve", "help"} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("root help missing %q:\n%s", expected, stdout.String())
 		}

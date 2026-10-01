@@ -12,6 +12,7 @@ import (
 
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
+	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
 )
 
 func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
@@ -111,6 +112,63 @@ func TestCLIRejectsInvalidArgumentsAndReturnsProviderErrors(t *testing.T) {
 	provider.err = context.DeadlineExceeded
 	if err := executeForTest(context.Background(), []string{"chat", "--model", "model", "prompt"}, nil, &stdout, &stderr, rt); !errors.Is(err, app.ErrTimeout) {
 		t.Fatalf("chat error=%v, want timeout", err)
+	}
+}
+
+func TestChatAllowsAutomaticStrategiesWithoutModel(t *testing.T) {
+	rt, provider := newCLITestRuntime(t)
+	var out, stderr bytes.Buffer
+	err := executeForTest(context.Background(), []string{"chat", "--strategy", "auto", "--task", "coding", "hello"}, nil, &out, &stderr, rt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "answer\n" || provider.model != "model" {
+		t.Fatalf("out=%q model=%q", out.String(), provider.model)
+	}
+}
+
+func TestChatRejectsInvalidStrategyFlagCombinations(t *testing.T) {
+	rt, _ := newCLITestRuntime(t)
+	var out, stderr bytes.Buffer
+	for _, args := range [][]string{{"chat", "--strategy", "bogus", "hello"}, {"chat", "--strategy", "auto", "--models", "model", "hello"}} {
+		if err := executeForTest(context.Background(), args, nil, &out, &stderr, rt); err == nil {
+			t.Errorf("accepted args %v", args)
+		}
+	}
+}
+
+func TestConversationCommandsCreateListShowDelete(t *testing.T) {
+	rt, p := newCLITestRuntime(t)
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/cli.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	r := app.NewRegistry()
+	r.Register("test", p)
+	rt.service, err = app.NewService(r, app.ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr bytes.Buffer
+	if err = executeForTest(context.Background(), []string{"conversations", "create"}, nil, &out, &stderr, rt); err != nil {
+		t.Fatal(err)
+	}
+	id := strings.TrimSpace(out.String())
+	if id == "" || strings.Contains(id, " ") {
+		t.Fatalf("id=%q", id)
+	}
+	out.Reset()
+	if err = executeForTest(context.Background(), []string{"conversations", "list"}, nil, &out, &stderr, rt); err != nil || !strings.Contains(out.String(), id) {
+		t.Fatalf("list=%q err=%v", out.String(), err)
+	}
+	out.Reset()
+	if err = executeForTest(context.Background(), []string{"conversations", "show", id}, nil, &out, &stderr, rt); err != nil || !strings.Contains(out.String(), `"turns"`) {
+		t.Fatalf("show=%q err=%v", out.String(), err)
+	}
+	out.Reset()
+	if err = executeForTest(context.Background(), []string{"conversations", "delete", id}, nil, &out, &stderr, rt); err != nil || out.Len() != 0 {
+		t.Fatalf("delete output=%q err=%v", out.String(), err)
 	}
 }
 
