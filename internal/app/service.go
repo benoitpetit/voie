@@ -41,6 +41,7 @@ type ServiceOptions struct {
 	RouterModel     string
 	SynthesisModel  string
 	RoutingPolicy   RoutingPolicy
+	Conversations   ConversationStore
 	Timeout         time.Duration
 	HealthProbe     func(context.Context, string) bool
 	HealthClient    *http.Client
@@ -88,11 +89,15 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	}
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
+	_, version, userMessages, err := s.prepareConversation(callCtx, &request)
+	if err != nil {
+		return nil, err
+	}
 	strategy := normalizeStrategy(request.Strategy)
 	var provider Provider
 	var model string
 	var routing *RoutingInfo
-	var err error
+	var response *ChatCompletionResponse
 	switch strategy {
 	case StrategyClassic:
 		provider, model, err = s.selectProvider(request)
@@ -106,23 +111,41 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			routing = &decision
 		}
 	case StrategyEnsemble:
-		return s.completeEnsemble(callCtx, request)
+		response, err = s.completeEnsemble(callCtx, request)
 	default:
 		return nil, appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
 	}
 	if err != nil {
 		return nil, err
 	}
-	response, err := provider.ChatCompletion(callCtx, request.Messages, model)
-	if err != nil {
-		return nil, s.contextOrUpstreamError(callCtx, err)
+	if strategy != StrategyEnsemble {
+		response, err = provider.ChatCompletion(callCtx, request.Messages, model)
+		if err != nil {
+			return nil, s.contextOrUpstreamError(callCtx, err)
+		}
+		if response == nil || len(response.Choices) == 0 {
+			return nil, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", provider.GetInfo().Name), nil)
+		}
+		response.Provider = provider.GetInfo().Name
+		response.Model = model
+		response.Routing = routing
 	}
 	if response == nil || len(response.Choices) == 0 {
-		return nil, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", provider.GetInfo().Name), nil)
+		return nil, appError(ErrUpstream, "completion returned an empty response", nil)
 	}
-	response.Provider = provider.GetInfo().Name
-	response.Model = model
-	response.Routing = routing
+	if request.ConversationID != "" {
+		info := RoutingInfo{Strategy: strategy, Models: []RoutedModel{{Model: model, Provider: response.Provider, Status: "succeeded"}}}
+		if response.Routing != nil {
+			info = *response.Routing
+		} else if routing != nil {
+			info = *routing
+		}
+		updated, err := s.options.Conversations.AppendTurn(callCtx, request.ConversationID, version, userMessages, response.Choices[0].Message, info)
+		if err != nil {
+			return nil, err
+		}
+		response.ConversationID = updated.ID
+	}
 	return response, nil
 }
 
@@ -135,43 +158,104 @@ func (s *Service) CompleteStream(ctx context.Context, request CompletionRequest,
 	}
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
+	_, version, userMessages, err := s.prepareConversation(callCtx, &request)
+	if err != nil {
+		return err
+	}
 	strategy := normalizeStrategy(request.Strategy)
-	var err error
+	var routing *RoutingInfo
+	var streamText strings.Builder
+	streamCallback := func(chunk string) { streamText.WriteString(chunk); callback(chunk) }
 	if strategy == StrategyEnsemble {
 		response, err := s.completeEnsemble(callCtx, request)
 		if err != nil {
 			return err
 		}
-		provider := s.registry.GetForModel(response.Model)
-		if provider == nil {
-			return appError(ErrRouting, "synthesis provider is unavailable", nil)
-		}
-		messages := synthesisMessages(request.Messages, response.Routing, nil)
 		// The synthesis response is already available. Stream its final answer as one chunk.
-		_ = messages
-		callback(response.Choices[0].Message.Content)
-		return nil
-	}
-	var provider Provider
-	var model string
-	if strategy == StrategyAuto {
-		candidate, _, err := s.selectAutomatic(callCtx, request)
+		streamCallback(response.Choices[0].Message.Content)
+		routing = response.Routing
+	} else {
+		var provider Provider
+		var model string
+		if strategy == StrategyAuto {
+			candidate, info, selectErr := s.selectAutomatic(callCtx, request)
+			if selectErr != nil {
+				return selectErr
+			}
+			provider, model, routing = s.registry.Get(candidate.Provider), candidate.Model, &info
+		} else if strategy == StrategyClassic {
+			provider, model, err = s.selectProvider(request)
+		} else {
+			return appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
+		}
 		if err != nil {
 			return err
 		}
-		provider, model = s.registry.Get(candidate.Provider), candidate.Model
-	} else if strategy == StrategyClassic {
-		provider, model, err = s.selectProvider(request)
-	} else {
-		return appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
+		if err = provider.ChatCompletionStream(callCtx, request.Messages, model, streamCallback); err != nil {
+			return s.contextOrUpstreamError(callCtx, err)
+		}
 	}
-	if err != nil {
-		return err
-	}
-	if err := provider.ChatCompletionStream(callCtx, request.Messages, model, callback); err != nil {
-		return s.contextOrUpstreamError(callCtx, err)
+	if request.ConversationID != "" {
+		assistant := Message{Role: "assistant", Content: streamText.String()}
+		info := RoutingInfo{Strategy: strategy}
+		if routing != nil {
+			info = *routing
+		}
+		updated, err := s.options.Conversations.AppendTurn(callCtx, request.ConversationID, version, userMessages, assistant, info)
+		if err != nil {
+			return err
+		}
+		_ = updated
 	}
 	return nil
+}
+
+func (s *Service) prepareConversation(ctx context.Context, request *CompletionRequest) (Conversation, int64, []Message, error) {
+	if strings.TrimSpace(request.ConversationID) == "" {
+		return Conversation{}, 0, nil, nil
+	}
+	if s.options.Conversations == nil {
+		return Conversation{}, 0, nil, appError(ErrConversationStore, "conversation storage is not configured", nil)
+	}
+	c, err := s.options.Conversations.Get(ctx, request.ConversationID)
+	if err != nil {
+		return Conversation{}, 0, nil, err
+	}
+	if c.Version > 0 {
+		for _, m := range request.Messages {
+			if m.Role == "system" || m.Role == "developer" {
+				return Conversation{}, 0, nil, appError(ErrInvalidInput, "system instructions cannot be replaced after a conversation has started", nil)
+			}
+		}
+	}
+	turn := append([]Message(nil), request.Messages...)
+	request.Messages = append(c.ContextMessages(), request.Messages...)
+	return c, c.Version, turn, nil
+}
+
+func (s *Service) CreateConversation(ctx context.Context) (Conversation, error) {
+	if s.options.Conversations == nil {
+		return Conversation{}, appError(ErrConversationStore, "conversation storage is not configured", nil)
+	}
+	return s.options.Conversations.Create(ctx)
+}
+func (s *Service) GetConversation(ctx context.Context, id string) (Conversation, error) {
+	if s.options.Conversations == nil {
+		return Conversation{}, appError(ErrConversationStore, "conversation storage is not configured", nil)
+	}
+	return s.options.Conversations.Get(ctx, id)
+}
+func (s *Service) ListConversations(ctx context.Context) ([]ConversationSummary, error) {
+	if s.options.Conversations == nil {
+		return nil, appError(ErrConversationStore, "conversation storage is not configured", nil)
+	}
+	return s.options.Conversations.List(ctx)
+}
+func (s *Service) DeleteConversation(ctx context.Context, id string) error {
+	if s.options.Conversations == nil {
+		return appError(ErrConversationStore, "conversation storage is not configured", nil)
+	}
+	return s.options.Conversations.Delete(ctx, id)
 }
 
 func (s *Service) ListModels() []ModelInfo {

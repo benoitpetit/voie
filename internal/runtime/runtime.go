@@ -13,6 +13,7 @@ import (
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
+	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
 	"github.com/benoitpetit/voie/internal/transport/httpapi"
 	"github.com/benoitpetit/voie/internal/transport/mcp"
 	"github.com/benoitpetit/voie/providers"
@@ -20,9 +21,10 @@ import (
 )
 
 type Runtime struct {
-	Config     *config.Config
-	Registry   *app.Registry
-	AppService *app.Service
+	Config            *config.Config
+	Registry          *app.Registry
+	AppService        *app.Service
+	ConversationStore *sqlitestore.Store
 }
 
 func New(cfg *config.Config) (*Runtime, error) {
@@ -64,17 +66,30 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 	for task, rule := range policyConfig.Tasks {
 		policy.Tasks[task] = app.TaskRule{RequiredCapabilities: append([]string(nil), rule.RequiredCapabilities...), PreferredModels: append([]string(nil), rule.PreferredModels...)}
 	}
+	conversationPath := strings.TrimSpace(cfg.ConversationDBPath)
+	if conversationPath == "" {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve conversation database directory: %w", err)
+		}
+		conversationPath = filepath.Join(configDir, "voie", "conversations.db")
+	}
+	conversationStore, err := sqlitestore.NewSQLiteStore(conversationPath, cfg.ConversationTTL)
+	if err != nil {
+		return nil, err
+	}
 	service, err := app.NewService(registry, app.ServiceOptions{
 		DefaultProvider: cfg.DefaultProvider,
 		RouterModel:     cfg.RouterModel,
 		SynthesisModel:  cfg.SynthesisModel,
 		RoutingPolicy:   policy,
+		Conversations:   conversationStore,
 		Timeout:         cfg.Timeout,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &Runtime{Config: cfg, Registry: registry, AppService: service}, nil
+	return &Runtime{Config: cfg, Registry: registry, AppService: service, ConversationStore: conversationStore}, nil
 }
 
 func (r *Runtime) Address() string {
@@ -84,6 +99,7 @@ func (r *Runtime) Address() string {
 func (r *Runtime) Service() *app.Service { return r.AppService }
 
 func (r *Runtime) Serve(ctx context.Context, host, port string) error {
+	defer r.Close()
 	if host == "" {
 		host = r.Config.Host
 	}
@@ -122,5 +138,13 @@ func (r *Runtime) Serve(ctx context.Context, host, port string) error {
 }
 
 func (r *Runtime) MCP(ctx context.Context) error {
+	defer r.Close()
 	return mcpserver.Run(ctx, r.AppService)
+}
+
+func (r *Runtime) Close() error {
+	if r.ConversationStore != nil {
+		return r.ConversationStore.Close()
+	}
+	return nil
 }
