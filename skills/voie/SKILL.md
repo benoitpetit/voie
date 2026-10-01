@@ -7,6 +7,8 @@ description: Use when an agent needs to install voie or discover and call a supp
 
 Use the `voie` runtime catalogue to choose a model, then call it through the interface available in the current environment.
 
+Some public providers, including ChatJimmy, do not require an account or API key. They send prompts to a third-party service; avoid confidential data unless its handling has been reviewed. Discover model IDs at runtime because upstream catalogues and availability can change.
+
 ## Workflow
 
 1. Prefer the configured `voie` MCP server when available. Call `list_models` and select an exact model ID from its current results.

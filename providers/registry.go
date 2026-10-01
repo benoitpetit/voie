@@ -10,5 +10,6 @@ func NewRegistry() *app.Registry {
 	registry.Register("quillbot", &Quillbot{})
 	registry.Register("yqcloud", &Yqcloud{})
 	registry.Register("cohere", &CohereCommand{})
+	registry.Register("jimmy", &Jimmy{})
 	return registry
 }

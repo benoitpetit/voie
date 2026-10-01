@@ -33,6 +33,8 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
 
 `messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider` and `stream` are optional. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
 
+Use `GET /v1/models` to discover current IDs. For example, the ChatJimmy provider currently advertises `llama3.1-8B`; its upstream is non-streaming, so a request with `stream: true` receives the completed answer as one content chunk.
+
 ### Non-streaming response
 
 Successful responses keep the OpenAI-compatible `chat.completion` shape. `provider` identifies the selected upstream provider.

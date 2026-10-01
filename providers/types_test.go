@@ -16,6 +16,16 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 			t.Errorf("existing provider %q is missing after Duck.ai registration", existing)
 		}
 	}
+	jimmy := registry.Get("jimmy")
+	if jimmy == nil {
+		t.Fatal("registry.Get(jimmy) = nil")
+	}
+	if jimmy.GetInfo().DefaultModel != "llama3.1-8B" {
+		t.Errorf("Jimmy default model = %q, want llama3.1-8B", jimmy.GetInfo().DefaultModel)
+	}
+	if routed := registry.GetForModel("llama3.1-8B"); routed == nil || routed.GetInfo().Name != "jimmy" {
+		t.Errorf("GetForModel(llama3.1-8B) = %v, want jimmy", routed)
+	}
 
 	foundName := false
 	for _, name := range registry.GetProviderNames() {

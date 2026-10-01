@@ -6,6 +6,8 @@
 
 Providers use public or reverse-engineered endpoints. Their availability can change. Duck.ai chat requires Chrome or Chromium on the host; the other modes and providers do not require a browser.
 
+ChatJimmy is available without an account or API key and currently lists `llama3.1-8B`. Its upstream API returns complete responses, so `voie` emits a single final chunk when local streaming is requested. Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices.
+
 ## Install and run
 
 ### Install a release
@@ -89,6 +91,7 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 ./voie models --json
 ./voie providers
 ./voie chat --model MODEL_ID "Summarize this text"
+./voie chat --provider jimmy --model llama3.1-8B "Bonjour"
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
