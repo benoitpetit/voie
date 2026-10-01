@@ -85,12 +85,33 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	if err := validateMessages(request.Messages); err != nil {
 		return nil, err
 	}
-	provider, model, err := s.selectProvider(request)
+	callCtx, cancel := s.completionContext(ctx)
+	defer cancel()
+	strategy := normalizeStrategy(request.Strategy)
+	var provider Provider
+	var model string
+	var routing *RoutingInfo
+	var err error
+	switch strategy {
+	case StrategyClassic:
+		provider, model, err = s.selectProvider(request)
+	case StrategyAuto:
+		var candidate ModelCandidate
+		var decision RoutingInfo
+		candidate, decision, err = s.selectAutomatic(callCtx, request)
+		if err == nil {
+			provider = s.registry.Get(candidate.Provider)
+			model = candidate.Model
+			routing = &decision
+		}
+	case StrategyEnsemble:
+		return nil, appError(ErrInvalidInput, "ensemble strategy is not available", nil)
+	default:
+		return nil, appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
+	}
 	if err != nil {
 		return nil, err
 	}
-	callCtx, cancel := s.completionContext(ctx)
-	defer cancel()
 	response, err := provider.ChatCompletion(callCtx, request.Messages, model)
 	if err != nil {
 		return nil, s.contextOrUpstreamError(callCtx, err)
@@ -99,6 +120,8 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 		return nil, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", provider.GetInfo().Name), nil)
 	}
 	response.Provider = provider.GetInfo().Name
+	response.Model = model
+	response.Routing = routing
 	return response, nil
 }
 
