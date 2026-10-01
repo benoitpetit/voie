@@ -74,6 +74,23 @@ func TestRequestLoggingIncludesAuthenticationFailuresAndFallbackStatus(t *testin
 	}
 }
 
+func TestChatRequestParseFailuresLogOnlyTypedCategory(t *testing.T) {
+	var logs bytes.Buffer
+	utils.SetOutput(&logs)
+	defer utils.SetOutput(nil)
+	utils.SetNoColor(true)
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":"private-prompt"}`)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("parse status=%d, want 400", response.Code)
+	}
+	if !strings.Contains(logs.String(), "category=invalid_json") || strings.Contains(logs.String(), "private-prompt") {
+		t.Fatalf("chat parse logs are missing category or leak input: %q", logs.String())
+	}
+}
+
 type flushTestWriter struct {
 	header  http.Header
 	status  int

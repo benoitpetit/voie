@@ -47,11 +47,13 @@ type apiHandler struct{ service *app.Service }
 
 func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
+		utils.Warn("chat failed category=method_not_allowed")
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use POST.")
 		return
 	}
 	var request chatRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		utils.Warn("chat failed category=invalid_json")
 		writeError(w, http.StatusBadRequest, "Bad request: invalid JSON — "+err.Error())
 		return
 	}
