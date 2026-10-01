@@ -48,11 +48,19 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 	if s.db != nil {
 		return s.db, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+	dir := filepath.Dir(s.path)
+	_, dirErr := os.Stat(dir)
+	dirCreated := errors.Is(dirErr, os.ErrNotExist)
+	if dirErr != nil && !dirCreated {
+		return nil, appError(app.ErrConversationStore, "inspect conversation directory", dirErr)
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, appError(app.ErrConversationStore, "create conversation directory", err)
 	}
-	if err := os.Chmod(filepath.Dir(s.path), 0700); err != nil {
-		return nil, appError(app.ErrConversationStore, "secure conversation directory", err)
+	if dirCreated {
+		if err := os.Chmod(dir, 0700); err != nil {
+			return nil, appError(app.ErrConversationStore, "secure conversation directory", err)
+		}
 	}
 	if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
 		f, e := os.OpenFile(s.path, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
@@ -80,7 +88,7 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 		return nil, appError(app.ErrConversationStore, "migrate conversation database", err)
 	}
 	s.db = db
-	if _, err := s.cleanup(ctx, time.Now()); err != nil {
+	if _, err := s.cleanup(ctx, db, time.Now()); err != nil {
 		s.db = nil
 		_ = db.Close()
 		return nil, err
@@ -230,6 +238,7 @@ func (s *Store) AppendTurn(ctx context.Context, id string, expected int64, user 
 	var expiry int64
 	err = tx.QueryRowContext(ctx, "SELECT payload,expires_at FROM conversations WHERE id=?", id).Scan(&payload, &expiry)
 	if errors.Is(err, sql.ErrNoRows) {
+		_ = tx.Rollback()
 		return app.Conversation{}, s.missing(ctx, db, id)
 	}
 	if err != nil {
@@ -279,16 +288,13 @@ func (s *Store) AppendTurn(ctx context.Context, id string, expected int64, user 
 }
 
 func (s *Store) CleanupExpired(ctx context.Context, now time.Time) (int, error) {
-	if _, err := s.open(ctx); err != nil {
+	db, err := s.open(ctx)
+	if err != nil {
 		return 0, err
 	}
-	return s.cleanup(ctx, now)
+	return s.cleanup(ctx, db, now)
 }
-func (s *Store) cleanup(ctx context.Context, now time.Time) (int, error) {
-	db := s.db
-	if db == nil {
-		return 0, appError(app.ErrConversationStore, "database not open", nil)
-	}
+func (s *Store) cleanup(ctx context.Context, db *sql.DB, now time.Time) (int, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, storeErr(err)

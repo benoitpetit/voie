@@ -17,23 +17,29 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "chat [prompt...]",
 		Short: "Generate a completion from a prompt",
-		Long:  "Send a prompt to a supported model selected by the required --model ID. Use --provider to select a provider explicitly. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only the answer text on stdout.",
+		Long:  "Send a prompt using classic model selection or opt-in automatic/ensemble routing. Classic requests require --model; auto and ensemble can select models without it. Use --provider to constrain the provider and --conversation to resume local history. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.",
 		Example: `  voie chat --model MODEL_ID "Summarize this text"
   cat prompt.txt | voie chat --model MODEL_ID
-  voie chat --model MODEL_ID --provider PROVIDER "Hello"`,
+  voie chat --model MODEL_ID --provider PROVIDER "Hello"
+  voie chat --strategy auto --task coding "Review this code"
+  voie chat --strategy ensemble --models MODEL_A,MODEL_B "Compare these approaches"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
+			effectiveStrategy := strategy
+			if effectiveStrategy == "" {
+				effectiveStrategy = "classic"
+			}
 			if strings.TrimSpace(model) == "" && (strategy == "" || strategy == "classic") {
 				return fmt.Errorf("chat requires --model MODEL")
 			}
 			if strategy != "" && strategy != "classic" && strategy != "auto" && strategy != "ensemble" {
 				return fmt.Errorf("strategy must be classic, auto, or ensemble")
 			}
-			if strategy != "ensemble" && len(models) > 0 {
+			if effectiveStrategy != "ensemble" && len(models) > 0 {
 				return fmt.Errorf("--models requires --strategy ensemble")
 			}
-			if strategy == "classic" && (task != "" || conversation != "") {
-				return fmt.Errorf("--task and --conversation require auto or ensemble")
+			if effectiveStrategy == "classic" && task != "" {
+				return fmt.Errorf("--task requires auto or ensemble")
 			}
 			service, err := getService()
 			if err != nil {

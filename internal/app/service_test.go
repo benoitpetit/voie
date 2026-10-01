@@ -26,6 +26,31 @@ func TestClassicResponseOmitsRoutingAndConversationFields(t *testing.T) {
 	}
 }
 
+func TestClassicCompletionPreservesUpstreamModelField(t *testing.T) {
+	registry := NewRegistry()
+	provider := &testProvider{info: ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"requested"}}, response: &ChatCompletionResponse{Model: "upstream-canonical", Choices: []Choice{{Message: Message{Role: "assistant", Content: "ok"}}}}}
+	registry.Register("test", provider)
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{Model: "requested", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Model != "upstream-canonical" {
+		t.Fatalf("classic model=%q, want provider response model", response.Model)
+	}
+}
+
+func TestServiceRejectsUnknownConfiguredSynthesisModel(t *testing.T) {
+	registry := NewRegistry()
+	_, err := NewService(registry, ServiceOptions{SynthesisModel: "missing"})
+	if !errors.Is(err, ErrUnknownModel) {
+		t.Fatalf("error=%v, want ErrUnknownModel", err)
+	}
+}
+
 func TestServiceResolvesExplicitAndDefaultModels(t *testing.T) {
 	registry := NewRegistry()
 	perplexity := &testProvider{info: ProviderInfo{Name: "perplexity", Working: true, DefaultModel: "turbo", SupportedModels: []string{"turbo"}}}

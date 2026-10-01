@@ -49,6 +49,10 @@ func (s *Service) selectAutomatic(ctx context.Context, request CompletionRequest
 }
 
 func (s *Service) selectCandidates(ctx context.Context, request CompletionRequest, limit int) ([]ModelCandidate, RouteDecision, error) {
+	return s.selectCandidatesExcluding(ctx, request, limit, "")
+}
+
+func (s *Service) selectCandidatesExcluding(ctx context.Context, request CompletionRequest, limit int, excludedModel string) ([]ModelCandidate, RouteDecision, error) {
 	if limit < 1 || limit > 3 {
 		return nil, RouteDecision{}, appError(ErrInvalidInput, "automatic routing candidate limit must be between 1 and 3", nil)
 	}
@@ -60,7 +64,7 @@ func (s *Service) selectCandidates(ctx context.Context, request CompletionReques
 		}
 		taskRule = s.options.RoutingPolicy.Tasks[taskHint]
 	}
-	candidates, err := s.modelCandidates(request.Provider, taskHint, taskRule)
+	candidates, err := s.modelCandidates(request.Provider, taskHint, taskRule, excludedModel)
 	if err != nil {
 		return nil, RouteDecision{}, err
 	}
@@ -104,8 +108,12 @@ func (s *Service) selectCandidates(ctx context.Context, request CompletionReques
 	if _, ok := supportedTasks[decision.Task]; !ok {
 		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router returned unsupported task %q", decision.Task), nil)
 	}
+	allCandidates := append([]ModelCandidate(nil), candidates...)
 	if rule, ok := s.options.RoutingPolicy.Tasks[decision.Task]; ok {
 		candidates = filterRequiredCapabilities(candidates, rule.RequiredCapabilities)
+	}
+	if len(candidates) == 0 {
+		return nil, RouteDecision{}, appError(ErrRouting, "no models satisfy the router's task constraints", nil)
 	}
 	selectedIDs := decision.Models
 	if limit == 1 {
@@ -115,6 +123,31 @@ func (s *Service) selectCandidates(ctx context.Context, request CompletionReques
 		selectedIDs = []string{decision.Model}
 	} else if len(selectedIDs) < 2 || len(selectedIDs) > limit || decision.Model != "" {
 		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router decision must contain between 2 and %d models", limit), nil)
+	}
+	if taskHint == "" {
+		for _, id := range selectedIDs {
+			found := false
+			for _, candidate := range candidates {
+				if strings.EqualFold(candidate.Model, id) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				wasEligibleBeforeTaskFilter := false
+				for _, candidate := range allCandidates {
+					if strings.EqualFold(candidate.Model, id) {
+						wasEligibleBeforeTaskFilter = true
+						break
+					}
+				}
+				if !wasEligibleBeforeTaskFilter {
+					return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router selected ineligible model %q", id), nil)
+				}
+				request.Task = decision.Task
+				return s.selectCandidatesExcluding(ctx, request, limit, excludedModel)
+			}
+		}
 	}
 	selected := make([]ModelCandidate, 0, len(selectedIDs))
 	seen := make(map[string]struct{}, len(selectedIDs))
@@ -146,7 +179,7 @@ func (s *Service) selectCandidates(ctx context.Context, request CompletionReques
 	return selected, decision, nil
 }
 
-func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule) ([]ModelCandidate, error) {
+func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, excludedModel string) ([]ModelCandidate, error) {
 	providerFilter = strings.ToLower(strings.TrimSpace(providerFilter))
 	if providerFilter != "" && s.registry.Get(providerFilter) == nil {
 		return nil, appError(ErrUnknownProvider, fmt.Sprintf("provider %q is not registered", providerFilter), nil)
@@ -165,7 +198,7 @@ func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule) ([
 		}
 		for _, model := range info.SupportedModels {
 			key := strings.ToLower(strings.TrimSpace(model))
-			if key == "" || key == strings.ToLower(strings.TrimSpace(s.options.RouterModel)) {
+			if key == "" || key == strings.ToLower(strings.TrimSpace(s.options.RouterModel)) || key == strings.ToLower(strings.TrimSpace(excludedModel)) {
 				continue
 			}
 			if _, duplicate := seen[key]; duplicate {

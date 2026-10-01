@@ -20,12 +20,19 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 		return nil, "", appError(ErrInvalidInput, "ensemble supports at most three models", nil)
 	}
 	if len(request.Models) > 0 {
+		synthesisModel := strings.TrimSpace(s.options.SynthesisModel)
+		if synthesisModel == "" {
+			synthesisModel = strings.TrimSpace(s.options.RouterModel)
+		}
 		seen := map[string]bool{}
 		candidates := make([]ModelCandidate, 0, len(request.Models))
 		for _, model := range request.Models {
 			model = strings.TrimSpace(model)
 			if model == "" || seen[strings.ToLower(model)] {
 				return nil, "", appError(ErrInvalidInput, "ensemble models must be non-empty and distinct", nil)
+			}
+			if synthesisModel != "" && strings.EqualFold(model, synthesisModel) {
+				return nil, "", appError(ErrInvalidInput, "the synthesis model cannot also be an ensemble candidate", nil)
 			}
 			seen[strings.ToLower(model)] = true
 			provider := s.registry.GetForModel(model)
@@ -43,7 +50,11 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 		}
 		return candidates, strings.TrimSpace(request.Task), nil
 	}
-	candidates, decision, err := s.selectCandidates(ctx, request, 3)
+	excluded := strings.TrimSpace(s.options.SynthesisModel)
+	if excluded == "" {
+		excluded = strings.TrimSpace(s.options.RouterModel)
+	}
+	candidates, decision, err := s.selectCandidatesExcluding(ctx, request, 3, excluded)
 	if err != nil {
 		return nil, "", err
 	}
@@ -54,9 +65,27 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 }
 
 func (s *Service) completeEnsemble(ctx context.Context, request CompletionRequest) (*ChatCompletionResponse, error) {
-	candidates, task, err := s.selectEnsembleCandidates(ctx, request)
+	synthesis, synthesizer, model, routing, err := s.runEnsemble(ctx, request)
 	if err != nil {
 		return nil, err
+	}
+	response, err := synthesizer.ChatCompletion(ctx, synthesis, model)
+	if err != nil {
+		return nil, s.contextOrUpstreamError(ctx, err)
+	}
+	if response == nil || len(response.Choices) == 0 {
+		return nil, appError(ErrUpstream, "synthesis model returned an empty completion", nil)
+	}
+	response.Model = model
+	response.Provider = synthesizer.GetInfo().Name
+	response.Routing = routing
+	return response, nil
+}
+
+func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) ([]Message, Provider, string, *RoutingInfo, error) {
+	candidates, task, err := s.selectEnsembleCandidates(ctx, request)
+	if err != nil {
+		return nil, nil, "", nil, err
 	}
 	synthesisModel := strings.TrimSpace(s.options.SynthesisModel)
 	if synthesisModel == "" {
@@ -64,7 +93,7 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	}
 	synthesizer := s.registry.GetForModel(synthesisModel)
 	if synthesisModel == "" || synthesizer == nil || !synthesizer.GetInfo().Working {
-		return nil, appError(ErrRouting, "a working SYNTHESIS_MODEL or ROUTER_MODEL is required for ensemble", nil)
+		return nil, nil, "", nil, appError(ErrRouting, "a working SYNTHESIS_MODEL or ROUTER_MODEL is required for ensemble", nil)
 	}
 	// Never send an intermediate answer to a selected candidate, and do not let
 	// a synthesizer be mistaken for one of the parallel judges.
@@ -76,7 +105,7 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	}
 	candidates = filtered
 	if len(candidates) < 2 {
-		return nil, appError(ErrEnsembleInsufficient, "ensemble requires two models other than the synthesizer", nil)
+		return nil, nil, "", nil, appError(ErrEnsembleInsufficient, "ensemble requires two models other than the synthesizer", nil)
 	}
 
 	results := make([]ensembleResult, len(candidates))
@@ -100,7 +129,7 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	}
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
-		return nil, s.contextOrUpstreamError(ctx, err)
+		return nil, nil, "", nil, s.contextOrUpstreamError(ctx, err)
 	}
 	succeeded := make([]ensembleResult, 0, len(results))
 	routed := make([]RoutedModel, 0, len(results))
@@ -113,20 +142,10 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 		routed = append(routed, RoutedModel{Model: result.candidate.Model, Provider: result.candidate.Provider, Status: status, DurationMillis: result.duration.Milliseconds()})
 	}
 	if len(succeeded) < 2 {
-		return nil, appError(ErrEnsembleInsufficient, "fewer than two ensemble models completed successfully", nil)
+		return nil, nil, "", nil, appError(ErrEnsembleInsufficient, "fewer than two ensemble models completed successfully", nil)
 	}
 	synthesis := synthesisMessages(request.Messages, nil, succeeded)
-	response, err := synthesizer.ChatCompletion(ctx, synthesis, synthesisModel)
-	if err != nil {
-		return nil, s.contextOrUpstreamError(ctx, err)
-	}
-	if response == nil || len(response.Choices) == 0 {
-		return nil, appError(ErrUpstream, "synthesis model returned an empty completion", nil)
-	}
-	response.Model = synthesisModel
-	response.Provider = synthesizer.GetInfo().Name
-	response.Routing = &RoutingInfo{Strategy: StrategyEnsemble, Task: task, Models: routed}
-	return response, nil
+	return synthesis, synthesizer, synthesisModel, &RoutingInfo{Strategy: StrategyEnsemble, Task: task, Models: routed}, nil
 }
 
 func synthesisMessages(messages []Message, _ *RoutingInfo, results []ensembleResult) []Message {

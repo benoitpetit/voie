@@ -159,6 +159,10 @@ func TestConversationCommandsCreateListShowDelete(t *testing.T) {
 		t.Fatalf("id=%q", id)
 	}
 	out.Reset()
+	if err = executeForTest(context.Background(), []string{"chat", "--model", "model", "--conversation", id, "hello"}, nil, &out, &stderr, rt); err != nil || out.String() != "answer\n" {
+		t.Fatalf("classic conversation chat output=%q err=%v", out.String(), err)
+	}
+	out.Reset()
 	if err = executeForTest(context.Background(), []string{"conversations", "list"}, nil, &out, &stderr, rt); err != nil || !strings.Contains(out.String(), id) {
 		t.Fatalf("list=%q err=%v", out.String(), err)
 	}

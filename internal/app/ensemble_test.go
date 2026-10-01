@@ -36,6 +36,18 @@ func TestEnsembleRejectsMoreThanThreeModels(t *testing.T) {
 	}
 }
 
+func TestEnsembleRejectsSynthesisModelAsCandidate(t *testing.T) {
+	registry := NewRegistry()
+	for _, id := range []string{"a", "b", "synth"} {
+		registry.Register(id, &testProvider{info: ProviderInfo{Name: id, Working: true, SupportedModels: []string{id}}})
+	}
+	service, _ := NewService(registry, ServiceOptions{SynthesisModel: "synth"})
+	_, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyEnsemble, Models: []string{"a", "synth"}, Messages: []Message{{Role: "user", Content: "hi"}}})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error=%v, want ErrInvalidInput", err)
+	}
+}
+
 func TestEnsembleRejectsFewerThanTwoSuccesses(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register("a", &testProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a"}}, response: &ChatCompletionResponse{}})

@@ -64,6 +64,27 @@ func TestServiceAutoUsesRouterAmongEligibleModels(t *testing.T) {
 	}
 }
 
+func TestServiceAutoRechecksCandidatesAfterRouterClassifiesTask(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"writing","model":"model-a","reason":"incorrect capability choice"}`}}
+	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
+	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", a)
+	registry.Register("b", b)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"writing"}}}, Tasks: map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "draft"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Model != "model-b" || b.callCount() != 1 || a.callCount() != 0 {
+		t.Fatalf("response=%+v calls a/b=%d/%d", response, a.callCount(), b.callCount())
+	}
+}
+
 func TestServiceAutoRejectsUnknownOrDisabledRouterChoice(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

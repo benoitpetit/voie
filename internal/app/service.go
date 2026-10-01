@@ -59,11 +59,15 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 	}
 	options.DefaultProvider = strings.ToLower(strings.TrimSpace(options.DefaultProvider))
 	options.RouterModel = strings.TrimSpace(options.RouterModel)
+	options.SynthesisModel = strings.TrimSpace(options.SynthesisModel)
 	if options.DefaultProvider != "" && registry.Get(options.DefaultProvider) == nil {
 		return nil, appError(ErrUnknownProvider, fmt.Sprintf("configured default provider %q is unknown", options.DefaultProvider), nil)
 	}
 	if options.RouterModel != "" && registry.GetForModel(options.RouterModel) == nil {
 		return nil, appError(ErrUnknownModel, fmt.Sprintf("configured router model %q is unknown", options.RouterModel), nil)
+	}
+	if options.SynthesisModel != "" && registry.GetForModel(options.SynthesisModel) == nil {
+		return nil, appError(ErrUnknownModel, fmt.Sprintf("configured synthesis model %q is unknown", options.SynthesisModel), nil)
 	}
 	if options.Timeout < 0 {
 		return nil, appError(ErrInvalidInput, "timeout must be positive", nil)
@@ -127,7 +131,9 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			return nil, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", provider.GetInfo().Name), nil)
 		}
 		response.Provider = provider.GetInfo().Name
-		response.Model = model
+		if strategy == StrategyAuto {
+			response.Model = model
+		}
 		response.Routing = routing
 	}
 	if response == nil || len(response.Choices) == 0 {
@@ -176,13 +182,14 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 	var streamText strings.Builder
 	streamCallback := func(chunk string) { streamText.WriteString(chunk); callback(chunk, routing) }
 	if strategy == StrategyEnsemble {
-		response, err := s.completeEnsemble(callCtx, request)
+		synthesis, synthesizer, model, info, err := s.runEnsemble(callCtx, request)
 		if err != nil {
 			return err
 		}
-		// The synthesis response is already available. Stream its final answer as one chunk.
-		routing = response.Routing
-		streamCallback(response.Choices[0].Message.Content)
+		routing = info
+		if err := synthesizer.ChatCompletionStream(callCtx, synthesis, model, func(chunk string) { streamCallback(chunk) }); err != nil {
+			return s.contextOrUpstreamError(callCtx, err)
+		}
 	} else {
 		var provider Provider
 		var model string
