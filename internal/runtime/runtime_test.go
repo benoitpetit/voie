@@ -3,6 +3,9 @@ package runtime
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +19,19 @@ func TestNewWithRegistryRejectsUnknownDefaultProvider(t *testing.T) {
 	cfg := &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute, DefaultProvider: "missing"}
 	if _, err := NewWithRegistry(cfg, registry); !errors.Is(err, app.ErrUnknownProvider) {
 		t.Fatalf("NewWithRegistry() error = %v, want ErrUnknownProvider", err)
+	}
+}
+
+func TestNewWithRegistryRejectsUnknownPolicyModel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "routing.json")
+	if err := os.WriteFile(path, []byte(`{"models":{"missing/model":{"description":"Missing","capabilities":["coding"]}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry := app.NewRegistry()
+	registry.Register("test", &runtimeTestProvider{})
+	cfg := &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute, RoutingConfigPath: path}
+	if _, err := NewWithRegistry(cfg, registry); err == nil || !strings.Contains(err.Error(), "missing/model") {
+		t.Fatalf("NewWithRegistry() error = %v, want unknown model reference", err)
 	}
 }
 

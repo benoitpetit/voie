@@ -38,6 +38,8 @@ func normalizeStrategy(strategy Strategy) Strategy {
 
 type ServiceOptions struct {
 	DefaultProvider string
+	RouterModel     string
+	RoutingPolicy   RoutingPolicy
 	Timeout         time.Duration
 	HealthProbe     func(context.Context, string) bool
 	HealthClient    *http.Client
@@ -54,8 +56,12 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 		return nil, appError(ErrInvalidInput, "provider registry is required", nil)
 	}
 	options.DefaultProvider = strings.ToLower(strings.TrimSpace(options.DefaultProvider))
+	options.RouterModel = strings.TrimSpace(options.RouterModel)
 	if options.DefaultProvider != "" && registry.Get(options.DefaultProvider) == nil {
 		return nil, appError(ErrUnknownProvider, fmt.Sprintf("configured default provider %q is unknown", options.DefaultProvider), nil)
+	}
+	if options.RouterModel != "" && registry.GetForModel(options.RouterModel) == nil {
+		return nil, appError(ErrUnknownModel, fmt.Sprintf("configured router model %q is unknown", options.RouterModel), nil)
 	}
 	if options.Timeout < 0 {
 		return nil, appError(ErrInvalidInput, "timeout must be positive", nil)

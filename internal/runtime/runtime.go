@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/benoitpetit/voie/config"
@@ -30,8 +33,41 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+	if registry == nil {
+		return nil, fmt.Errorf("provider registry is required")
+	}
+	routingPath := strings.TrimSpace(cfg.RoutingConfigPath)
+	if routingPath == "" {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return nil, fmt.Errorf("resolve user configuration directory: %w", err)
+		}
+		routingPath = filepath.Join(configDir, "voie", "routing.json")
+	}
+	policyConfig, err := config.LoadRoutingPolicy(routingPath)
+	if err != nil {
+		return nil, err
+	}
+	registeredModels := make(map[string]struct{})
+	for _, name := range registry.GetProviderNames() {
+		for _, model := range registry.Get(name).GetInfo().SupportedModels {
+			registeredModels[strings.ToLower(strings.TrimSpace(model))] = struct{}{}
+		}
+	}
+	if err := config.ValidateRoutingPolicy(policyConfig, registeredModels); err != nil {
+		return nil, err
+	}
+	policy := app.RoutingPolicy{Models: make(map[string]app.ModelDescriptor, len(policyConfig.Models)), Tasks: make(map[string]app.TaskRule, len(policyConfig.Tasks))}
+	for model, descriptor := range policyConfig.Models {
+		policy.Models[model] = app.ModelDescriptor{Description: descriptor.Description, Capabilities: append([]string(nil), descriptor.Capabilities...)}
+	}
+	for task, rule := range policyConfig.Tasks {
+		policy.Tasks[task] = app.TaskRule{RequiredCapabilities: append([]string(nil), rule.RequiredCapabilities...), PreferredModels: append([]string(nil), rule.PreferredModels...)}
+	}
 	service, err := app.NewService(registry, app.ServiceOptions{
 		DefaultProvider: cfg.DefaultProvider,
+		RouterModel:     cfg.RouterModel,
+		RoutingPolicy:   policy,
 		Timeout:         cfg.Timeout,
 	})
 	if err != nil {

@@ -88,6 +88,21 @@ type ModelInfo struct {
 	Meta       map[string]interface{} `json:"meta,omitempty"`
 }
 
+type RoutingPolicy struct {
+	Models map[string]ModelDescriptor
+	Tasks  map[string]TaskRule
+}
+
+type ModelDescriptor struct {
+	Description  string
+	Capabilities []string
+}
+
+type TaskRule struct {
+	RequiredCapabilities []string
+	PreferredModels      []string
+}
+
 type Provider interface {
 	ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error)
 	ChatCompletionStream(ctx context.Context, messages []Message, model string, callback func(chunk string)) error
