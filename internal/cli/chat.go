@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/benoitpetit/voie/internal/app"
@@ -45,7 +46,8 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runChatWithOptions(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), service, model, provider, app.Strategy(strategy), task, models, conversation)
+			stderr := command.ErrOrStderr()
+			return runChatWithReporter(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), stderr, isTerminalWriter(stderr), service, model, provider, app.Strategy(strategy), task, models, conversation)
 		},
 	}
 	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required)")
@@ -62,6 +64,10 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout io.Writ
 }
 
 func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, conversation string) error {
+	return runChatWithReporter(ctx, args, stdin, stdout, io.Discard, false, service, model, provider, strategy, task, models, conversation)
+}
+
+func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, isTerminal bool, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, conversation string) error {
 	prompt := strings.TrimSpace(strings.Join(args, " "))
 	if prompt == "" {
 		if stdin == nil {
@@ -76,7 +82,9 @@ func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, std
 	if prompt == "" {
 		return fmt.Errorf("chat prompt must not be empty")
 	}
-	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}})
+	reporter := newProgressReporter(stderr, isTerminal)
+	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}, OnProgress: reporter.Handle})
+	reporter.Finish(err)
 	if err != nil {
 		return err
 	}
@@ -85,4 +93,13 @@ func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, std
 	}
 	_, err = fmt.Fprintln(stdout, response.Choices[0].Message.Content)
 	return err
+}
+
+func isTerminalWriter(writer io.Writer) bool {
+	file, ok := writer.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }

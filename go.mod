@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/benoitpetit/agent-spinner v0.0.0-20260409185017-1b976a61382c // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2 // indirect

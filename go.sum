@@ -1,3 +1,5 @@
+github.com/benoitpetit/agent-spinner v0.0.0-20260409185017-1b976a61382c h1:bS82NLWdjWf6oYdtyMnA65MuB5UN0tzYxCXrtg12zbI=
+github.com/benoitpetit/agent-spinner v0.0.0-20260409185017-1b976a61382c/go.mod h1:AEotyeJG9rEu7pddH0HuFpwq7WB5jtghJv9PvWAe3FE=
 github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327 h1:UQ4AU+BGti3Sy/aLU8KVseYKNALcX9UXY6DfpwQ6J8E=
 github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327/go.mod h1:NItd7aLkcfOA/dcMXvl8p1u+lQqioRMq/SqDp71Pb/k=
 github.com/chromedp/chromedp v0.14.0 h1:/xE5m6wEBwivhalHwlCOyYfBcAJNwg4nLw96QiCfYr0=

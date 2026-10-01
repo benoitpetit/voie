@@ -22,8 +22,11 @@ func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stdout.String() != "answer\n" || stderr.Len() != 0 {
+	if stdout.String() != "answer\n" || !strings.Contains(stderr.String(), "accepted") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+	if strings.Contains(stderr.String(), "hello world") || strings.Contains(stderr.String(), "answer") || strings.Contains(stderr.String(), "\033[") {
+		t.Fatalf("stderr contains completion content or color codes: %q", stderr.String())
 	}
 	if provider.model != "model" || provider.messages[0].Content != "hello world" {
 		t.Fatalf("provider request model=%q messages=%+v", provider.model, provider.messages)
