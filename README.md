@@ -6,7 +6,7 @@
 
 Providers use public or reverse-engineered endpoints. Their availability can change. Duck.ai chat requires Chrome or Chromium on the host; the other modes and providers do not require a browser.
 
-ChatJimmy is available without an account or API key and currently lists `llama3.1-8B`. Its upstream API returns complete responses, so `voie` emits a single final chunk when local streaming is requested. Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices.
+Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices. Some providers return complete responses rather than streaming tokens, so `voie` emits one final content chunk for those requests.
 
 ## Install and run
 
@@ -30,7 +30,7 @@ Both install `~/.local/bin/voie` by default. The installer does not add that dir
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/benoitpetit/voie/main/install.sh
-sh install.sh --version 0.0.1 --install-dir /your/bin
+sh install.sh --version 0.0.2 --install-dir /your/bin
 ```
 
 **Windows** (amd64, PowerShell):
@@ -43,7 +43,7 @@ This installs `%LOCALAPPDATA%\Programs\voie\voie.exe`. The installer does not ad
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/benoitpetit/voie/main/install.ps1 -OutFile install.ps1
-./install.ps1 -Version 0.0.1 -InstallDir C:\Tools\voie
+./install.ps1 -Version 0.0.2 -InstallDir C:\Tools\voie
 ```
 
 The release archives are named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS, and `voie_VERSION_windows_amd64.zip` for Windows.
@@ -84,7 +84,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.1 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.1) contains these archives.
+The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.2 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.2) contains these archives.
 
 ## Use the CLI
 
@@ -96,7 +96,6 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 ./voie models --json
 ./voie providers
 ./voie chat --model MODEL_ID "Summarize this text"
-./voie chat --provider jimmy --model llama3.1-8B "Bonjour"
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
@@ -104,7 +103,7 @@ The Cobra help shows every command and its available flags. Commands are `serve`
 
 `chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
 
-Automatic strategies are opt-in. `auto` uses task rules first and asks `ROUTER_MODEL` only when more than one eligible model remains. `ensemble` runs two or three models and synthesizes their answers. Example: `voie chat --strategy auto --task coding "Review this function"`. An explicit ensemble can use `voie chat --strategy ensemble --models model-a,model-b "Compare these approaches"`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
+Automatic strategies are opt-in. `auto` uses task rules first and asks `ROUTER_MODEL` only when more than one eligible model remains. `ensemble` runs two or three models and synthesizes their answers. `--task` accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general` when voie selects candidates automatically; the CLI offers these values as completions. Examples: `voie chat --strategy auto --task coding "Review this function"` and `voie chat --strategy ensemble --task reasoning "Compare these approaches"`. An explicit ensemble can use `voie chat --strategy ensemble --models model-a,model-b "Compare these approaches"`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
 
 ## Use MCP
 

@@ -37,7 +37,7 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
 
 `messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `conversation_id`, and `stream` are optional. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
 
-`strategy` defaults to `classic`, preserving existing model/provider selection. `auto` selects one eligible model. Supported task hints are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`. `ROUTER_MODEL` is required when task rules leave more than one eligible model; a unique task-rule match needs no router call. `ensemble` runs 2 or 3 distinct models concurrently and synthesizes after at least 2 succeed. `models` may explicitly supply ensemble candidates; otherwise `ROUTER_MODEL` selects them. `SYNTHESIS_MODEL` is used for the final answer and falls back to `ROUTER_MODEL`. Multi-model requests send the prompt to each selected provider and send successful intermediate answers to the synthesizer.
+`strategy` defaults to `classic`, preserving existing model/provider selection. `auto` selects one eligible model. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general` and guides automatic candidate selection in `auto` and in `ensemble` when `models` is omitted. `ROUTER_MODEL` is required when automatic selection has more than one eligible candidate; a unique task-rule match needs no router call. `ensemble` runs 2 or 3 distinct models concurrently and synthesizes after at least 2 succeed. `models` may explicitly supply ensemble candidates; otherwise `ROUTER_MODEL` selects them. `SYNTHESIS_MODEL` is used for the final answer and falls back to `ROUTER_MODEL`. Multi-model requests send the prompt to each selected provider and send successful intermediate answers to the synthesizer.
 
 When supplying `models` explicitly, list only ensemble candidates; the synthesis model must be separate.
 
@@ -49,13 +49,15 @@ Automatic routing:
 {"strategy":"auto","task":"coding","messages":[{"role":"user","content":"Review this code"}]}
 ```
 
-Ensemble with explicit candidates:
+Ensemble with automatic candidate selection and a task hint:
 
 ```json
-{"strategy":"ensemble","models":["MODEL_A","MODEL_B"],"messages":[{"role":"user","content":"Compare these approaches"}]}
+{"strategy":"ensemble","task":"reasoning","messages":[{"role":"user","content":"Compare these approaches"}]}
 ```
 
-Use `GET /v1/models` to discover current IDs. For example, the ChatJimmy provider currently advertises `llama3.1-8B`; its upstream is non-streaming, so a request with `stream: true` receives the completed answer as one content chunk.
+To select exact ensemble candidates, provide them in `models`; in that case, `task` does not change the explicit list.
+
+Use `GET /v1/models` to discover current IDs. Some providers return complete responses rather than streaming tokens, so a request with `stream: true` may receive the completed answer as one content chunk.
 
 ### Non-streaming response
 

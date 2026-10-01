@@ -33,7 +33,7 @@ Takes an empty object. Returns provider names, labels, `alive`, default model ID
 
 ### `chat_completion`
 
-Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, and `conversation_id`.
+Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, and `conversation_id`. `task` guides automatic candidate selection in `auto` or in `ensemble` when `models` is omitted; supported values are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`.
 
 ```json
 {
@@ -51,11 +51,13 @@ Automatic routing example:
 {"strategy":"auto","task":"coding","messages":[{"role":"user","content":"Review this function"}]}
 ```
 
-Ensemble example with explicit candidates:
+Ensemble example with automatic candidate selection and a task hint:
 
 ```json
-{"strategy":"ensemble","models":["MODEL_A","MODEL_B"],"messages":[{"role":"user","content":"Compare these designs"}]}
+{"strategy":"ensemble","task":"reasoning","messages":[{"role":"user","content":"Compare these designs"}]}
 ```
+
+When `models` contains explicit ensemble candidates, voie uses that exact list and `task` does not change it.
 
 The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. Automatic routing uses `ROUTER_MODEL` only when local task rules do not identify one model. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`. Selected providers receive the prompt, and the synthesizer receives successful intermediate answers.
 

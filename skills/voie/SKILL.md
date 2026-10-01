@@ -7,7 +7,7 @@ description: Use when an agent needs to install voie or discover and call a supp
 
 Use the `voie` runtime catalogue to choose a model, then call it through the interface available in the current environment.
 
-Some public providers, including ChatJimmy, do not require an account or API key. They send prompts to a third-party service; avoid confidential data unless its handling has been reviewed. Discover model IDs at runtime because upstream catalogues and availability can change.
+Public providers receive the prompts sent to them; avoid confidential data unless the provider's handling has been reviewed. Discover model IDs at runtime because upstream catalogues and availability can change.
 
 ## Workflow
 
@@ -15,6 +15,8 @@ Some public providers, including ChatJimmy, do not require an account or API key
 2. Call `chat_completion` with that explicit `model` and a `messages` array. Set `provider` only when the user asks for a provider or routing needs to be constrained.
 3. If MCP is unavailable and the local executable is available, run `voie models --json`, then `voie chat --model MODEL_ID "PROMPT"`.
 4. If only the HTTP API is available, call `GET /v1/models`, then `POST /v1/chat/completions` with the exact model ID and messages. Send the configured bearer token when the API requires authentication.
+
+When automatic selection is requested, use `strategy: "auto"` to select one model or `strategy: "ensemble"` to combine several. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`. For an ensemble with explicit model IDs, use `models` to specify the candidates; a task hint does not change that explicit list.
 
 ## Install the CLI
 

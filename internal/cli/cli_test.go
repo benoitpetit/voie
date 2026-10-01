@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
 	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
+	"github.com/spf13/cobra"
 )
 
 func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
@@ -30,6 +32,39 @@ func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
 	}
 	if provider.model != "model" || provider.messages[0].Content != "hello world" {
 		t.Fatalf("provider request model=%q messages=%+v", provider.model, provider.messages)
+	}
+}
+
+func TestChatHelpListsEverySupportedTask(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := executeForTest(context.Background(), []string{"chat", "--help"}, nil, &stdout, &stderr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"coding", "reasoning", "writing", "translation", "summarization", "general", "auto", "ensemble"} {
+		if !strings.Contains(stdout.String(), value) {
+			t.Errorf("chat help does not mention %q:\n%s", value, stdout.String())
+		}
+	}
+}
+
+func TestChatTaskFlagCompletesSupportedTasks(t *testing.T) {
+	root := NewRootCommand(context.Background(), nil, io.Discard, io.Discard, nil)
+	chat, _, err := root.Find([]string{"chat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	completion, ok := chat.GetFlagCompletionFunc("task")
+	if !ok {
+		t.Fatal("--task has no shell completion function")
+	}
+	got, directive := completion(chat, nil, "")
+	want := []string{"coding", "reasoning", "writing", "translation", "summarization", "general"}
+	if !reflect.DeepEqual([]string(got), want) {
+		t.Fatalf("task completions=%v, want %v", got, want)
+	}
+	if directive&cobra.ShellCompDirectiveNoFileComp == 0 {
+		t.Fatalf("completion directive=%v, want no file completions", directive)
 	}
 }
 

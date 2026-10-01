@@ -28,7 +28,7 @@ app.Registry → provider
 
 ## Routing and conversations
 
-`strategy` is `classic` when omitted. Classic routing remains model/provider based, including the generic `openai` default behavior. `auto` filters disabled providers and policy-ineligible models, ranks preferred models, and uses `ROUTER_MODEL` to choose when task rules do not leave one candidate. Supported task names are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`. If auto routing is ambiguous and no router is configured, the request fails with a routing error.
+`strategy` is `classic` when omitted. Classic routing remains model/provider based, including the generic `openai` default behavior. `auto` filters disabled providers and policy-ineligible models, ranks preferred models, and uses `ROUTER_MODEL` to choose when task rules do not leave one candidate. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`; it guides automatic candidate selection in `auto` and in `ensemble` when explicit model IDs are not supplied. If automatic routing is ambiguous and no router is configured, the request fails with a routing error.
 
 `ensemble` accepts two or three distinct explicit model IDs, or asks the router to select up to three. Candidates run concurrently and at least two must succeed. `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`; intermediate answers are not returned or saved in the conversation transcript. Multi-model requests send the prompt to each selected provider and then send successful candidate answers to the synthesizer.
 

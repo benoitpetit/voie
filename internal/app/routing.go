@@ -10,9 +10,19 @@ import (
 	"strings"
 )
 
-var supportedTasks = map[string]struct{}{
-	"coding": {}, "reasoning": {}, "writing": {}, "translation": {},
-	"summarization": {}, "general": {},
+var taskCategories = []string{"coding", "reasoning", "writing", "translation", "summarization", "general"}
+
+var supportedTasks = func() map[string]struct{} {
+	tasks := make(map[string]struct{}, len(taskCategories))
+	for _, task := range taskCategories {
+		tasks[task] = struct{}{}
+	}
+	return tasks
+}()
+
+// SupportedTaskCategories returns the task hints accepted by automatic routing.
+func SupportedTaskCategories() []string {
+	return append([]string(nil), taskCategories...)
 }
 
 type ModelCandidate struct {
@@ -289,8 +299,9 @@ func parseRouteDecision(content string) (RouteDecision, error) {
 }
 
 func routingSystemPrompt(limit int) string {
+	tasks := strings.Join(taskCategories, ", ")
 	if limit == 1 {
-		return `Classify the task and choose one model from the supplied candidates. Return only JSON with keys "task", "model", and "reason". The task must be one of coding, reasoning, writing, translation, summarization, general. Never invent a model ID.`
+		return fmt.Sprintf(`Classify the task and choose one model from the supplied candidates. Return only JSON with keys "task", "model", and "reason". The task must be one of %s. Never invent a model ID.`, tasks)
 	}
-	return fmt.Sprintf(`Classify the task and choose between 2 and %d distinct models from the supplied candidates. Return only JSON with keys "task", "models" (array), and "reason". The task must be one of coding, reasoning, writing, translation, summarization, general. Never invent a model ID.`, limit)
+	return fmt.Sprintf(`Classify the task and choose between 2 and %d distinct models from the supplied candidates. Return only JSON with keys "task", "models" (array), and "reason". The task must be one of %s. Never invent a model ID.`, limit, tasks)
 }

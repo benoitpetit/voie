@@ -4,10 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestSupportedTaskCategoriesAreStableAndDefensive(t *testing.T) {
+	want := []string{"coding", "reasoning", "writing", "translation", "summarization", "general"}
+	got := SupportedTaskCategories()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("task categories=%v, want %v", got, want)
+	}
+	got[0] = "changed"
+	if next := SupportedTaskCategories(); !reflect.DeepEqual(next, want) {
+		t.Fatalf("task category list is mutable by callers: %v", next)
+	}
+}
 
 func TestServiceAutoUsesUniqueTaskRuleWithoutRouter(t *testing.T) {
 	answer := &routingStub{info: ProviderInfo{Name: "answer", Working: true, SupportedModels: []string{"model-a"}}}

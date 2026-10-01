@@ -54,11 +54,11 @@ voie mcp
 
 `serve` starts the HTTP API using configured `HOST` and `PORT`; flags override them for that run. A non-loopback host still requires `API_TOKEN`. Runtime configuration loads when a command runs, not when help is requested.
 
-`chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` provides a task hint, `--models` sets explicit ensemble candidates, and `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
+`chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` provides a hint for automatic candidate selection in `auto` or in `ensemble` when `--models` is omitted. It accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`; shell completion suggests these values. `--models` sets exact ensemble candidates, and `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
 
 ```bash
 voie chat --strategy auto --task coding "Review this patch"
-voie chat --strategy ensemble --models MODEL_A,MODEL_B "Compare these designs"
+voie chat --strategy ensemble --task reasoning "Compare these designs"
 ID=$(voie conversations create)
 voie chat --strategy auto --conversation "$ID" "Continue the discussion"
 voie conversations list

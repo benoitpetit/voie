@@ -15,10 +15,11 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	var model, provider, task, conversation string
 	var strategy string
 	var models []string
+	taskCategories := app.SupportedTaskCategories()
 	command := &cobra.Command{
 		Use:   "chat [prompt...]",
 		Short: "Generate a completion from a prompt",
-		Long:  "Send a prompt using classic model selection or opt-in automatic/ensemble routing. Classic requests require --model; auto and ensemble can select models without it. Use --provider to constrain the provider and --conversation to resume local history. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.",
+		Long:  fmt.Sprintf("Send a prompt using classic model selection or opt-in automatic/ensemble routing. Classic requests require --model; auto and ensemble can select models without it. --task is an optional hint for auto and ensemble; supported values: %s. Use --provider to constrain the provider and --conversation to resume local history. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.", strings.Join(taskCategories, ", ")),
 		Example: `  voie chat --model MODEL_ID "Summarize this text"
   cat prompt.txt | voie chat --model MODEL_ID
   voie chat --model MODEL_ID --provider PROVIDER "Hello"
@@ -53,7 +54,10 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required)")
 	command.Flags().StringVarP(&provider, "provider", "p", "", "provider to use")
 	command.Flags().StringVar(&strategy, "strategy", "", "completion strategy: classic, auto, or ensemble")
-	command.Flags().StringVar(&task, "task", "", "task category for automatic routing")
+	command.Flags().StringVar(&task, "task", "", fmt.Sprintf("task hint for auto or ensemble; supported: %s", strings.Join(taskCategories, ", ")))
+	if err := command.RegisterFlagCompletionFunc("task", cobra.FixedCompletions(taskCategories, cobra.ShellCompDirectiveNoFileComp)); err != nil {
+		panic(err)
+	}
 	command.Flags().StringSliceVar(&models, "models", nil, "models to include in an ensemble")
 	command.Flags().StringVar(&conversation, "conversation", "", "local conversation ID to resume")
 	return command
