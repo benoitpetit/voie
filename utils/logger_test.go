@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/benoitpetit/voie/internal/brand"
 )
@@ -17,6 +18,25 @@ func TestSetOutputRoutesLogsToConfiguredWriter(t *testing.T) {
 		t.Fatalf("log output = %q", output.String())
 	}
 	SetOutput(os.Stdout)
+}
+
+func TestRequestLoggerIncludesIdentityAndDefaultsToMonochrome(t *testing.T) {
+	var output bytes.Buffer
+	SetOutput(&output)
+	defer SetOutput(os.Stdout)
+	SetNoColor(true)
+	request := NewRequestLogger("GET", "/health", "must-not-appear", "must-not-appear")
+	request.Start()
+	request.End(200, "request_id=%s status=%d", request.ID, 200)
+	if strings.Contains(output.String(), "\033[") || !strings.Contains(output.String(), request.ID) {
+		t.Fatalf("request logs lack monochrome request identity: %q", output.String())
+	}
+	if strings.Contains(output.String(), "must-not-appear") {
+		t.Fatalf("request logs contain discarded fields: %q", output.String())
+	}
+	if time.Since(request.StartTime) < 0 {
+		t.Fatal("request logger elapsed duration is invalid")
+	}
 }
 
 func TestLogServerStartUsesBuildBrandAndVersion(t *testing.T) {

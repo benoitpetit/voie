@@ -12,6 +12,7 @@ import (
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
+	"github.com/benoitpetit/voie/utils"
 )
 
 type chatRequest struct {
@@ -39,7 +40,7 @@ func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
 	if cfg != nil {
 		token = cfg.APIToken
 	}
-	return cors(bearerAuth(token, mux))
+	return requestLogging(cors(bearerAuth(token, mux)))
 }
 
 type apiHandler struct{ service *app.Service }
@@ -58,9 +59,11 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	if !request.Stream {
 		response, err := h.service.Complete(r.Context(), appRequest)
 		if err != nil {
+			logChatOutcome(appRequest, nil, err)
 			writeAppError(w, err)
 			return
 		}
+		logChatOutcome(appRequest, response, nil)
 		writeJSON(w, http.StatusOK, response)
 		return
 	}
@@ -98,9 +101,11 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		})
 	})
 	if err != nil && !started {
+		logChatOutcome(request, nil, err)
 		writeAppError(w, err)
 		return
 	}
+	logChatOutcome(request, nil, err)
 	start(nil)
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
@@ -111,6 +116,58 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		})
 	}
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+}
+
+func logChatOutcome(request app.CompletionRequest, response *app.ChatCompletionResponse, err error) {
+	strategy := request.Strategy
+	if strategy == "" {
+		strategy = app.StrategyClassic
+	}
+	if err != nil {
+		utils.Warn("chat strategy=%s failed category=%s", strategy, chatErrorCategory(err))
+		return
+	}
+	model, provider := request.Model, request.Provider
+	if response != nil {
+		if response.Model != "" {
+			model = response.Model
+		}
+		if response.Provider != "" {
+			provider = response.Provider
+		}
+	}
+	utils.Info("chat strategy=%s model=%s provider=%s status=succeeded", strategy, model, provider)
+}
+
+func chatErrorCategory(err error) string {
+	switch {
+	case errors.Is(err, app.ErrInvalidInput):
+		return "invalid_input"
+	case errors.Is(err, app.ErrUnknownModel):
+		return "unknown_model"
+	case errors.Is(err, app.ErrUnknownProvider):
+		return "unknown_provider"
+	case errors.Is(err, app.ErrProviderDisabled):
+		return "provider_disabled"
+	case errors.Is(err, app.ErrRouting):
+		return "routing"
+	case errors.Is(err, app.ErrTimeout):
+		return "timeout"
+	case errors.Is(err, app.ErrCanceled):
+		return "canceled"
+	case errors.Is(err, app.ErrConversationConflict):
+		return "conversation_conflict"
+	case errors.Is(err, app.ErrConversationExpired):
+		return "conversation_expired"
+	case errors.Is(err, app.ErrConversationNotFound):
+		return "conversation_not_found"
+	case errors.Is(err, app.ErrConversationStore):
+		return "conversation_store"
+	case errors.Is(err, app.ErrUpstream):
+		return "upstream"
+	default:
+		return "internal"
+	}
 }
 
 func (h *apiHandler) models(w http.ResponseWriter, r *http.Request) {

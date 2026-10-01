@@ -32,7 +32,7 @@ var (
 	logger  *log.Logger
 	mu      sync.Mutex
 	level   = INFO
-	noColor = false
+	noColor = true
 )
 
 func init() {
@@ -98,32 +98,36 @@ func formatLog(level Level, format string, v ...interface{}) string {
 func Info(format string, v ...interface{}) {
 	if enabled(INFO) {
 		mu.Lock()
+		defer mu.Unlock()
+		defer func() { _ = recover() }()
 		logger.Print(formatLog(INFO, format, v...))
-		mu.Unlock()
 	}
 }
 
 func Warn(format string, v ...interface{}) {
 	if enabled(WARN) {
 		mu.Lock()
+		defer mu.Unlock()
+		defer func() { _ = recover() }()
 		logger.Print(formatLog(WARN, format, v...))
-		mu.Unlock()
 	}
 }
 
 func Error(format string, v ...interface{}) {
 	if enabled(ERROR) {
 		mu.Lock()
+		defer mu.Unlock()
+		defer func() { _ = recover() }()
 		logger.Print(formatLog(ERROR, format, v...))
-		mu.Unlock()
 	}
 }
 
 func Debug(format string, v ...interface{}) {
 	if enabled(DEBUG) {
 		mu.Lock()
+		defer mu.Unlock()
+		defer func() { _ = recover() }()
 		logger.Print(formatLog(DEBUG, format, v...))
-		mu.Unlock()
 	}
 }
 
@@ -149,7 +153,7 @@ func NewRequestLogger(method, path, query, ip string) *RequestLogger {
 }
 
 func (rl *RequestLogger) Start() {
-	Info("[%s] %s %s %s", rl.ID, rl.Method, rl.Path, rl.Query)
+	safeLog(func() { Info("[%s] %s %s request_id=%s", rl.ID, rl.Method, rl.Path, rl.ID) })
 }
 
 func (rl *RequestLogger) End(statusCode int, format string, v ...interface{}) {
@@ -157,18 +161,9 @@ func (rl *RequestLogger) End(statusCode int, format string, v ...interface{}) {
 	duration := time.Since(rl.StartTime)
 	rl.mu.Unlock()
 
-	statusColor := "\033[32m"
-	if statusCode >= 400 {
-		statusColor = "\033[31m"
-	} else if statusCode >= 300 {
-		statusColor = "\033[33m"
-	}
-
-	if noColor {
-		Info("[%s] %d %s (%s)", rl.ID, statusCode, fmt.Sprintf(format, v...), duration)
-	} else {
-		Info("%s[%d]%s %s (%s)", statusColor, statusCode, reset, fmt.Sprintf(format, v...), duration)
-	}
+	safeLog(func() {
+		Info("[%s] %s %s %d %s (%s)", rl.ID, rl.Method, rl.Path, statusCode, fmt.Sprintf(format, v...), duration)
+	})
 }
 
 func (rl *RequestLogger) Error(err error) {
@@ -176,7 +171,12 @@ func (rl *RequestLogger) Error(err error) {
 	duration := time.Since(rl.StartTime)
 	rl.mu.Unlock()
 
-	Error("[%s] %s %s failed after %s: %v", rl.ID, rl.Method, rl.Path, duration, err)
+	safeLog(func() { Error("[%s] %s %s failed after %s: %v", rl.ID, rl.Method, rl.Path, duration, err) })
+}
+
+func safeLog(log func()) {
+	defer func() { _ = recover() }()
+	log()
 }
 
 func LogProviderRequest(provider, model string) {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,60 @@ import (
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
 	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
+	"github.com/benoitpetit/voie/utils"
 )
+
+func TestRequestLoggingRedactsValuesAndPreservesFlush(t *testing.T) {
+	var logs bytes.Buffer
+	utils.SetOutput(&logs)
+	defer utils.SetOutput(nil)
+	utils.SetNoColor(true)
+	defer utils.SetNoColor(true)
+	underlying := &flushTestWriter{header: make(http.Header)}
+	handler := requestLogging(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte("body-secret"))
+		w.(http.Flusher).Flush()
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/private?token=query-secret", strings.NewReader("prompt-secret"))
+	request.Header.Set("Authorization", "Bearer header-secret")
+	handler.ServeHTTP(underlying, request)
+	if underlying.status != http.StatusAccepted || underlying.flushes != 1 || string(underlying.body) != "body-secret" {
+		t.Fatalf("response status=%d flushes=%d body=%q", underlying.status, underlying.flushes, underlying.body)
+	}
+	for _, required := range []string{"POST", "/private", "202", "request_id="} {
+		if !strings.Contains(logs.String(), required) {
+			t.Fatalf("logs %q missing %q", logs.String(), required)
+		}
+	}
+	for _, secret := range []string{"query-secret", "header-secret", "prompt-secret", "body-secret"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatalf("logs leaked %q: %s", secret, logs.String())
+		}
+	}
+}
+
+type flushTestWriter struct {
+	header  http.Header
+	status  int
+	flushes int
+	body    []byte
+}
+
+func (w *flushTestWriter) Header() http.Header { return w.header }
+func (w *flushTestWriter) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+}
+func (w *flushTestWriter) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	w.body = append(w.body, body...)
+	return len(body), nil
+}
+func (w *flushTestWriter) Flush() { w.flushes++ }
 
 func TestHTTPRoutesPreserveJSONAndSSEShapes(t *testing.T) {
 	service, provider := httpTestService(t)
