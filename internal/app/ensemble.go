@@ -69,8 +69,10 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	if err != nil {
 		return nil, err
 	}
+	request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesizing ensemble results", Model: model, Provider: synthesizer.GetInfo().Name, Status: "started"})
 	response, err := synthesizer.ChatCompletion(ctx, synthesis, model)
 	if err != nil {
+		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis failed", Model: model, Provider: synthesizer.GetInfo().Name, Status: "failed"})
 		return nil, s.contextOrUpstreamError(ctx, err)
 	}
 	if response == nil || len(response.Choices) == 0 {
@@ -79,6 +81,7 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	response.Model = model
 	response.Provider = synthesizer.GetInfo().Name
 	response.Routing = routing
+	request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis completed", Model: model, Provider: synthesizer.GetInfo().Name, Status: "succeeded"})
 	return response, nil
 }
 
@@ -115,9 +118,11 @@ func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) ([
 		go func(i int, candidate ModelCandidate) {
 			defer wg.Done()
 			start := time.Now()
+			request.emitProgress(ProgressEvent{Stage: "model", Message: "Calling ensemble model " + candidate.Model, Model: candidate.Model, Provider: candidate.Provider, Status: "started"})
 			p := s.registry.Get(candidate.Provider)
 			if p == nil {
 				results[i] = ensembleResult{candidate: candidate, err: ErrUnknownProvider, duration: time.Since(start)}
+				request.emitProgress(ProgressEvent{Stage: "model", Message: "Ensemble model failed", Model: candidate.Model, Provider: candidate.Provider, Status: "failed"})
 				return
 			}
 			resp, callErr := p.ChatCompletion(ctx, request.Messages, candidate.Model)
@@ -125,6 +130,12 @@ func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) ([
 				callErr = fmt.Errorf("empty completion")
 			}
 			results[i] = ensembleResult{candidate: candidate, response: resp, err: callErr, duration: time.Since(start)}
+			status := "succeeded"
+			message := "Ensemble model completed"
+			if callErr != nil {
+				status, message = "failed", "Ensemble model failed"
+			}
+			request.emitProgress(ProgressEvent{Stage: "model", Message: message, Model: candidate.Model, Provider: candidate.Provider, Status: status})
 		}(i, candidate)
 	}
 	wg.Wait()

@@ -12,13 +12,48 @@ import (
 )
 
 type CompletionRequest struct {
-	Model          string    `json:"model"`
-	Provider       string    `json:"provider,omitempty"`
-	Strategy       Strategy  `json:"strategy,omitempty"`
-	Task           string    `json:"task,omitempty"`
-	Models         []string  `json:"models,omitempty"`
-	ConversationID string    `json:"conversation_id,omitempty"`
-	Messages       []Message `json:"messages"`
+	Model          string              `json:"model"`
+	Provider       string              `json:"provider,omitempty"`
+	Strategy       Strategy            `json:"strategy,omitempty"`
+	Task           string              `json:"task,omitempty"`
+	Models         []string            `json:"models,omitempty"`
+	ConversationID string              `json:"conversation_id,omitempty"`
+	Messages       []Message           `json:"messages"`
+	OnProgress     func(ProgressEvent) `json:"-"`
+	progress       *progressEmitter
+}
+
+type ProgressEvent struct {
+	Stage    string
+	Message  string
+	Model    string
+	Provider string
+	Status   string
+}
+
+type progressEmitter struct {
+	mu       sync.Mutex
+	callback func(ProgressEvent)
+}
+
+func (p *progressEmitter) emit(event ProgressEvent) {
+	if p == nil || p.callback == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	defer func() { _ = recover() }()
+	p.callback(event)
+}
+
+func (r CompletionRequest) emitProgress(event ProgressEvent) {
+	r.progress.emit(event)
+}
+
+func initProgress(request *CompletionRequest) {
+	if request.OnProgress != nil {
+		request.progress = &progressEmitter{callback: request.OnProgress}
+	}
 }
 
 type Strategy string
@@ -88,7 +123,9 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 }
 
 func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*ChatCompletionResponse, error) {
+	initProgress(&request)
 	if err := validateMessages(request.Messages); err != nil {
+		request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Invalid completion request", Status: "failed"})
 		return nil, err
 	}
 	callCtx, cancel := s.completionContext(ctx)
@@ -98,6 +135,7 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 		return nil, err
 	}
 	strategy := normalizeStrategy(request.Strategy)
+	request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Completion accepted: " + string(strategy), Status: "started"})
 	var provider Provider
 	var model string
 	var routing *RoutingInfo
@@ -106,6 +144,7 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	case StrategyClassic:
 		provider, model, err = s.selectProvider(request)
 	case StrategyAuto:
+		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
 		var candidate ModelCandidate
 		var decision RoutingInfo
 		candidate, decision, err = s.selectAutomatic(callCtx, request)
@@ -113,6 +152,9 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			provider = s.registry.Get(candidate.Provider)
 			model = candidate.Model
 			routing = &decision
+			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selected " + candidate.Model + " (" + candidate.Provider + ")", Model: candidate.Model, Provider: candidate.Provider, Status: "succeeded"})
+		} else {
+			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Automatic routing failed", Status: "failed"})
 		}
 	case StrategyEnsemble:
 		response, err = s.completeEnsemble(callCtx, request)
@@ -123,8 +165,10 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 		return nil, err
 	}
 	if strategy != StrategyEnsemble {
+		request.emitProgress(ProgressEvent{Stage: "model", Message: "Calling model " + model, Model: model, Provider: provider.GetInfo().Name, Status: "started"})
 		response, err = provider.ChatCompletion(callCtx, request.Messages, model)
 		if err != nil {
+			request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call failed", Model: model, Provider: provider.GetInfo().Name, Status: "failed"})
 			return nil, s.contextOrUpstreamError(callCtx, err)
 		}
 		if response == nil || len(response.Choices) == 0 {
@@ -135,11 +179,13 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			response.Model = model
 		}
 		response.Routing = routing
+		request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call completed", Model: model, Provider: provider.GetInfo().Name, Status: "succeeded"})
 	}
 	if response == nil || len(response.Choices) == 0 {
 		return nil, appError(ErrUpstream, "completion returned an empty response", nil)
 	}
 	if request.ConversationID != "" {
+		request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Saving conversation turn", Status: "started"})
 		info := RoutingInfo{Strategy: strategy, Models: []RoutedModel{{Model: model, Provider: response.Provider, Status: "succeeded"}}}
 		if response.Routing != nil {
 			info = *response.Routing
@@ -148,9 +194,11 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 		}
 		updated, err := s.options.Conversations.AppendTurn(callCtx, request.ConversationID, version, userMessages, response.Choices[0].Message, info)
 		if err != nil {
+			request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Conversation save failed", Status: "failed"})
 			return nil, err
 		}
 		response.ConversationID = updated.ID
+		request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Conversation turn saved", Status: "succeeded"})
 	}
 	return response, nil
 }
@@ -165,6 +213,7 @@ func (s *Service) CompleteStream(ctx context.Context, request CompletionRequest,
 // CompleteStreamWithInfo emits the route decision with each chunk so transports
 // can include it in their initial streaming event.
 func (s *Service) CompleteStreamWithInfo(ctx context.Context, request CompletionRequest, callback func(string, *RoutingInfo)) error {
+	initProgress(&request)
 	if err := validateMessages(request.Messages); err != nil {
 		return err
 	}
@@ -178,6 +227,7 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		return err
 	}
 	strategy := normalizeStrategy(request.Strategy)
+	request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Completion accepted: " + string(strategy), Status: "started"})
 	var routing *RoutingInfo
 	var streamText strings.Builder
 	streamCallback := func(chunk string) { streamText.WriteString(chunk); callback(chunk, routing) }
@@ -187,18 +237,24 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 			return err
 		}
 		routing = info
+		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Streaming synthesized completion", Model: model, Provider: synthesizer.GetInfo().Name, Status: "started"})
 		if err := synthesizer.ChatCompletionStream(callCtx, synthesis, model, func(chunk string) { streamCallback(chunk) }); err != nil {
+			request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis failed", Model: model, Provider: synthesizer.GetInfo().Name, Status: "failed"})
 			return s.contextOrUpstreamError(callCtx, err)
 		}
+		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis completed", Model: model, Provider: synthesizer.GetInfo().Name, Status: "succeeded"})
 	} else {
 		var provider Provider
 		var model string
 		if strategy == StrategyAuto {
+			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
 			candidate, info, selectErr := s.selectAutomatic(callCtx, request)
 			if selectErr != nil {
+				request.emitProgress(ProgressEvent{Stage: "routing", Message: "Automatic routing failed", Status: "failed"})
 				return selectErr
 			}
 			provider, model, routing = s.registry.Get(candidate.Provider), candidate.Model, &info
+			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selected " + candidate.Model + " (" + candidate.Provider + ")", Model: candidate.Model, Provider: candidate.Provider, Status: "succeeded"})
 		} else if strategy == StrategyClassic {
 			provider, model, err = s.selectProvider(request)
 		} else {
@@ -207,11 +263,15 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		if err != nil {
 			return err
 		}
+		request.emitProgress(ProgressEvent{Stage: "model", Message: "Streaming from " + model, Model: model, Provider: provider.GetInfo().Name, Status: "started"})
 		if err = provider.ChatCompletionStream(callCtx, request.Messages, model, streamCallback); err != nil {
+			request.emitProgress(ProgressEvent{Stage: "model", Message: "Model stream failed", Model: model, Provider: provider.GetInfo().Name, Status: "failed"})
 			return s.contextOrUpstreamError(callCtx, err)
 		}
+		request.emitProgress(ProgressEvent{Stage: "model", Message: "Model stream completed", Model: model, Provider: provider.GetInfo().Name, Status: "succeeded"})
 	}
 	if request.ConversationID != "" {
+		request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Saving conversation turn", Status: "started"})
 		assistant := Message{Role: "assistant", Content: streamText.String()}
 		info := RoutingInfo{Strategy: strategy}
 		if routing != nil {
@@ -219,9 +279,11 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		}
 		updated, err := s.options.Conversations.AppendTurn(callCtx, request.ConversationID, version, userMessages, assistant, info)
 		if err != nil {
+			request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Conversation save failed", Status: "failed"})
 			return err
 		}
 		_ = updated
+		request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Conversation turn saved", Status: "succeeded"})
 	}
 	return nil
 }

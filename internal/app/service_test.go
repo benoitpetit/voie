@@ -43,6 +43,57 @@ func TestClassicCompletionPreservesUpstreamModelField(t *testing.T) {
 	}
 }
 
+func TestCompletionProgressEventsAndCallbackPanicIsolation(t *testing.T) {
+	registry := NewRegistry()
+	provider := &testProvider{info: ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"model"}}}
+	registry.Register("test", provider)
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var events []ProgressEvent
+	request := CompletionRequest{
+		Model: "model", Messages: []Message{{Role: "user", Content: "secret prompt"}},
+		OnProgress: func(event ProgressEvent) { events = append(events, event) },
+	}
+	if _, err := service.Complete(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 3 || events[0].Stage != "accepted" || events[0].Status != "started" {
+		t.Fatalf("progress events = %#v", events)
+	}
+	for _, event := range events {
+		if strings.Contains(event.Message, "secret prompt") {
+			t.Fatalf("progress leaked prompt: %#v", event)
+		}
+	}
+	request.OnProgress = func(ProgressEvent) { panic("observer failure") }
+	if _, err := service.Complete(context.Background(), request); err != nil {
+		t.Fatalf("observer panic changed completion result: %v", err)
+	}
+}
+
+func TestStreamCompletionEmitsProgressEvents(t *testing.T) {
+	registry := NewRegistry()
+	provider := &testProvider{info: ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"model"}}}
+	registry.Register("test", provider)
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var events []ProgressEvent
+	err = service.CompleteStream(context.Background(), CompletionRequest{
+		Model: "model", Messages: []Message{{Role: "user", Content: "secret prompt"}},
+		OnProgress: func(event ProgressEvent) { events = append(events, event) },
+	}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) < 3 {
+		t.Fatalf("stream progress events = %#v", events)
+	}
+}
+
 func TestServiceRejectsUnknownConfiguredSynthesisModel(t *testing.T) {
 	registry := NewRegistry()
 	_, err := NewService(registry, ServiceOptions{SynthesisModel: "missing"})
