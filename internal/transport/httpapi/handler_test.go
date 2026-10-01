@@ -91,6 +91,60 @@ func TestChatRequestParseFailuresLogOnlyTypedCategory(t *testing.T) {
 	}
 }
 
+func TestChatOutcomeLogsRoutingSummaryWithoutContent(t *testing.T) {
+	var logs bytes.Buffer
+	utils.SetOutput(&logs)
+	defer utils.SetOutput(nil)
+	utils.SetNoColor(true)
+	response := &app.ChatCompletionResponse{
+		Model: "synth-model", Provider: "synth-provider",
+		Routing: &app.RoutingInfo{Strategy: app.StrategyEnsemble, Task: "writing", Models: []app.RoutedModel{
+			{Model: "candidate-a", Provider: "provider-a", Status: "succeeded"},
+			{Model: "candidate-b", Provider: "provider-b", Status: "failed"},
+		}},
+		Choices: []app.Choice{{Message: app.Message{Content: "private answer"}}},
+	}
+	logChatOutcome(app.CompletionRequest{Strategy: app.StrategyEnsemble}, response, nil)
+	for _, expected := range []string{"task=writing", "candidate-a", "provider-a", "candidate-b", "failed"} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Fatalf("chat logs %q missing routing value %q", logs.String(), expected)
+		}
+	}
+	if strings.Contains(logs.String(), "private answer") {
+		t.Fatalf("chat logs leaked response content: %q", logs.String())
+	}
+}
+
+func TestStreamingChatLogsAutomaticRoutingSummary(t *testing.T) {
+	var logs bytes.Buffer
+	utils.SetOutput(&logs)
+	defer utils.SetOutput(nil)
+	utils.SetNoColor(true)
+	registry := app.NewRegistry()
+	registry.Register("test", &httpTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{RoutingPolicy: app.RoutingPolicy{
+		Models: map[string]app.ModelDescriptor{"model": {Capabilities: []string{"coding"}}},
+		Tasks:  map[string]app.TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"strategy":"auto","task":"coding","stream":true,"messages":[{"role":"user","content":"private prompt"}]}`
+	response := httptest.NewRecorder()
+	NewHandler(service, &config.Config{}).ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("stream status=%d body=%s", response.Code, response.Body.String())
+	}
+	for _, expected := range []string{"task=coding", "model/test:succeeded"} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Fatalf("stream chat logs %q missing %q", logs.String(), expected)
+		}
+	}
+	if strings.Contains(logs.String(), "private prompt") || strings.Contains(logs.String(), "chunk") {
+		t.Fatalf("stream chat logs leaked completion content: %q", logs.String())
+	}
+}
+
 type flushTestWriter struct {
 	header  http.Header
 	status  int

@@ -44,7 +44,7 @@
 - [x] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/app -run 'Progress' -count=1`; observe failures because the callback/event API is absent.
 - [x] Add the callback and safe event emitter; instrument buffered/streaming route, provider, ensemble synthesis, and persistence transitions without including prompt or answer content.
 - [x] Rerun the focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/app`.
-- [ ] Commit as `feat: expose completion progress events`.
+- [x] Commit as `feat: expose completion progress events`.
 
 ### Task 2: HTTP request lifecycle and routing logs
 
@@ -63,7 +63,7 @@
 - [x] Implement the outer logging wrapper and safe status recorder; update `RequestLogger` so no-color is the default and the final record includes the request identity.
 - [x] Add chat routing summary and typed error-category records without logging message contents.
 - [x] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/httpapi ./utils`.
-- [ ] Commit as `feat: log HTTP request lifecycles`.
+- [x] Commit as `feat: log HTTP request lifecycles`.
 
 ### Task 3: Monochrome CLI progress display
 
@@ -81,7 +81,7 @@
 - [x] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/cli -run 'Progress|Chat' -count=1`; observe failures because no reporter is connected.
 - [x] Add the pinned Agent Spinner dependency and implement TTY/non-TTY reporters; connect `CompletionRequest.OnProgress` in the chat command.
 - [x] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/cli`.
-- [ ] Commit as `feat: show CLI completion progress`.
+- [x] Commit as `feat: show CLI completion progress`.
 
 ### Task 4: MCP tool lifecycle logs
 
@@ -99,7 +99,7 @@
 - [x] Implement the typed lifecycle wrapper and apply it to every registered MCP tool.
 - [x] Route default utility logs to stderr so MCP protocol stdout remains reserved; verify with a logger test.
 - [x] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/mcp ./utils`.
-- [ ] Commit as `feat: log MCP tool calls`.
+- [x] Commit as `feat: log MCP tool calls`.
 
 ### Task 5: Documentation, full verification, and release
 
@@ -110,6 +110,6 @@
 - [x] Document stderr progress/log behavior, answer-only stdout, and redaction boundaries.
 - [x] Run `GOCACHE=/tmp/voie-go-cache go test ./...`, `GOCACHE=/tmp/voie-go-cache go vet ./...`, and `CGO_ENABLED=0 GOCACHE=/tmp/voie-go-cache go build ./...` after the final changes; all three pass.
 - [x] Review the release workflow and verify that tag `v0.0.2` triggers the intended release process; confirm the tag does not exist locally or on `origin`.
-- [ ] Complete a fresh whole-branch review and address any Critical/Important findings with RED→GREEN tests.
-- [ ] Commit documentation and any review fixes.
+- [x] Complete a fresh whole-branch review and address the Important finding with RED→GREEN tests.
+- [x] Commit documentation and review fixes.
 - [ ] Push `main` and annotated tag `v0.0.2` to `origin`; verify the release workflow result.

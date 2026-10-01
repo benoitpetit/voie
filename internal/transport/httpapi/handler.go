@@ -74,6 +74,7 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, request app.CompletionRequest) {
 	started := false
+	var finalRouting *app.RoutingInfo
 	completionID := "chatcmpl-" + randomID()
 	resolvedModel := request.Model
 	start := func(routing *app.RoutingInfo) {
@@ -95,6 +96,9 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		})
 	}
 	err := h.service.CompleteStreamWithInfo(r.Context(), request, func(chunk string, routing *app.RoutingInfo) {
+		if routing != nil {
+			finalRouting = routing
+		}
 		start(routing)
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
@@ -103,11 +107,11 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		})
 	})
 	if err != nil && !started {
-		logChatOutcome(request, nil, err)
+		logChatOutcome(request, nil, err, finalRouting)
 		writeAppError(w, err)
 		return
 	}
-	logChatOutcome(request, nil, err)
+	logChatOutcome(request, nil, err, finalRouting)
 	start(nil)
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
@@ -120,13 +124,13 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 }
 
-func logChatOutcome(request app.CompletionRequest, response *app.ChatCompletionResponse, err error) {
+func logChatOutcome(request app.CompletionRequest, response *app.ChatCompletionResponse, err error, streamRouting ...*app.RoutingInfo) {
 	strategy := request.Strategy
 	if strategy == "" {
 		strategy = app.StrategyClassic
 	}
 	if err != nil {
-		utils.Warn("chat strategy=%s failed category=%s", strategy, chatErrorCategory(err))
+		utils.Warn("chat strategy=%s failed category=%s routing=%q", strategy, chatErrorCategory(err), chatRoutingSummary(response, streamRouting...))
 		return
 	}
 	model, provider := request.Model, request.Provider
@@ -138,7 +142,31 @@ func logChatOutcome(request app.CompletionRequest, response *app.ChatCompletionR
 			provider = response.Provider
 		}
 	}
-	utils.Info("chat strategy=%s model=%s provider=%s status=succeeded", strategy, model, provider)
+	utils.Info("chat strategy=%s model=%s provider=%s routing=%q status=succeeded", strategy, model, provider, chatRoutingSummary(response, streamRouting...))
+}
+
+func chatRoutingSummary(response *app.ChatCompletionResponse, streamRouting ...*app.RoutingInfo) string {
+	var routing *app.RoutingInfo
+	if response != nil {
+		routing = response.Routing
+	}
+	if routing == nil && len(streamRouting) > 0 {
+		routing = streamRouting[0]
+	}
+	if routing == nil {
+		return ""
+	}
+	parts := make([]string, 0, len(routing.Models)+2)
+	if routing.Task != "" {
+		parts = append(parts, "task="+routing.Task)
+	}
+	for _, model := range routing.Models {
+		parts = append(parts, fmt.Sprintf("%s/%s:%s", model.Model, model.Provider, model.Status))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "strategy="+string(routing.Strategy))
+	}
+	return strings.Join(parts, ",")
 }
 
 func chatErrorCategory(err error) string {
