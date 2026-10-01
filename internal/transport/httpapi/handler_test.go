@@ -48,6 +48,32 @@ func TestRequestLoggingRedactsValuesAndPreservesFlush(t *testing.T) {
 	}
 }
 
+func TestRequestLoggingIncludesAuthenticationFailuresAndFallbackStatus(t *testing.T) {
+	var logs bytes.Buffer
+	utils.SetOutput(&logs)
+	defer utils.SetOutput(nil)
+	utils.SetNoColor(true)
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{APIToken: "expected-token"})
+	request := httptest.NewRequest(http.MethodGet, "/health?secret=query", nil)
+	request.Header.Set("Authorization", "Bearer rejected-token")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("authentication status=%d, want 401", response.Code)
+	}
+	quiet := requestLogging(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	quiet.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/quiet", nil))
+	for _, expected := range []string{"GET /health", "401", "GET /quiet", "500"} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Fatalf("logs %q missing %q", logs.String(), expected)
+		}
+	}
+	if strings.Contains(logs.String(), "secret=query") || strings.Contains(logs.String(), "rejected-token") {
+		t.Fatalf("logs include request secrets: %s", logs.String())
+	}
+}
+
 type flushTestWriter struct {
 	header  http.Header
 	status  int
