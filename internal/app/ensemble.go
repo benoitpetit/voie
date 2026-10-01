@@ -86,10 +86,13 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 }
 
 func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) ([]Message, Provider, string, *RoutingInfo, error) {
+	request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selecting ensemble candidates", Status: "started"})
 	candidates, task, err := s.selectEnsembleCandidates(ctx, request)
 	if err != nil {
+		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Ensemble candidate selection failed", Status: "failed"})
 		return nil, nil, "", nil, err
 	}
+	request.emitProgress(ProgressEvent{Stage: "routing", Message: fmt.Sprintf("Selected %d ensemble candidates", len(candidates)), Status: "succeeded"})
 	synthesisModel := strings.TrimSpace(s.options.SynthesisModel)
 	if synthesisModel == "" {
 		synthesisModel = strings.TrimSpace(s.options.RouterModel)

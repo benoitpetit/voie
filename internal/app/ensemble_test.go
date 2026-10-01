@@ -19,12 +19,22 @@ func TestEnsembleUsesExplicitModelsAndReturnsRoutingMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyEnsemble, Models: []string{"a", "b"}, Messages: []Message{{Role: "user", Content: "hello"}}})
+	var events []ProgressEvent
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyEnsemble, Models: []string{"a", "b"}, Messages: []Message{{Role: "user", Content: "hello"}}, OnProgress: func(event ProgressEvent) { events = append(events, event) }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if response.Model != "synth" || response.Routing == nil || len(response.Routing.Models) != 2 {
 		t.Fatalf("response = %+v", response)
+	}
+	stages := map[string]bool{}
+	for _, event := range events {
+		stages[event.Stage+":"+event.Status] = true
+	}
+	for _, stage := range []string{"routing:started", "routing:succeeded", "model:started", "model:succeeded", "synthesis:started", "synthesis:succeeded"} {
+		if !stages[stage] {
+			t.Errorf("missing progress stage %q in %#v", stage, events)
+		}
 	}
 }
 

@@ -75,7 +75,8 @@ func TestServiceConversationResumesAndPersistsTurn(t *testing.T) {
 	r := NewRegistry()
 	r.Register("p", p)
 	s, _ := NewService(r, ServiceOptions{Conversations: store})
-	resp, err := s.Complete(context.Background(), CompletionRequest{Model: "m", ConversationID: "c1", Messages: []Message{{Role: "user", Content: "now"}}})
+	var events []ProgressEvent
+	resp, err := s.Complete(context.Background(), CompletionRequest{Model: "m", ConversationID: "c1", Messages: []Message{{Role: "user", Content: "now"}}, OnProgress: func(event ProgressEvent) { events = append(events, event) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +85,9 @@ func TestServiceConversationResumesAndPersistsTurn(t *testing.T) {
 	}
 	if store.calls != 1 || len(store.value.Turns) != 2 || resp.ConversationID != "c1" {
 		t.Fatalf("store=%+v response=%+v", store, resp)
+	}
+	if len(events) == 0 || events[len(events)-2].Stage != "conversation" || events[len(events)-2].Status != "started" || events[len(events)-1].Status != "succeeded" {
+		t.Fatalf("conversation persistence progress = %#v", events)
 	}
 }
 

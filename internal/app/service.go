@@ -172,6 +172,7 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			return nil, s.contextOrUpstreamError(callCtx, err)
 		}
 		if response == nil || len(response.Choices) == 0 {
+			request.emitProgress(ProgressEvent{Stage: "model", Message: "Model returned an empty completion", Model: model, Provider: provider.GetInfo().Name, Status: "failed"})
 			return nil, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", provider.GetInfo().Name), nil)
 		}
 		response.Provider = provider.GetInfo().Name

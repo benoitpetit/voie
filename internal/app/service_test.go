@@ -243,8 +243,16 @@ func TestServiceRejectsEmptyUpstreamResponseAndTimesOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	registry.Register("test", provider)
-	if _, err := service.Complete(context.Background(), CompletionRequest{Provider: "test", Model: "model", Messages: []Message{{Role: "user", Content: "hi"}}}); !errors.Is(err, ErrUpstream) {
+	var events []ProgressEvent
+	if _, err := service.Complete(context.Background(), CompletionRequest{Provider: "test", Model: "model", Messages: []Message{{Role: "user", Content: "hi"}}, OnProgress: func(event ProgressEvent) { events = append(events, event) }}); !errors.Is(err, ErrUpstream) {
 		t.Fatalf("empty response error = %v, want ErrUpstream", err)
+	}
+	failed := false
+	for _, event := range events {
+		failed = failed || event.Stage == "model" && event.Status == "failed"
+	}
+	if !failed {
+		t.Fatalf("empty upstream response did not emit failed model progress: %#v", events)
 	}
 	provider.waitForContext = true
 	if _, err := service.Complete(context.Background(), CompletionRequest{Provider: "test", Model: "model", Messages: []Message{{Role: "user", Content: "hi"}}}); !errors.Is(err, ErrTimeout) {

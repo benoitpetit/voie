@@ -52,7 +52,8 @@ func TestServiceAutoUsesRouterAmongEligibleModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "write a short note"}}})
+	var events []ProgressEvent
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "write a short note"}}, OnProgress: func(event ProgressEvent) { events = append(events, event) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +62,9 @@ func TestServiceAutoUsesRouterAmongEligibleModels(t *testing.T) {
 	}
 	if router.callCount() != 1 || a.callCount() != 0 || b.callCount() != 1 {
 		t.Fatalf("calls router/a/b = %d/%d/%d", router.callCount(), a.callCount(), b.callCount())
+	}
+	if len(events) < 4 || events[1].Stage != "routing" || events[1].Status != "started" || events[2].Status != "succeeded" || events[2].Model != "model-b" {
+		t.Fatalf("automatic routing progress = %#v", events)
 	}
 }
 
