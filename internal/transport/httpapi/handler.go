@@ -70,17 +70,21 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, request app.CompletionRequest) {
 	started := false
 	completionID := "chatcmpl-" + randomID()
+	resolvedModel := request.Model
 	start := func(routing *app.RoutingInfo) {
 		if started {
 			return
 		}
 		started = true
+		if resolvedModel == "" && routing != nil && len(routing.Models) > 0 {
+			resolvedModel = routing.Models[0].Model
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("X-Accel-Buffering", "no")
 		writeSSE(w, app.StreamChunk{
-			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: request.Model,
+			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
 			ConversationID: request.ConversationID, Routing: routing,
 			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{Role: "assistant"}}},
 		})
@@ -88,7 +92,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 	err := h.service.CompleteStreamWithInfo(r.Context(), request, func(chunk string, routing *app.RoutingInfo) {
 		start(routing)
 		writeSSE(w, app.StreamChunk{
-			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: request.Model,
+			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
 			ConversationID: request.ConversationID, Routing: routing,
 			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{Content: chunk}}},
 		})
@@ -102,7 +106,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
 	} else {
 		writeSSE(w, app.StreamChunk{
-			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: request.Model,
+			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
 			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{}, FinishReason: "stop"}},
 		})
 	}
