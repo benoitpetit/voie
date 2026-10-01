@@ -112,4 +112,4 @@
 - [x] Review the release workflow and verify that tag `v0.0.2` triggers the intended release process; confirm the tag does not exist locally or on `origin`.
 - [x] Complete a fresh whole-branch review and address the Important finding with RED→GREEN tests.
 - [x] Commit documentation and review fixes.
-- [ ] Push `main` and annotated tag `v0.0.2` to `origin`; verify the release workflow result.
+- [x] Push `main` and annotated tag `v0.0.2` to `origin`; verify the release workflow and uploaded archives.
