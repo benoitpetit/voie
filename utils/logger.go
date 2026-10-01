@@ -36,7 +36,7 @@ var (
 )
 
 func init() {
-	logger = log.New(os.Stdout, "", 0)
+	logger = log.New(os.Stderr, "", 0)
 }
 
 func SetLevel(l Level) {
@@ -55,7 +55,7 @@ func enabled(messageLevel Level) bool {
 
 func SetOutput(output io.Writer) {
 	if output == nil {
-		output = os.Stdout
+		output = os.Stderr
 	}
 	mu.Lock()
 	logger.SetOutput(output)

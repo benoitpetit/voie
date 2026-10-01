@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -18,6 +19,28 @@ func TestSetOutputRoutesLogsToConfiguredWriter(t *testing.T) {
 		t.Fatalf("log output = %q", output.String())
 	}
 	SetOutput(os.Stdout)
+}
+
+func TestDefaultLoggerOutputIsStderr(t *testing.T) {
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStderr := os.Stderr
+	os.Stderr = write
+	defer func() { os.Stderr = oldStderr }()
+	defer SetOutput(oldStderr)
+	SetOutput(nil)
+	Info("stderr default test")
+	_ = write.Close()
+	data, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = read.Close()
+	if !strings.Contains(string(data), "stderr default test") {
+		t.Fatalf("stderr output = %q", data)
+	}
 }
 
 func TestRequestLoggerIncludesIdentityAndDefaultsToMonochrome(t *testing.T) {

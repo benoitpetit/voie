@@ -73,7 +73,7 @@ func NewServer(service *app.Service) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: brand.Name, Version: brand.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{
 		Name: listModelsToolName, Description: "List supported model IDs and their providers.",
-	}, func(context.Context, *mcp.CallToolRequest, emptyInput) (*mcp.CallToolResult, modelsOutput, error) {
+	}, logToolCall(listModelsToolName, func(context.Context, *mcp.CallToolRequest, emptyInput) (*mcp.CallToolResult, modelsOutput, error) {
 		models := service.ListModels()
 		output := modelsOutput{Models: make([]modelItem, 0, len(models))}
 		var lines []string
@@ -83,10 +83,10 @@ func NewServer(service *app.Service) *mcp.Server {
 			lines = append(lines, fmt.Sprintf("%s (%s)", model.ID, provider))
 		}
 		return textToolResult("Supported models:\n" + strings.Join(lines, "\n")), output, nil
-	})
+	}))
 	mcp.AddTool(server, &mcp.Tool{
 		Name: listProvidersToolName, Description: "List providers and check whether their URLs are reachable over HTTP.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, providersOutput, error) {
+	}, logToolCall(listProvidersToolName, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, providersOutput, error) {
 		providers, err := service.ListProviders(ctx)
 		if err != nil {
 			return nil, providersOutput{}, err
@@ -105,10 +105,10 @@ func NewServer(service *app.Service) *mcp.Server {
 			lines = append(lines, fmt.Sprintf("%s (%s): %s", provider.Name, provider.Label, state))
 		}
 		return textToolResult("Providers (HTTP reachability):\n" + strings.Join(lines, "\n")), output, nil
-	})
+	}))
 	mcp.AddTool(server, &mcp.Tool{
 		Name: chatCompletionToolName, Description: "Generate a non-streaming completion using classic, automatic, or ensemble model routing.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
+	}, logToolCall(chatCompletionToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
 		response, err := service.Complete(ctx, app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, ConversationID: input.ConversationID, Messages: input.Messages})
 		if err != nil {
 			return nil, chatCompletionOutput{}, err
@@ -121,35 +121,40 @@ func NewServer(service *app.Service) *mcp.Server {
 			Routing:        response.Routing,
 		}
 		return textToolResult(output.Text), output, nil
-	})
-	mcp.AddTool(server, &mcp.Tool{Name: createConversationToolName, Description: "Create a local persistent conversation."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, app.Conversation, error) {
+	}))
+	mcp.AddTool(server, &mcp.Tool{Name: createConversationToolName, Description: "Create a local persistent conversation."}, logToolCall(createConversationToolName, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, app.Conversation, error) {
 		c, err := service.CreateConversation(ctx)
 		if err != nil {
 			return nil, app.Conversation{}, err
 		}
 		return textToolResult(c.ID), c, nil
-	})
-	mcp.AddTool(server, &mcp.Tool{Name: listConversationsToolName, Description: "List local conversations without transcript contents."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, struct {
+	}))
+	mcp.AddTool(server, &mcp.Tool{Name: listConversationsToolName, Description: "List local conversations without transcript contents."}, logToolCall(listConversationsToolName, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, struct {
 		Conversations []app.ConversationSummary `json:"conversations"`
-	}, error) { items, err := service.ListConversations(ctx); out := struct {
-		Conversations []app.ConversationSummary `json:"conversations"`
-	}{items}; if err != nil {
-		return nil, out, err
-	}; return textToolResult(fmt.Sprintf("%d conversations", len(items))), out, nil })
-	mcp.AddTool(server, &mcp.Tool{Name: getConversationToolName, Description: "Read a local conversation and its turns."}, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationIDInput) (*mcp.CallToolResult, app.Conversation, error) {
+	}, error) {
+		items, err := service.ListConversations(ctx)
+		out := struct {
+			Conversations []app.ConversationSummary `json:"conversations"`
+		}{items}
+		if err != nil {
+			return nil, out, err
+		}
+		return textToolResult(fmt.Sprintf("%d conversations", len(items))), out, nil
+	}))
+	mcp.AddTool(server, &mcp.Tool{Name: getConversationToolName, Description: "Read a local conversation and its turns."}, logToolCall(getConversationToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationIDInput) (*mcp.CallToolResult, app.Conversation, error) {
 		c, err := service.GetConversation(ctx, input.ID)
 		if err != nil {
 			return nil, app.Conversation{}, err
 		}
 		return textToolResult(input.ID), c, nil
-	})
-	mcp.AddTool(server, &mcp.Tool{Name: deleteConversationToolName, Description: "Delete a local conversation and its expiration tombstone."}, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationIDInput) (*mcp.CallToolResult, emptyInput, error) {
+	}))
+	mcp.AddTool(server, &mcp.Tool{Name: deleteConversationToolName, Description: "Delete a local conversation and its expiration tombstone."}, logToolCall(deleteConversationToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationIDInput) (*mcp.CallToolResult, emptyInput, error) {
 		err := service.DeleteConversation(ctx, input.ID)
 		if err != nil {
 			return nil, emptyInput{}, err
 		}
 		return textToolResult("Conversation deleted."), emptyInput{}, nil
-	})
+	}))
 	return server
 }
 

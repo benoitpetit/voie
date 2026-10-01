@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"reflect"
@@ -10,8 +11,41 @@ import (
 
 	"github.com/benoitpetit/voie/internal/app"
 	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
+	"github.com/benoitpetit/voie/utils"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestMCPToolLifecycleLogsOmitArgumentsResultsAndErrors(t *testing.T) {
+	var logs bytes.Buffer
+	utils.SetOutput(&logs)
+	defer utils.SetOutput(nil)
+	utils.SetNoColor(true)
+	handler := mcp.ToolHandlerFor[map[string]string, string](func(_ context.Context, _ *mcp.CallToolRequest, input map[string]string) (*mcp.CallToolResult, string, error) {
+		if input["value"] == "fail-secret" {
+			return nil, "", errors.New("error-secret")
+		}
+		return textToolResult("result-secret"), "result-secret", nil
+	})
+	wrapped := logToolCall("test_tool", handler)
+	_, _, err := wrapped(context.Background(), nil, map[string]string{"value": "argument-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = wrapped(context.Background(), nil, map[string]string{"value": "fail-secret"})
+	if err == nil {
+		t.Fatal("expected test handler error")
+	}
+	for _, marker := range []string{"test_tool", "started", "succeeded", "failed", "request_id="} {
+		if !strings.Contains(logs.String(), marker) {
+			t.Fatalf("logs %q missing %q", logs.String(), marker)
+		}
+	}
+	for _, secret := range []string{"argument-secret", "result-secret", "fail-secret", "error-secret"} {
+		if strings.Contains(logs.String(), secret) {
+			t.Fatalf("MCP logs leaked %q: %s", secret, logs.String())
+		}
+	}
+}
 
 func TestMCPToolsExposeStableSchemasAndStructuredResults(t *testing.T) {
 	service, _ := mcpTestService(t, nil, time.Second)
