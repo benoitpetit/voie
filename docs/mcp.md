@@ -1,6 +1,6 @@
 # MCP guide
 
-`voie mcp` runs a local MCP server over stdin/stdout. Before protocol processing begins, it logs the server name, build version, and registered tools (`list_models`, `list_providers`, and `chat_completion`) to stderr. stdout remains reserved for MCP protocol messages.
+`voie mcp` runs a local MCP server over stdin/stdout. Before protocol processing begins, it logs the server name, build version, and registered tools (`list_models`, `list_providers`, `chat_completion`, `create_conversation`, `list_conversations`, `get_conversation`, and `delete_conversation`) to stderr. stdout remains reserved for MCP protocol messages.
 
 ## Client setup
 
@@ -31,7 +31,7 @@ Takes an empty object. Returns provider names, labels, `alive`, default model ID
 
 ### `chat_completion`
 
-Requires `model` and `messages`; accepts optional `provider`.
+Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, and `conversation_id`.
 
 ```json
 {
@@ -43,7 +43,28 @@ Requires `model` and `messages`; accepts optional `provider`.
 }
 ```
 
-The result includes assistant text and structured `text`, `model`, and `provider` fields. Unknown model IDs, provider mismatches, timeouts, and upstream failures are returned as tool execution errors that the client can inspect and recover from.
+Automatic routing example:
+
+```json
+{"strategy":"auto","task":"coding","messages":[{"role":"user","content":"Review this function"}]}
+```
+
+Ensemble example with explicit candidates:
+
+```json
+{"strategy":"ensemble","models":["MODEL_A","MODEL_B"],"messages":[{"role":"user","content":"Compare these designs"}]}
+```
+
+The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. Automatic routing uses `ROUTER_MODEL` only when local task rules do not identify one model. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`. Selected providers receive the prompt, and the synthesizer receives successful intermediate answers.
+
+### Conversation tools
+
+- `create_conversation` takes `{}` and returns a new local conversation ID and timestamps.
+- `list_conversations` takes `{}` and returns summaries without transcript contents.
+- `get_conversation` takes `{"id":"CONVERSATION_ID"}` and returns the transcript.
+- `delete_conversation` takes `{"id":"CONVERSATION_ID"}` and deletes the transcript and its expiry marker.
+
+Pass a returned ID as `conversation_id` to `chat_completion` to resume the conversation. The local database defaults to `~/.config/voie/conversations.db`; sessions expire after 720 hours of inactivity unless `CONVERSATION_TTL` changes it. Reads do not refresh expiry. Classic requests without `conversation_id` do not touch local storage.
 
 ## Troubleshooting
 

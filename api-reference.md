@@ -24,6 +24,10 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
 {
   "model": "MODEL_ID",
   "provider": "optional-provider-name",
+  "strategy": "classic",
+  "task": "coding",
+  "models": ["MODEL_A", "MODEL_B"],
+  "conversation_id": "optional-local-session-id",
   "messages": [
     {"role": "user", "content": "Hello"}
   ],
@@ -31,7 +35,25 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
 }
 ```
 
-`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider` and `stream` are optional. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
+`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `conversation_id`, and `stream` are optional. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
+
+`strategy` defaults to `classic`, preserving existing model/provider selection. `auto` selects one eligible model. Supported task hints are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`. `ROUTER_MODEL` is required when task rules leave more than one eligible model; a unique task-rule match needs no router call. `ensemble` runs 2 or 3 distinct models concurrently and synthesizes after at least 2 succeed. `models` may explicitly supply ensemble candidates; otherwise `ROUTER_MODEL` selects them. `SYNTHESIS_MODEL` is used for the final answer and falls back to `ROUTER_MODEL`. Multi-model requests send the prompt to each selected provider and send successful intermediate answers to the synthesizer.
+
+When supplying `models` explicitly, list only ensemble candidates; the synthesis model must be separate.
+
+An optional `routing` object in responses identifies the strategy, inferred task, and per-model success status. `conversation_id` appears in responses when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
+
+Automatic routing:
+
+```json
+{"strategy":"auto","task":"coding","messages":[{"role":"user","content":"Review this code"}]}
+```
+
+Ensemble with explicit candidates:
+
+```json
+{"strategy":"ensemble","models":["MODEL_A","MODEL_B"],"messages":[{"role":"user","content":"Compare these approaches"}]}
+```
 
 Use `GET /v1/models` to discover current IDs. For example, the ChatJimmy provider currently advertises `llama3.1-8B`; its upstream is non-streaming, so a request with `stream: true` receives the completed answer as one content chunk.
 
@@ -128,6 +150,17 @@ Lists registered providers and checks reachability with HTTP GET. Checks run con
 
 Returns local registry health without probing provider websites. The response includes `status`, `timestamp`, `version`, `providers_total`, `providers_working`, `working_providers`, and `total_models`.
 
+## Local conversations
+
+Conversation storage is local SQLite, configured by `CONVERSATION_DB_PATH` (default `~/.config/voie/conversations.db`). `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days.
+
+- `POST /v1/conversations` creates a conversation and returns `201` with its ID and timestamps.
+- `GET /v1/conversations` returns summary rows without transcript contents.
+- `GET /v1/conversations/{id}` returns the transcript.
+- `DELETE /v1/conversations/{id}` removes it and returns `204`.
+
+Send `conversation_id` in a completion request to append a turn and include saved turns as context. Only successful completions are saved. Conversations are capped at 200 messages and 2 MiB. A stale concurrent turn returns `409`; expired IDs return `410` during the 30-day tombstone period and then `404`. Requests without `conversation_id` never open the local conversation database.
+
 ## `GET /`
 
 Returns API name, version, route names, registered provider count, model count, and the `openai_compatible` flag.
@@ -155,5 +188,10 @@ Errors use this JSON envelope:
 | `503` | Provider disabled |
 | `502` | Upstream provider failure |
 | `504` | Completion timed out |
+| `409` | Conversation changed during a concurrent turn |
+| `410` | Conversation expired (tombstone retained) |
+| `500` | Local conversation storage failure |
 
 Completions use the configured end-to-end `TIMEOUT` (seconds), defaulting to 120 seconds. Unknown model IDs are rejected instead of being silently sent to another provider.
+
+Routing and conversation configuration: `ROUTER_MODEL` chooses among eligible models, `SYNTHESIS_MODEL` produces ensemble output (fallback: router), `ROUTING_CONFIG_PATH` defaults to `~/.config/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `~/.config/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.

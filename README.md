@@ -67,6 +67,11 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `DEFAULT_PROVIDER` | empty | Provider used for the generic `openai` model in API requests |
 | `TIMEOUT` | `120` | End-to-end completion timeout in seconds |
 | `API_TOKEN` | empty | Bearer token required for non-loopback binds |
+| `ROUTER_MODEL` | empty | Model that classifies ambiguous automatic-routing requests |
+| `SYNTHESIS_MODEL` | empty | Model that merges ensemble answers; falls back to `ROUTER_MODEL` |
+| `ROUTING_CONFIG_PATH` | `~/.config/voie/routing.json` | Local model descriptions and task rules |
+| `CONVERSATION_DB_PATH` | `~/.config/voie/conversations.db` | Local SQLite conversation database |
+| `CONVERSATION_TTL` | `720h` | Inactivity lifetime for local conversations |
 
 The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`.
 
@@ -95,9 +100,11 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
-The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `models`, `providers`, `mcp`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
+The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
 
 `chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
+
+Automatic strategies are opt-in. `auto` uses task rules first and asks `ROUTER_MODEL` only when more than one eligible model remains. `ensemble` runs two or three models and synthesizes their answers. Example: `voie chat --strategy auto --task coding "Review this function"`. An explicit ensemble can use `voie chat --strategy ensemble --models model-a,model-b "Compare these approaches"`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
 
 ## Use MCP
 
@@ -114,7 +121,7 @@ Configure your MCP client to launch the same executable with the `mcp` argument.
 }
 ```
 
-The server provides `list_models`, `list_providers`, and `chat_completion`. The completion tool expects an explicit model ID and a `messages` array. See [docs/mcp.md](docs/mcp.md) for result shapes and setup details.
+The server provides `list_models`, `list_providers`, `chat_completion`, and conversation management tools. `chat_completion` supports classic, automatic, and ensemble strategies. See [docs/mcp.md](docs/mcp.md) for result shapes and setup details.
 
 The portable Agent Skill is in [`skills/voie/SKILL.md`](skills/voie/SKILL.md). Copy the `skills/voie` folder into an agent's supported skills directory to install it.
 
@@ -129,6 +136,8 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 ```
 
 Routes, request and response schemas, authentication, and streaming are documented in [api-reference.md](api-reference.md).
+
+Automatic routing and ensembles are optional request strategies; requests that omit `strategy` retain the classic model/provider behavior. Local conversation tracking is opt-in via `conversation_id` and persists on disk with expiry.
 
 `GET /v1/providers` reports `alive` based on whether an HTTP response was received from each provider URL. It does not test model inference or guarantee that a completion will succeed.
 
