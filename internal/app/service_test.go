@@ -2,11 +2,29 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestNormalizeRequestStrategyDefaultsToClassic(t *testing.T) {
+	if got := normalizeStrategy(""); got != StrategyClassic {
+		t.Fatalf("normalized empty strategy = %q, want %q", got, StrategyClassic)
+	}
+}
+
+func TestClassicResponseOmitsRoutingAndConversationFields(t *testing.T) {
+	data, err := json.Marshal(ChatCompletionResponse{ID: "chatcmpl-test", Object: "chat.completion", Model: "model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "routing") || strings.Contains(string(data), "conversation_id") {
+		t.Fatalf("classic response contains opt-in metadata: %s", data)
+	}
+}
 
 func TestServiceResolvesExplicitAndDefaultModels(t *testing.T) {
 	registry := NewRegistry()

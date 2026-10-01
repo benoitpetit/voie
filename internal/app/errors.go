@@ -11,6 +11,12 @@ var (
 	ErrTimeout               = errors.New("completion timed out")
 	ErrCanceled              = errors.New("completion canceled")
 	ErrUpstream              = errors.New("upstream provider failure")
+	ErrRouting               = errors.New("model routing failed")
+	ErrEnsembleInsufficient  = errors.New("not enough ensemble results")
+	ErrConversationNotFound  = errors.New("conversation not found")
+	ErrConversationExpired   = errors.New("conversation expired")
+	ErrConversationConflict  = errors.New("conversation version conflict")
+	ErrConversationStore     = errors.New("conversation store failure")
 )
 
 type Error struct {

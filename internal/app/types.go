@@ -11,13 +11,15 @@ type Message struct {
 }
 
 type ChatCompletionResponse struct {
-	ID       string   `json:"id"`
-	Object   string   `json:"object"`
-	Created  int64    `json:"created"`
-	Model    string   `json:"model"`
-	Provider string   `json:"provider,omitempty"`
-	Choices  []Choice `json:"choices"`
-	Usage    *Usage   `json:"usage,omitempty"`
+	ID             string       `json:"id"`
+	Object         string       `json:"object"`
+	Created        int64        `json:"created"`
+	Model          string       `json:"model"`
+	Provider       string       `json:"provider,omitempty"`
+	ConversationID string       `json:"conversation_id,omitempty"`
+	Routing        *RoutingInfo `json:"routing,omitempty"`
+	Choices        []Choice     `json:"choices"`
+	Usage          *Usage       `json:"usage,omitempty"`
 }
 
 type Choice struct {
@@ -39,11 +41,26 @@ type Usage struct {
 }
 
 type StreamChunk struct {
-	ID      string   `json:"id"`
-	Object  string   `json:"object"`
-	Created int64    `json:"created"`
-	Model   string   `json:"model"`
-	Choices []Choice `json:"choices"`
+	ID             string       `json:"id"`
+	Object         string       `json:"object"`
+	Created        int64        `json:"created"`
+	Model          string       `json:"model"`
+	ConversationID string       `json:"conversation_id,omitempty"`
+	Routing        *RoutingInfo `json:"routing,omitempty"`
+	Choices        []Choice     `json:"choices"`
+}
+
+type RoutingInfo struct {
+	Strategy Strategy      `json:"strategy"`
+	Task     string        `json:"task,omitempty"`
+	Models   []RoutedModel `json:"models,omitempty"`
+}
+
+type RoutedModel struct {
+	Model          string `json:"model"`
+	Provider       string `json:"provider"`
+	Status         string `json:"status"`
+	DurationMillis int64  `json:"duration_ms,omitempty"`
 }
 
 type ProviderInfo struct {

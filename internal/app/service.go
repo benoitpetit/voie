@@ -12,9 +12,28 @@ import (
 )
 
 type CompletionRequest struct {
-	Model    string    `json:"model"`
-	Provider string    `json:"provider,omitempty"`
-	Messages []Message `json:"messages"`
+	Model          string    `json:"model"`
+	Provider       string    `json:"provider,omitempty"`
+	Strategy       Strategy  `json:"strategy,omitempty"`
+	Task           string    `json:"task,omitempty"`
+	Models         []string  `json:"models,omitempty"`
+	ConversationID string    `json:"conversation_id,omitempty"`
+	Messages       []Message `json:"messages"`
+}
+
+type Strategy string
+
+const (
+	StrategyClassic  Strategy = "classic"
+	StrategyAuto     Strategy = "auto"
+	StrategyEnsemble Strategy = "ensemble"
+)
+
+func normalizeStrategy(strategy Strategy) Strategy {
+	if strategy == "" {
+		return StrategyClassic
+	}
+	return strategy
 }
 
 type ServiceOptions struct {
