@@ -167,6 +167,10 @@ Returns API name, version, route names, registered provider count, model count, 
 
 ## Errors
 
+### Server request logs
+
+Each HTTP request, including authentication failures, is logged to stderr with a short request ID, method, URL path, final status, and elapsed time. Chat records also include the routing summary or a typed failure category. Logs omit query values, headers, request and response bodies, prompts, answers, token counts, and client IPs. SSE responses continue to flush each chunk as it is produced; logging does not buffer the response.
+
 Errors use this JSON envelope:
 
 ```json

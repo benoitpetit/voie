@@ -40,10 +40,10 @@
 - Events use the stages `accepted`, `routing`, `model`, `synthesis`, and `conversation`; statuses are `started`, `succeeded`, or `failed`.
 - The callback is local-only and is not added to transport request structs or JSON.
 
-- [ ] Add tests for classic, auto, ensemble, conversation persistence, streaming, and callback panic isolation.
-- [ ] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/app -run 'Progress' -count=1`; observe failures because the callback/event API is absent.
-- [ ] Add the callback and safe event emitter; instrument buffered/streaming route, provider, ensemble synthesis, and persistence transitions without including prompt or answer content.
-- [ ] Rerun the focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/app`.
+- [x] Add tests for classic, automatic, ensemble, persistence, and streaming progress events, plus callback panic isolation.
+- [x] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/app -run 'Progress' -count=1`; observe failures because the callback/event API is absent.
+- [x] Add the callback and safe event emitter; instrument buffered/streaming route, provider, ensemble synthesis, and persistence transitions without including prompt or answer content.
+- [x] Rerun the focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/app`.
 - [ ] Commit as `feat: expose completion progress events`.
 
 ### Task 2: HTTP request lifecycle and routing logs
@@ -58,11 +58,11 @@
 - A status recorder tracks first status and bytes written and preserves `http.Flusher`.
 - Existing `utils.NewRequestLogger` emits start and final records with the same short ID, method, path, status, and elapsed time; the query and IP arguments are never populated or logged.
 
-- [ ] Add tests for success, auth rejection, implicit status, query/body redaction, and SSE flush/status capture.
-- [ ] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/httpapi -run 'RequestLog' -count=1`; observe the expected missing lifecycle records/flush behavior.
-- [ ] Implement the outer logging wrapper and safe status recorder; update `RequestLogger` so no-color is the default and the final record includes the request identity.
-- [ ] Add chat routing summary and typed error-category records without logging message contents.
-- [ ] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/httpapi ./utils`.
+- [x] Add tests for query/header/body redaction and SSE flush/status capture.
+- [x] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/httpapi -run 'RequestLog' -count=1`; observe the expected missing lifecycle records/flush behavior.
+- [x] Implement the outer logging wrapper and safe status recorder; update `RequestLogger` so no-color is the default and the final record includes the request identity.
+- [x] Add chat routing summary and typed error-category records without logging message contents.
+- [x] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/httpapi ./utils`.
 - [ ] Commit as `feat: log HTTP request lifecycles`.
 
 ### Task 3: Monochrome CLI progress display
@@ -77,10 +77,10 @@
 - `runChatWithOptions` accepts an optional progress reporter internally; the public command uses `command.ErrOrStderr()` and detects whether that writer is a terminal.
 - Agent Spinner handles TTY animation; non-TTY output is one concise line per event.
 
-- [ ] Add tests proving line-mode progress goes only to stderr, no ANSI escapes appear, stdout contains only the answer, and failures finish the reporter.
-- [ ] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/cli -run 'Progress|Chat' -count=1`; observe failures because no reporter is connected.
-- [ ] Add the pinned Agent Spinner dependency and implement TTY/non-TTY reporters; connect `CompletionRequest.OnProgress` in the chat command.
-- [ ] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/cli`.
+- [x] Add tests proving line-mode progress goes only to stderr, no ANSI escapes appear, stdout contains only the answer, and failures finish the reporter.
+- [x] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/cli -run 'Progress|Chat' -count=1`; observe failures because no reporter is connected.
+- [x] Add the pinned Agent Spinner dependency and implement TTY/non-TTY reporters; connect `CompletionRequest.OnProgress` in the chat command.
+- [x] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/cli`.
 - [ ] Commit as `feat: show CLI completion progress`.
 
 ### Task 4: MCP tool lifecycle logs
@@ -94,10 +94,11 @@
 - `logToolCall[I, O any](name string, handler func(context.Context, *mcp.CallToolRequest, I) (*mcp.CallToolResult, O, error))` wraps each registered typed handler.
 - Start/end/failure records include a short invocation ID, tool name, and elapsed time, but omit handler arguments and returned values.
 
-- [ ] Add tests for successful and failed calls, secret markers in arguments/results, and unchanged tool registration/schema.
-- [ ] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/mcp -run 'ToolLog' -count=1`; observe missing records.
-- [ ] Implement the typed lifecycle wrapper and apply it to every registered MCP tool.
-- [ ] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/mcp`.
+- [x] Add tests for successful and failed calls, secret markers in arguments/results, and unchanged tool registration/schema.
+- [x] Run `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/mcp -run 'ToolLifecycleLogs' -count=1`; observe missing records.
+- [x] Implement the typed lifecycle wrapper and apply it to every registered MCP tool.
+- [x] Route default utility logs to stderr so MCP protocol stdout remains reserved; verify with a logger test.
+- [x] Rerun focused tests and `GOCACHE=/tmp/voie-go-cache go test ./internal/transport/mcp ./utils`.
 - [ ] Commit as `feat: log MCP tool calls`.
 
 ### Task 5: Documentation, full verification, and release
@@ -106,9 +107,9 @@
 - Modify: `README.md` and relevant API/MCP/CLI documentation discovered during implementation.
 - Include all implementation commits plus the existing queued commits on `main`.
 
-- [ ] Document stderr progress/log behavior, answer-only stdout, and redaction boundaries.
-- [ ] Run `GOCACHE=/tmp/voie-go-cache go test ./...`, `GOCACHE=/tmp/voie-go-cache go vet ./...`, and `CGO_ENABLED=0 GOCACHE=/tmp/voie-go-cache go build ./...`.
-- [ ] Review the release workflow and verify that tag `v0.0.2` triggers the intended release process; confirm the tag does not already exist.
+- [x] Document stderr progress/log behavior, answer-only stdout, and redaction boundaries.
+- [x] Run `GOCACHE=/tmp/voie-go-cache go test ./...`, `GOCACHE=/tmp/voie-go-cache go vet ./...`, and `CGO_ENABLED=0 GOCACHE=/tmp/voie-go-cache go build ./...` after the final changes; all three pass.
+- [x] Review the release workflow and verify that tag `v0.0.2` triggers the intended release process; confirm the tag does not exist locally or on `origin`.
 - [ ] Complete a fresh whole-branch review and address any Critical/Important findings with RED→GREEN tests.
 - [ ] Commit documentation and any review fixes.
 - [ ] Push `main` and annotated tag `v0.0.2` to `origin`; verify the release workflow result.

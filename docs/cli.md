@@ -54,7 +54,7 @@ voie mcp
 
 `serve` starts the HTTP API using configured `HOST` and `PORT`; flags override them for that run. A non-loopback host still requires `API_TOKEN`. Runtime configuration loads when a command runs, not when help is requested.
 
-`chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` provides a task hint, `--models` sets explicit ensemble candidates, and `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Errors are returned to stderr by the executable and use a nonzero exit code.
+`chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` provides a task hint, `--models` sets explicit ensemble candidates, and `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
 
 ```bash
 voie chat --strategy auto --task coding "Review this patch"
@@ -92,7 +92,7 @@ The commands use the same environment variables as the HTTP runtime:
 | `CONVERSATION_DB_PATH` | `~/.config/voie/conversations.db` | Local conversation database |
 | `CONVERSATION_TTL` | `720h` | Conversation inactivity lifetime |
 
-The MCP transport writes protocol messages to stdout. `voie mcp` sends application logs to stderr.
+The MCP transport writes protocol messages to stdout. `voie mcp` sends application logs to stderr, including per-tool start, completion/failure, and duration records. Tool arguments, results, and conversation contents are not included in logs. All log output is monochrome.
 
 ## Troubleshooting
 

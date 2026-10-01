@@ -102,7 +102,7 @@ cat prompt.txt | ./voie chat --model MODEL_ID
 
 The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
 
-`chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
+`chat` prints only the completion text to stdout. Progress goes to stderr as plain lines when redirected and as a monochrome spinner on an interactive terminal. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
 
 Automatic strategies are opt-in. `auto` uses task rules first and asks `ROUTER_MODEL` only when more than one eligible model remains. `ensemble` runs two or three models and synthesizes their answers. Example: `voie chat --strategy auto --task coding "Review this function"`. An explicit ensemble can use `voie chat --strategy ensemble --models model-a,model-b "Compare these approaches"`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
 
@@ -136,6 +136,8 @@ curl http://127.0.0.1:8080/v1/chat/completions \
 ```
 
 Routes, request and response schemas, authentication, and streaming are documented in [api-reference.md](api-reference.md).
+
+The server writes request start/end records to stderr with a request ID, method, path, status, and duration. It omits query values, headers, request/response bodies, prompts, tokens, and client IPs. Chat logs include the routing summary or a typed failure category.
 
 Automatic routing and ensembles are optional request strategies; requests that omit `strategy` retain the classic model/provider behavior. Local conversation tracking is opt-in via `conversation_id` and persists on disk with expiry.
 
