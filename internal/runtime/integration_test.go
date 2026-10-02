@@ -17,6 +17,7 @@ import (
 	"github.com/benoitpetit/voie/internal/runtime"
 	"github.com/benoitpetit/voie/internal/transport/httpapi"
 	mcpserver "github.com/benoitpetit/voie/internal/transport/mcp"
+	"github.com/benoitpetit/voie/utils"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -133,13 +134,21 @@ func TestCrossTransportFallbackOverrideContract(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var cliLogs bytes.Buffer
 	var cliAnswer bytes.Buffer
-	if err := cli.Execute(context.Background(), []string{"chat", "--model", "flaky-model", "--fallback-model", "fake-model", "hello"}, strings.NewReader(""), &cliAnswer, &bytes.Buffer{}, func() (cli.Runtime, error) { return rt, nil }); err != nil {
+	if err := cli.Execute(context.Background(), []string{"chat", "--model", "flaky-model", "--fallback-model", "fake-model", "hello"}, strings.NewReader(""), &cliAnswer, &cliLogs, func() (cli.Runtime, error) { return rt, nil }); err != nil {
 		t.Fatal(err)
 	}
 	if strings.TrimSpace(cliAnswer.String()) != "shared answer" {
 		t.Fatalf("CLI completion = %q", cliAnswer.String())
 	}
+	if strings.Contains(cliLogs.String(), "hello") || strings.Contains(cliLogs.String(), "shared answer") {
+		t.Fatalf("CLI stderr leaked prompt or answer: %q", cliLogs.String())
+	}
+
+	var apiLogs bytes.Buffer
+	utils.SetOutput(&apiLogs)
+	defer utils.SetOutput(nil)
 
 	handler := httpapi.NewHandler(rt.Service(), cfg)
 	httpCompletion := httptest.NewRecorder()
@@ -156,6 +165,9 @@ func TestCrossTransportFallbackOverrideContract(t *testing.T) {
 	}
 	if response.Routing == nil || len(response.Routing.Attempts) != 2 || response.Routing.Attempts[0].Outcome != app.OutcomeUnavailable || response.Routing.Attempts[1].Outcome != app.OutcomeSucceeded {
 		t.Fatalf("HTTP routing = %+v, want unavailable then succeeded", response.Routing)
+	}
+	if strings.Contains(apiLogs.String(), "hello") || strings.Contains(apiLogs.String(), "shared answer") {
+		t.Fatalf("HTTP logs leaked prompt or answer: %q", apiLogs.String())
 	}
 
 	session, closeSessions := integrationMCPClient(t, rt.Service())
