@@ -1,6 +1,6 @@
 # Model Fallback and Retry Specification
 
-**Status:** Draft for user review
+**Status:** Approved for implementation
 **Date:** 2026-10-01
 **Scope:** Configurable model retries and equivalent-model fallback across classic, automatic, and ensemble completions, exposed consistently through CLI, MCP, and HTTP API.
 
@@ -44,7 +44,7 @@ The shared policy has these fields:
 | `max_fallback_models` | Maximum number of distinct alternate models attempted for one completion. Defaults to `1`. |
 | `models` | Optional ordered model IDs to try after a given primary model. |
 
-The default retry count and fallback limit preserve bounded latency while providing a useful first fallback. Setting `enabled` false, `max_retries` to zero, or `max_fallback_models` to zero disables the corresponding behavior. Values must be non-negative; `max_retries` is capped at 3 and `max_fallback_models` at 3 to keep request amplification bounded.
+The default retry count and fallback limit preserve bounded latency while providing a useful first fallback. `enabled` false disables both retries and fallback, restoring the current single-call behavior. `max_retries` set to zero disables same-model retries, and `max_fallback_models` set to zero disables fallback while leaving retries active. Values must be non-negative; `max_retries` is capped at 3 and `max_fallback_models` at 3 to keep request amplification bounded.
 
 Policy precedence is:
 
@@ -88,6 +88,8 @@ The provider boundary must expose typed failure information sufficient to distin
 
 Provider adapters must wrap status/network details in a shared typed error; the app layer must not classify failures by searching human-readable error strings. If an adapter cannot provide a more specific class, its error is treated as non-retryable and returned as an upstream failure.
 
+The typed error carries the failure category and the upstream HTTP status only. It must not carry the upstream response body. The body is removed from provider error messages entirely, so it is absent from the error returned to API clients, from attempt metadata, and from service and transport logs. A provider may record the body only in provider-scoped logs that are emitted when `DEBUG` is enabled, and it must do so through the existing debug logger rather than through the error value. Provider request logs follow the same rule: model, provider, status and outcome only.
+
 For a retryable failure, make up to `max_retries` additional calls to the same model, subject to the completion's existing overall timeout. Once same-model retries are exhausted, or a model-unavailable failure occurs, try fallback models in precedence order up to `max_fallback_models`. Stop on first successful non-empty completion. Never retry after cancellation or after the request context expires. Retries and fallback calls use the same messages and request context; no prompt or intermediate answer is sent to another candidate.
 
 For streaming requests, retries and fallback are allowed only until the first content chunk has been delivered to the caller. After the first chunk, a failure terminates the stream with the existing provider-error event; the service must not splice a second model's answer into a partial first answer.
@@ -104,7 +106,7 @@ The router still selects the primary model as today. Fallback candidates must be
 
 ### Ensemble
 
-Retry each initially selected candidate independently using the shared retry count. After parallel initial attempts and retries, replace failed candidate slots in deterministic order, using the request-level explicit list, each failed primary's configured fallback list, then task/capability-compatible candidates. `max_fallback_models` is shared across the whole ensemble completion. Stop replacement when the original selected candidate count has been restored or the global fallback budget is exhausted. Synthesis proceeds when at least two distinct candidate models have succeeded, preserving the existing minimum; otherwise return the existing insufficient-results error and record attempt outcomes in service logs.
+Retry each initially selected candidate independently using the shared retry count. After parallel initial attempts and retries, replace failed candidate slots in deterministic order, using the request-level explicit list, each failed primary's configured fallback list, then task/capability-compatible candidates. `max_fallback_models` is shared across the whole ensemble completion. Replace failed slots only while replacement is needed: stop once the number of successful candidates equals the originally selected candidate count, or when the shared fallback budget is exhausted. Synthesis proceeds when at least two distinct candidate models have succeeded, preserving the existing minimum; otherwise return the existing insufficient-results error and record attempt outcomes in service logs.
 
 The synthesis model uses the same retry/fallback policy, but it is never eligible as an ensemble candidate. If synthesis ultimately fails, the completion fails; candidate answers are not returned as a substitute for synthesis.
 
@@ -112,7 +114,16 @@ The synthesis model uses the same retry/fallback policy, but it is never eligibl
 
 Add an optional `fallback` policy override to `app.CompletionRequest` with pointer/presence semantics so omitted fields inherit global policy and explicit zero/empty values can override it. Its model list also needs presence semantics: omitted inherits configured lists; an empty list clears them. It contains `enabled`, `max_retries`, `max_fallback_models`, and optional ordered `models`.
 
-Extend `RoutingInfo` with an additive attempt list. Each attempt records the model, provider, attempt number, outcome (`succeeded`, `retryable_failure`, `unavailable`, or `failed`), and elapsed milliseconds. Existing `RoutedModel` information remains available and compatible. Do not include prompts, responses, credentials, or provider response bodies in attempt metadata or logs. Successful responses expose the full attempt list. Failed requests preserve existing transport error shapes in this release; CLI progress and service logs report the models tried and final failure category.
+Extend `RoutingInfo` with an additive `attempts` array. Each entry records `model`, `provider`, `attempt` (1-based ordinal within the completion), `outcome`, and `duration_ms`:
+
+| `outcome` | Meaning |
+| --- | --- |
+| `succeeded` | The attempt returned a non-empty completion. |
+| `retryable_failure` | A transient failure; the same model may be retried. |
+| `unavailable` | The provider reported that model unavailable; fallback proceeds without another attempt on that model. |
+| `failed` | A permanent failure, or the final attempt of a model that will not be retried. |
+
+Existing `RoutedModel` information remains available and compatible, and `attempts` is omitted when no attempt was recorded. Do not include prompts, responses, credentials, or provider response bodies in attempt metadata or logs. Successful responses expose the full attempt list. Failed requests preserve existing transport error shapes in this release; CLI progress and service logs report the models tried and final failure category.
 
 The API's normal JSON response continues to identify the actual successful model/provider. SSE emits only the chosen model's content and reports fallback decisions in initial routing metadata/progress before content starts. MCP structured output includes the same routing metadata. CLI continues to write only the final answer to stdout; its existing stderr progress reports retries and fallback choices.
 
@@ -134,6 +145,7 @@ There is no separate fallback endpoint or strategy. Existing calls that omit ove
 - Ignore no invalid explicit fallback entries; return an input/configuration error naming the invalid entry without exposing provider secrets.
 - Preserve current error categories when the policy is disabled or no fallback is available. When attempts were made, return the final failure category and attach all attempts to routing metadata/log context.
 - Caller cancellation and overall deadline exhaustion stop all retries, candidate replacements, and synthesis work.
+- Repository checks (`go vet`, `gofmt -l`, `go test ./...`) must run in CI on every push and pull request so regressions block a release before a tag is cut.
 
 ## Compatibility
 
