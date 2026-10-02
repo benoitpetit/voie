@@ -27,6 +27,12 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
   "strategy": "classic",
   "task": "coding",
   "models": ["MODEL_A", "MODEL_B"],
+  "fallback": {
+    "enabled": true,
+    "max_retries": 1,
+    "max_fallback_models": 1,
+    "models": ["MODEL_B"]
+  },
   "conversation_id": "optional-local-session-id",
   "messages": [
     {"role": "user", "content": "Hello"}
@@ -41,7 +47,17 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
 
 When supplying `models` explicitly, list only ensemble candidates; the synthesis model must be separate.
 
-An optional `routing` object in responses identifies the strategy, inferred task, and per-model success status. `conversation_id` appears in responses when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
+`fallback` is an optional per-request override of the global fallback policy. Omitted fields inherit the policy; `enabled` (boolean), `max_retries`, and `max_fallback_models` (each `0`–`3`) override the configured bounds, and `models` supplies candidate model IDs in fallback order, replacing the configured per-model list. An empty `models` list clears every candidate. `max_retries: 0` skips same-model retries, `max_fallback_models: 0` skips fallback, and `enabled: false` disables both. Bounds and model IDs are validated before any provider is called, so an invalid override returns `400`. Retries and fallback only happen before the first streamed content chunk.
+
+```json
+{"model":"MODEL_ID","fallback":{"enabled":false},"messages":[{"role":"user","content":"Hello"}]}
+```
+
+```json
+{"model":"MODEL_ID","fallback":{"models":["MODEL_B"]},"messages":[{"role":"user","content":"Hello"}]}
+```
+
+An optional `routing` object in responses identifies the strategy, inferred task, per-model selection, and the `attempts` array. Each `attempts` entry records one provider call: `model`, `provider`, `attempt` index, `outcome`, and `duration_ms` when known. Outcomes are `succeeded`, `retryable_failure`, `unavailable`, and `failed`. `conversation_id` appears in responses when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
 
 Automatic routing:
 
@@ -81,6 +97,13 @@ Successful responses keep the OpenAI-compatible `chat.completion` shape. `provid
     "prompt_tokens": 4,
     "completion_tokens": 2,
     "total_tokens": 6
+  },
+  "routing": {
+    "strategy": "classic",
+    "attempts": [
+      {"model": "MODEL_ID", "provider": "provider-name", "attempt": 1, "outcome": "retryable_failure", "duration_ms": 812},
+      {"model": "MODEL_ID", "provider": "provider-name", "attempt": 2, "outcome": "succeeded", "duration_ms": 703}
+    ]
   }
 }
 ```
@@ -95,7 +118,7 @@ curl -N http://127.0.0.1:8080/v1/chat/completions \
   -d '{"model":"MODEL_ID","stream":true,"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-If an error occurs before the stream starts, the server returns a normal JSON error status. Errors after the first SSE event are sent as an SSE `error` event.
+If an error occurs before the stream starts, the server returns a normal JSON error status. Errors after the first SSE event are sent as an SSE `error` event. Retries and fallback occur only before the first content chunk; once content has been delivered, a subsequent failure ends the stream without substituting another model.
 
 ## `GET /v1/models`
 
@@ -187,7 +210,7 @@ Errors use this JSON envelope:
 
 | HTTP status | Meaning |
 | --- | --- |
-| `400` | Invalid input, unknown model, or provider/model mismatch |
+| `400` | Invalid input, unknown model, provider/model mismatch, or invalid fallback bounds/IDs |
 | `401` | Missing or invalid bearer token |
 | `404` | Unknown provider |
 | `408` | Request canceled |

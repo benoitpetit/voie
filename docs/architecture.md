@@ -32,7 +32,7 @@ app.Registry → provider
 
 `ensemble` accepts two or three distinct explicit model IDs, or asks the router to select up to three. Candidates run concurrently and at least two must succeed. `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`; intermediate answers are not returned or saved in the conversation transcript. Multi-model requests send the prompt to each selected provider and then send successful candidate answers to the synthesizer.
 
-`ROUTING_CONFIG_PATH` points to optional JSON with `models` descriptors and `tasks` rules. Example:
+`ROUTING_CONFIG_PATH` points to optional JSON with `models` descriptors, `tasks` rules, and a `fallback` policy. Example:
 
 ```json
 {
@@ -41,11 +41,23 @@ app.Registry → provider
   },
   "tasks": {
     "coding": {"required_capabilities": ["coding"], "preferred_models": ["MODEL_ID"]}
+  },
+  "fallback": {
+    "enabled": true,
+    "max_retries": 1,
+    "max_fallback_models": 1,
+    "models": {
+      "MODEL_ID": ["OTHER_MODEL"]
+    }
   }
 }
 ```
 
 Conversation state is opt-in through `conversation_id` and stored locally in `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`, typically `~/.config/voie/conversations.db` on Linux). macOS and Windows use their standard per-user configuration directories. The default inactivity TTL is 720 hours. Reads do not extend it; successful turns do. Expired transcripts are deleted and an ID-only tombstone is retained for 30 days. Conversations cap at 200 messages and 2 MiB; concurrent stale turns receive a conflict. Classic calls without a conversation ID do not open the database.
+
+Every strategy shares the same fallback policy. Failures are classified as transient, unavailable, or permanent: network errors and HTTP `408`, `429`, or `5xx` are transient, a missing model is unavailable, and other `4xx` errors are permanent. Transient failures retry the same model up to `max_retries` and then fall back to other models up to `max_fallback_models`; unavailable failures skip straight to fallback; permanent failures stop immediately. In streaming, retries and fallback only happen before the first content chunk. The configured defaults are `enabled=true`, `max_retries=1`, and `max_fallback_models=1`, each bounded by `0`–`3`. Env vars (`FALLBACK_ENABLED`, `FALLBACK_MAX_RETRIES`, `FALLBACK_MAX_MODELS`) are overridden by `routing.json fallback`, which also defines per-model candidate lists under `models`. A request can override the policy through its transport-specific `fallback` object (fields `enabled`, `max_retries`, `max_fallback_models`, `models`); omitted fields inherit the policy, an empty `models` list clears every candidate, and invalid bounds or IDs fail before any provider call.
+
+Fallback candidates resolve deterministically: the request's explicit `models`, then the configured per-model list, then the eligible pool. For automatic routing the pool is the same task/capability/provider-filtered candidates the router used, excluding the primary. For ensembles the pool excludes the used candidates, the synthesizer, and the router, each candidate is attempted once, and the synthesis step reuses the remaining `max_fallback_models` budget. Responses carry an `attempts` array that records each provider call's model, provider, attempt index, outcome (`succeeded`, `retryable_failure`, `unavailable`, `failed`), and duration in milliseconds. See the interface guides for request and response examples.
 
 `ROUTER_MODEL`, `SYNTHESIS_MODEL`, `ROUTING_CONFIG_PATH`, `CONVERSATION_DB_PATH`, and `CONVERSATION_TTL` are shared by HTTP, CLI, and MCP. See the API and interface guides for request examples.
 

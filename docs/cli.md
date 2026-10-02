@@ -14,9 +14,9 @@ The monochrome ASCII wordmark appears in `voie --help`. Command output stays fre
 
 ```text
 voie serve [--host HOST] [--port PORT]
-voie chat --model MODEL [--provider PROVIDER] [PROMPT...]
-voie chat --strategy auto [--task TASK] [--conversation ID] [PROMPT...]
-voie chat --strategy ensemble [--models ID,ID] [--task TASK] [--conversation ID] [PROMPT...]
+voie chat --model MODEL [--provider PROVIDER] [--fallback-model ID]... [PROMPT...]
+voie chat --strategy auto [--task TASK] [--conversation ID] [--fallback-model ID]... [PROMPT...]
+voie chat --strategy ensemble [--models ID,ID] [--task TASK] [--conversation ID] [--fallback-model ID]... [PROMPT...]
 voie conversations create|list|show|delete
 voie models [--json]
 voie providers [--json]
@@ -60,7 +60,12 @@ voie mcp
 
 `chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` provides a hint for automatic candidate selection in `auto` or in `ensemble` when `--models` is omitted. It accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`; shell completion suggests these values. `--models` sets exact ensemble candidates, and `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
 
+Fallback can be tuned per request. `--fallback` enables retries and fallback, `--no-fallback` disables both, `--fallback-retries N` sets same-model retries and `--fallback-limit N` sets the maximum extra models tried after the primary (each `N` in `0`–`3`), and repeatable `--fallback-model ID` replaces the configured candidate list in order. When no fallback flag is present the request inherits the global policy. `--fallback` and `--no-fallback` conflict, and bounds are validated before the runtime loads; `--no-fallback` performs a single attempt.
+
 ```bash
+voie chat --model MODEL_ID --no-fallback "Do not retry this"
+voie chat --model MODEL_ID --fallback-retries 0 "Skip the retry, go straight to fallback"
+voie chat --model MODEL_ID --fallback-model MODEL_B --fallback-model MODEL_C "Try these models in order"
 voie chat --strategy auto --task coding "Review this patch"
 voie chat --strategy ensemble --task reasoning "Compare these designs"
 ID=$(voie conversations create)
@@ -95,6 +100,9 @@ The commands use the same environment variables as the HTTP runtime:
 | `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local routing policy file |
 | `CONVERSATION_DB_PATH` | `<user-config-dir>/voie/conversations.db` | Local conversation database |
 | `CONVERSATION_TTL` | `720h` | Conversation inactivity lifetime |
+| `FALLBACK_ENABLED` | `true` | Enable retries and fallback on provider failures |
+| `FALLBACK_MAX_RETRIES` | `1` | Same-model retries for transient failures (0-3) |
+| `FALLBACK_MAX_MODELS` | `1` | Extra models tried after the primary (0-3) |
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories.
 

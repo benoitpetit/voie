@@ -30,7 +30,8 @@ Run `voie version` or `voie --version` to read the embedded version. Run `voie u
 
 - For an unknown model, refresh the catalogue and retry with an exact current ID. Do not substitute a guessed alias.
 - For a provider/model mismatch, remove the explicit provider or choose a model listed for that provider.
-- For a timeout or upstream failure, call `list_providers` for reachability context and retry with another listed model when appropriate.
+- For a timeout or upstream failure, check the response's `routing.attempts` to see what already happened before retrying. Transient failures (network errors, HTTP 408/429/5xx) retry and fall back to other models automatically, so a single failing model call may already have tried several models.
+- Set an explicit fallback list for a request with `"fallback": {"models": [ID, ...]}` in HTTP/MCP, or repeatable `--fallback-model ID` in the CLI. Use `"fallback": {"enabled": false}` / `--no-fallback` to disable automatic retries when you must control the exact attempt count.
 - `alive: true` means the provider URL returned an HTTP response. It does not confirm model inference works.
 
 Use `models --json` or MCP `list_models` for discovery. Do not keep a separate hard-coded model list in prompts or integrations.

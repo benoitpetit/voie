@@ -33,7 +33,7 @@ Takes an empty object. Returns provider names, labels, `alive`, default model ID
 
 ### `chat_completion`
 
-Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, and `conversation_id`. `task` guides automatic candidate selection in `auto` or in `ensemble` when `models` is omitted; supported values are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`.
+Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, `fallback`, and `conversation_id`. `task` guides automatic candidate selection in `auto` or in `ensemble` when `models` is omitted; supported values are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`.
 
 ```json
 {
@@ -42,6 +42,24 @@ Requires `messages`; classic requests require `model`, while automatic and ensem
   "messages": [
     {"role": "user", "content": "Hello"}
   ]
+}
+```
+
+The `fallback` argument overrides the global fallback policy for this call. Omitted fields inherit the policy; `enabled`, `max_retries` and `max_fallback_models` (each `0`–`3`) override bounds, and `models` supplies candidate model IDs in fallback order. An empty `models` list clears every candidate, `max_retries: 0` skips retries, `max_fallback_models: 0` skips fallback, and `enabled: false` disables both:
+
+```json
+{
+  "model": "MODEL_ID_FROM_LIST_MODELS",
+  "fallback": {"enabled": false},
+  "messages": [{"role": "user", "content": "Hello"}]
+}
+```
+
+```json
+{
+  "model": "MODEL_ID_FROM_LIST_MODELS",
+  "fallback": {"models": ["MODEL_B"]},
+  "messages": [{"role": "user", "content": "Hello"}]
 }
 ```
 
@@ -59,7 +77,7 @@ Ensemble example with automatic candidate selection and a task hint:
 
 When `models` contains explicit ensemble candidates, voie uses that exact list and `task` does not change it.
 
-The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. Automatic routing uses `ROUTER_MODEL` only when local task rules do not identify one model. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`. Selected providers receive the prompt, and the synthesizer receives successful intermediate answers.
+The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. The `routing` object identifies the strategy and may include an `attempts` array recording each provider call's model, provider, attempt index, outcome (`succeeded`, `retryable_failure`, `unavailable`, `failed`), and duration in milliseconds. Automatic routing uses `ROUTER_MODEL` only when local task rules do not identify one model. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`. Selected providers receive the prompt, and the synthesizer receives successful intermediate answers.
 
 ### Conversation tools
 

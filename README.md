@@ -72,6 +72,9 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local model descriptions and task rules |
 | `CONVERSATION_DB_PATH` | `<user-config-dir>/voie/conversations.db` | Local SQLite conversation database |
 | `CONVERSATION_TTL` | `720h` | Inactivity lifetime for local conversations |
+| `FALLBACK_ENABLED` | `true` | Enable retries and fallback on provider failures |
+| `FALLBACK_MAX_RETRIES` | `1` | Same-model retries for transient failures (0-3) |
+| `FALLBACK_MAX_MODELS` | `1` | Extra models tried after the primary (0-3) |
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
 
@@ -142,6 +145,31 @@ Routes, request and response schemas, authentication, and streaming are document
 Automatic routing and ensembles are optional request strategies; requests that omit `strategy` retain the classic model/provider behavior. Local conversation tracking is opt-in via `conversation_id` and persists on disk with expiry.
 
 `GET /v1/providers` reports `alive` based on whether an HTTP response was received from each provider URL. It does not test model inference or guarantee that a completion will succeed.
+
+## Fallback and retries
+
+Provider failures are classified as transient, unavailable, or permanent. Network errors and HTTP `408`, `429`, or `5xx` responses are transient and eligible for retries and fallback; a missing model is treated as unavailable and moves straight to fallback; other `4xx` errors are permanent and never retried. Retries and fallback happen only before the first streamed content chunk — once a stream has delivered content, a failure ends it.
+
+A retry repeats the same model; fallback then tries other models. `FALLBACK_MAX_RETRIES` bounds same-model retries and `FALLBACK_MAX_MODELS` bounds how many other models are attempted (both default to `1`, with `0`–`3` valid). `0` disables that behavior and `FALLBACK_ENABLED=false` disables both. Per-model candidate lists live in `routing.json` under `fallback.models` and override the environment values:
+
+```json
+{
+  "fallback": {
+    "enabled": true,
+    "max_retries": 1,
+    "max_fallback_models": 1,
+    "models": {
+      "model-a": ["model-b", "model-c"]
+    }
+  }
+}
+```
+
+Fallback candidates are chosen in this order: the request's explicit `fallback.models`, then the configured per-model list, then, for automatic and ensemble strategies, the other eligible models (limited by `max_fallback_models`). An explicit `provider` constraint is honored when candidates resolve. Ensemble candidates each get one attempt, exclude the synthesizer and router, and the synthesis step reuses any remaining fallback budget. An explicitly empty `fallback.models` list clears every candidate.
+
+Each request can override the policy with a `fallback` object — HTTP and MCP accept `{"enabled": false, "max_retries": 0, "max_fallback_models": 0, "models": ["model-b"]}`, and the CLI exposes the same controls as `--fallback`, `--no-fallback`, `--fallback-retries N`, `--fallback-limit N`, and repeatable `--fallback-model ID`. Bound and ID validation happens before any provider is called, so an invalid override fails fast with an input error.
+
+Responses include `routing.attempts`: one entry per provider call with the model, provider, attempt index, outcome, and duration in milliseconds. Outcomes are `succeeded`, `retryable_failure`, `unavailable`, and `failed`. Interface examples are in [api-reference.md](api-reference.md), [docs/cli.md](docs/cli.md), and [docs/mcp.md](docs/mcp.md).
 
 ## Progress and logs
 
