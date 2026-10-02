@@ -309,3 +309,111 @@ func (p *cliTestProvider) ChatCompletion(_ context.Context, messages []app.Messa
 func (*cliTestProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
 	return nil
 }
+
+func TestChatFallbackHelpListsOverrideFlags(t *testing.T) {
+	rt, _ := newCLITestRuntime(t)
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--help"}, strings.NewReader(""), &stdout, &stderr, rt); err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range []string{"--fallback", "--no-fallback", "--fallback-retries", "--fallback-limit", "--fallback-model"} {
+		if !strings.Contains(stdout.String(), flag) {
+			t.Fatalf("chat help missing %q: %s", flag, stdout.String())
+		}
+	}
+}
+
+func TestChatFallbackDisabledSkipsRetry(t *testing.T) {
+	registry := app.NewRegistry()
+	provider := &cliFlakyProvider{failures: 1, err: app.NewProviderFailure(app.FailureTransient, "flaky", "flaky-model", 503, errors.New("down"))}
+	registry.Register("flaky", provider)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Second, HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &cliTestRuntime{service: service}
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--model", "flaky-model", "hello"}, strings.NewReader(""), &stdout, &stderr, rt); err != nil {
+		t.Fatalf("default retry error = %v", err)
+	}
+	if stdout.String() != "answer\n" {
+		t.Fatalf("default stdout = %q, want only the answer", stdout.String())
+	}
+	provider.failures = 1
+	provider.calls = 0
+	stdout.Reset()
+	if err := executeForTest(context.Background(), []string{"chat", "--model", "flaky-model", "--no-fallback", "hello"}, strings.NewReader(""), &stdout, &stderr, rt); err == nil {
+		t.Fatalf("--no-fallback unexpectedly succeeded: %q", stdout.String())
+	}
+	if provider.calls != 1 {
+		t.Fatalf("--no-fallback made %d calls, want exactly one attempt with retries disabled", provider.calls)
+	}
+}
+
+func TestChatFallbackModelListAccepted(t *testing.T) {
+	rt, _ := newCLITestRuntime(t)
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--model", "model", "--fallback-model", "model", "--fallback-retries", "0", "hello"}, strings.NewReader(""), &stdout, &stderr, rt); err != nil {
+		t.Fatalf("valid fallback flags rejected: %v", err)
+	}
+	if stdout.String() != "answer\n" {
+		t.Fatalf("stdout = %q, want only the answer", stdout.String())
+	}
+}
+
+func TestChatFallbackValidatesFlagsBeforeCompletion(t *testing.T) {
+	invalidArgs := [][]string{
+		{"chat", "--model", "model", "--fallback-retries", "5", "hello"},
+		{"chat", "--model", "model", "--fallback-limit", "9", "hello"},
+		{"chat", "--model", "model", "--fallback", "--no-fallback", "hello"},
+	}
+	for _, args := range invalidArgs {
+		var stdout, stderr bytes.Buffer
+		if err := executeForTest(context.Background(), args, strings.NewReader(""), &stdout, &stderr, mustCLITestRuntime(t)); err == nil {
+			t.Fatalf("args %v unexpectedly succeeded: %q", args, stdout.String())
+		}
+	}
+	registry := app.NewRegistry()
+	provider := &cliFlakyProvider{}
+	registry.Register("flaky", provider)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Second, HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &cliTestRuntime{service: service}
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--model", "flaky-model", "--fallback-model", "bogus", "hello"}, strings.NewReader(""), &stdout, &stderr, rt); err == nil {
+		t.Fatalf("unknown fallback model unexpectedly succeeded: %q", stdout.String())
+	}
+	if provider.calls != 0 {
+		t.Fatalf("provider called %d times before fallback validation", provider.calls)
+	}
+}
+
+func mustCLITestRuntime(t *testing.T) *cliTestRuntime {
+	t.Helper()
+	rt, _ := newCLITestRuntime(t)
+	return rt
+}
+
+type cliFlakyProvider struct {
+	failures int
+	err      error
+	calls    int
+}
+
+func (*cliFlakyProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "flaky", Label: "Flaky", URL: "https://example.invalid", Working: true, DefaultModel: "flaky-model", SupportedModels: []string{"flaky-model"}}
+}
+func (*cliFlakyProvider) SupportsModel(model string) bool { return model == "flaky-model" }
+func (p *cliFlakyProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	p.calls++
+	if p.failures > 0 {
+		p.failures--
+		return nil, p.err
+	}
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "answer"}}}}, nil
+}
+func (*cliFlakyProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
+}

@@ -3,9 +3,11 @@ package mcpserver
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -227,4 +229,140 @@ func (p *mcpTestProvider) ChatCompletion(ctx context.Context, _ []app.Message, m
 }
 func (p *mcpTestProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
 	return p.err
+}
+
+func mcpFallbackService(t *testing.T) (*app.Service, *mcpFallbackProvider, *mcpFallbackProvider) {
+	t.Helper()
+	registry := app.NewRegistry()
+	primary := &mcpFallbackProvider{info: app.ProviderInfo{Name: "a", Label: "A", URL: "https://example.invalid", Working: true, DefaultModel: "model-a", SupportedModels: []string{"model-a"}}}
+	backup := &mcpFallbackProvider{info: app.ProviderInfo{Name: "b", Label: "B", URL: "https://example.invalid", Working: true, DefaultModel: "model-b", SupportedModels: []string{"model-b"}}}
+	registry.Register("a", primary)
+	registry.Register("b", backup)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Second, Fallback: &app.FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1, Models: map[string][]string{"model-a": {"model-b"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service, primary, backup
+}
+
+func TestMCPChatCompletionSchemaDescribesFallback(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema *mcp.Tool
+	for _, tool := range result.Tools {
+		if tool.Name == chatCompletionToolName {
+			schema = tool
+			break
+		}
+	}
+	if schema == nil || schema.InputSchema == nil {
+		t.Fatalf("chat_completion schema = %+v, want fallback property", schema)
+	}
+	raw, err := json.Marshal(schema.InputSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ToLower(string(raw)), "fallback") {
+		t.Fatalf("chat_completion input schema does not describe fallback: %s", raw)
+	}
+}
+
+func TestMCPChatCompletionFallbackOverrideReportsRouting(t *testing.T) {
+	service, primary, backup := mcpFallbackService(t)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureUnavailable, "a", "model-a", 404, errors.New("gone"))
+	primary.failures = 1
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{
+		"model": "model-a", "messages": []any{map[string]any{"role": "user", "content": "hi"}},
+		"fallback": map[string]any{"models": []any{"model-b"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IsError || result.StructuredContent == nil {
+		t.Fatalf("fallback result = %+v, want a successful structured answer", result)
+	}
+	data, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured = %T %v", result.StructuredContent, result.StructuredContent)
+	}
+	if got, _ := data["model"].(string); got != "model-b" {
+		t.Fatalf("model = %q, want model-b after fallback", got)
+	}
+	if len(backup.calls) != 1 || len(primary.calls) != 1 {
+		t.Fatalf("primary calls = %v, backup calls = %v", primary.calls, backup.calls)
+	}
+	routing, ok := data["routing"].(map[string]any)
+	if !ok || routing["attempts"] == nil {
+		t.Fatalf("structured routing = %v, want routing.attempts", data["routing"])
+	}
+	attempts, ok := routing["attempts"].([]any)
+	if !ok || len(attempts) != 2 {
+		t.Fatalf("routing attempts = %v, want two entries", routing["attempts"])
+	}
+}
+
+func TestMCPChatCompletionFallbackInvalidRejectedBeforeProviderCall(t *testing.T) {
+	cases := []struct {
+		name string
+		args map[string]any
+	}{
+		{"max_retries out of range", map[string]any{"model": "model-a", "messages": []any{map[string]any{"role": "user", "content": "hi"}}, "fallback": map[string]any{"max_retries": 5}}},
+		{"unknown fallback model", map[string]any{"model": "model-a", "messages": []any{map[string]any{"role": "user", "content": "hi"}}, "fallback": map[string]any{"models": []any{"missing"}}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service, primary, backup := mcpFallbackService(t)
+			session, closeSessions := connectTestClient(t, NewServer(service))
+			defer closeSessions()
+			result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: tc.args})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !result.IsError {
+				t.Fatalf("result = %+v, want input error", result)
+			}
+			if len(primary.calls) != 0 || len(backup.calls) != 0 {
+				t.Fatalf("providers called before validation: primary %v backup %v", primary.calls, backup.calls)
+			}
+		})
+	}
+}
+
+type mcpFallbackProvider struct {
+	info         app.ProviderInfo
+	failingModel string
+	failures     int
+	failure      error
+	calls        []string
+	mu           sync.Mutex
+}
+
+func (p *mcpFallbackProvider) GetInfo() app.ProviderInfo { return p.info }
+func (p *mcpFallbackProvider) SupportsModel(model string) bool {
+	for _, supported := range p.info.SupportedModels {
+		if strings.EqualFold(supported, model) {
+			return true
+		}
+	}
+	return false
+}
+func (p *mcpFallbackProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, model)
+	if model == p.failingModel && p.failures > 0 {
+		p.failures--
+		return nil, p.failure
+	}
+	return &app.ChatCompletionResponse{Model: model, Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "answer"}}}}, nil
+}
+func (*mcpFallbackProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
 }

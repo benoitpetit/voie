@@ -48,13 +48,14 @@ type providersOutput struct {
 }
 
 type chatCompletionInput struct {
-	Model          string        `json:"model,omitempty" jsonschema:"optional model ID for classic requests; omitted for auto or ensemble"`
-	Messages       []app.Message `json:"messages" jsonschema:"conversation messages"`
-	Provider       string        `json:"provider,omitempty" jsonschema:"optional provider name"`
-	Strategy       app.Strategy  `json:"strategy,omitempty" jsonschema:"classic, auto, or ensemble"`
-	Task           string        `json:"task,omitempty" jsonschema:"optional task hint for automatic selection: coding, reasoning, writing, translation, summarization, or general; explicit ensemble models take precedence"`
-	Models         []string      `json:"models,omitempty" jsonschema:"optional explicit ensemble model IDs"`
-	ConversationID string        `json:"conversation_id,omitempty" jsonschema:"optional local conversation ID"`
+	Model          string                `json:"model,omitempty" jsonschema:"optional model ID for classic requests; omitted for auto or ensemble"`
+	Messages       []app.Message         `json:"messages" jsonschema:"conversation messages"`
+	Provider       string                `json:"provider,omitempty" jsonschema:"optional provider name"`
+	Strategy       app.Strategy          `json:"strategy,omitempty" jsonschema:"classic, auto, or ensemble"`
+	Task           string                `json:"task,omitempty" jsonschema:"optional task hint for automatic selection: coding, reasoning, writing, translation, summarization, or general; explicit ensemble models take precedence"`
+	Models         []string              `json:"models,omitempty" jsonschema:"optional explicit ensemble model IDs"`
+	Fallback       *app.FallbackOverride `json:"fallback,omitempty" jsonschema:"override the global fallback policy for this request: enabled, max_retries, max_fallback_models, or an explicit models list that replaces configured candidates"`
+	ConversationID string                `json:"conversation_id,omitempty" jsonschema:"optional local conversation ID"`
 }
 
 type chatCompletionOutput struct {
@@ -109,7 +110,7 @@ func NewServer(service *app.Service) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: chatCompletionToolName, Description: "Generate a non-streaming completion using classic, automatic, or ensemble model routing.",
 	}, logToolCall(chatCompletionToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
-		response, err := service.Complete(ctx, app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, ConversationID: input.ConversationID, Messages: input.Messages})
+		response, err := service.Complete(ctx, app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, Fallback: input.Fallback, ConversationID: input.ConversationID, Messages: input.Messages})
 		if err != nil {
 			return nil, chatCompletionOutput{}, err
 		}

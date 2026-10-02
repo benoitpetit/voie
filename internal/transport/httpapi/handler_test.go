@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -408,6 +409,235 @@ func (p *httpTestProvider) ChatCompletion(ctx context.Context, _ []app.Message, 
 }
 func (p *httpTestProvider) ChatCompletionStream(_ context.Context, _ []app.Message, _ string, callback func(string)) error {
 	p.streamCalled = true
+	callback("chunk")
+	return nil
+}
+
+func httpFallbackService(t *testing.T) (*app.Service, *httpFallbackProvider, *httpFallbackProvider) {
+	t.Helper()
+	registry := app.NewRegistry()
+	primary := &httpFallbackProvider{info: app.ProviderInfo{Name: "a", Label: "A", URL: "https://example.invalid", Working: true, DefaultModel: "model-a", SupportedModels: []string{"model-a"}, SupportsStream: true}}
+	backup := &httpFallbackProvider{info: app.ProviderInfo{Name: "b", Label: "B", URL: "https://example.invalid", Working: true, DefaultModel: "model-b", SupportedModels: []string{"model-b"}, SupportsStream: true}}
+	registry.Register("a", primary)
+	registry.Register("b", backup)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute, Fallback: &app.FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1, Models: map[string][]string{"model-a": {"model-b"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service, primary, backup
+}
+
+func httpChatRequest(t *testing.T, handler http.Handler, body string) (int, app.ChatCompletionResponse) {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	var response app.ChatCompletionResponse
+	if recorder.Code == http.StatusOK {
+		if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return recorder.Code, response
+}
+
+func TestHTTPChatFallbackOmittedInheritsGlobalConfig(t *testing.T) {
+	service, primary, backup := httpFallbackService(t)
+	handler := NewHandler(service, &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute})
+	primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureTransient, "a", "model-a", 503, errors.New("down"))
+	primary.failures = 10
+	status, response := httpChatRequest(t, handler, `{"model":"model-a","messages":[{"role":"user","content":"hi"}]}`)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Model != "model-b" {
+		t.Fatalf("model = %q, want model-b after fallback", response.Model)
+	}
+	if response.Routing == nil || len(response.Routing.Attempts) < 2 {
+		t.Fatalf("routing = %+v, want at least two attempts", response.Routing)
+	}
+	attempts := response.Routing.Attempts
+	if attempts[0].Model != "model-a" || attempts[0].Attempt != 1 || attempts[0].Outcome != app.OutcomeRetryableFailure {
+		t.Fatalf("first attempt = %+v, want model-a attempt 1 retryable_failure", attempts[0])
+	}
+	if last := attempts[len(attempts)-1]; last.Model != "model-b" || last.Outcome != app.OutcomeSucceeded {
+		t.Fatalf("last attempt = %+v, want model-b succeeded", last)
+	}
+	for i, attempt := range attempts {
+		if attempt.Attempt != i+1 {
+			t.Fatalf("attempt %d has ordinal %d, want %d", i, attempt.Attempt, i+1)
+		}
+	}
+	if len(primary.calls) != 2 || len(backup.calls) != 1 {
+		t.Fatalf("primary calls = %v, backup calls = %v", primary.calls, backup.calls)
+	}
+}
+
+func TestHTTPChatFallbackRequestOverrideReportsFinalModelAndAttempts(t *testing.T) {
+	service, primary, backup := httpFallbackService(t)
+	handler := NewHandler(service, &config.Config{})
+	primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureUnavailable, "a", "model-a", 404, errors.New("gone"))
+	primary.failures = 1
+	status, response := httpChatRequest(t, handler, `{"model":"model-a","fallback":{"models":["model-b"]},"messages":[{"role":"user","content":"hi"}]}`)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Model != "model-b" || len(backup.calls) != 1 || primary.calls[0] != "model-a" {
+		t.Fatalf("fallback did not reach backup: model=%q primary=%v backup=%v", response.Model, primary.calls, backup.calls)
+	}
+	if response.Routing == nil || len(response.Routing.Attempts) != 2 {
+		t.Fatalf("routing = %+v, want two attempts", response.Routing)
+	}
+	if got := response.Routing.Attempts[0]; got.Model != "model-a" || got.Outcome != app.OutcomeUnavailable {
+		t.Fatalf("first attempt = %+v, want model-a unavailable", got)
+	}
+	if got := response.Routing.Attempts[1]; got.Model != "model-b" || got.Outcome != app.OutcomeSucceeded {
+		t.Fatalf("second attempt = %+v, want model-b succeeded", got)
+	}
+	if response.Routing.Attempts[0].Attempt != 1 || response.Routing.Attempts[1].Attempt != 2 {
+		t.Fatalf("attempt ordinals = %d,%d, want 1,2", response.Routing.Attempts[0].Attempt, response.Routing.Attempts[1].Attempt)
+	}
+	if len(response.Choices) == 0 || response.Choices[0].Message.Content != "reply" {
+		t.Fatalf("choices = %+v, want fallback model reply", response.Choices)
+	}
+}
+
+func TestHTTPChatFallbackPerFieldOverridesAndExplicitZeros(t *testing.T) {
+	cases := []struct {
+		name         string
+		fallback     string
+		failures     int
+		wantStatus   int
+		wantModel    string
+		wantA, wantB int
+	}{
+		{"control retries then succeeds on primary", `{"max_retries":2}`, 1, http.StatusOK, "model-a", 2, 0},
+		{"max_retries zero skips retries", `{"max_retries":0}`, 1, http.StatusOK, "model-b", 1, 1},
+		{"max_fallback_models zero blocks fallback", `{"max_fallback_models":0}`, 5, http.StatusBadGateway, "", 2, 0},
+		{"enabled false disables the whole policy", `{"enabled":false}`, 1, http.StatusBadGateway, "", 1, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service, primary, backup := httpFallbackService(t)
+			handler := NewHandler(service, &config.Config{})
+			primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureTransient, "a", "model-a", 503, errors.New("down"))
+			primary.failures = tc.failures
+			body := `{"model":"model-a","fallback":` + tc.fallback + `,"messages":[{"role":"user","content":"hi"}]}`
+			status, response := httpChatRequest(t, handler, body)
+			if status != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", status, tc.wantStatus)
+			}
+			if tc.wantStatus == http.StatusOK && response.Model != tc.wantModel {
+				t.Fatalf("model = %q, want %q", response.Model, tc.wantModel)
+			}
+			if len(primary.calls) != tc.wantA || len(backup.calls) != tc.wantB {
+				t.Fatalf("primary calls = %v (%d), backup calls = %v (%d), want %d/%d", primary.calls, len(primary.calls), backup.calls, len(backup.calls), tc.wantA, tc.wantB)
+			}
+		})
+	}
+}
+
+func TestHTTPChatFallbackEmptyModelListClears(t *testing.T) {
+	service, primary, backup := httpFallbackService(t)
+	handler := NewHandler(service, &config.Config{})
+	primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureTransient, "a", "model-a", 503, errors.New("down"))
+	primary.failures = 10
+	status, _ := httpChatRequest(t, handler, `{"model":"model-a","fallback":{"models":[]},"messages":[{"role":"user","content":"hi"}]}`)
+	if status != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502 without fallback", status)
+	}
+	if len(backup.calls) != 0 {
+		t.Fatalf("backup called = %v, want none after explicit clear", backup.calls)
+	}
+}
+
+func TestHTTPChatFallbackInvalidInputsRejectedBeforeProviderCall(t *testing.T) {
+	cases := []struct {
+		name, body string
+	}{
+		{"max_retries out of range", `{"model":"model-a","fallback":{"max_retries":5},"messages":[{"role":"user","content":"hi"}]}`},
+		{"max_fallback_models out of range", `{"model":"model-a","fallback":{"max_fallback_models":7},"messages":[{"role":"user","content":"hi"}]}`},
+		{"unknown fallback model", `{"model":"model-a","fallback":{"models":["missing"]},"messages":[{"role":"user","content":"hi"}]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			service, primary, backup := httpFallbackService(t)
+			handler := NewHandler(service, &config.Config{})
+			status, _ := httpChatRequest(t, handler, tc.body)
+			if status != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400", status)
+			}
+			if len(primary.calls) != 0 || len(backup.calls) != 0 {
+				t.Fatalf("providers called before validation: primary %v backup %v", primary.calls, backup.calls)
+			}
+		})
+	}
+}
+
+func TestHTTPChatFallbackSSEEmitsRoutingBeforeContent(t *testing.T) {
+	service, primary, backup := httpFallbackService(t)
+	handler := NewHandler(service, &config.Config{})
+	primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureTransient, "a", "model-a", 503, errors.New("down"))
+	primary.failures = 10
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"model-a","stream":true,"fallback":{"models":["model-b"]},"messages":[{"role":"user","content":"hi"}]}`)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	if len(backup.calls) != 1 {
+		t.Fatalf("backup stream calls = %v, want the fallback model stream once", backup.calls)
+	}
+	events := strings.Split(recorder.Body.String(), "data: ")
+	if len(events) < 3 || !strings.Contains(events[1], "routing") {
+		t.Fatalf("first event missing routing metadata: %q", recorder.Body.String())
+	}
+	firstContent := -1
+	for index, event := range events {
+		if strings.Contains(event, `"delta":{"content"`) {
+			firstContent = index
+			break
+		}
+	}
+	if firstContent < 2 {
+		t.Fatalf("content chunk at event %d, want after the routing preamble: %q", firstContent, recorder.Body.String())
+	}
+}
+
+type httpFallbackProvider struct {
+	info         app.ProviderInfo
+	failingModel string
+	failures     int
+	failure      error
+	calls        []string
+	mu           sync.Mutex
+}
+
+func (p *httpFallbackProvider) GetInfo() app.ProviderInfo { return p.info }
+func (p *httpFallbackProvider) SupportsModel(model string) bool {
+	for _, supported := range p.info.SupportedModels {
+		if strings.EqualFold(supported, model) {
+			return true
+		}
+	}
+	return false
+}
+func (p *httpFallbackProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, model)
+	if model == p.failingModel && p.failures > 0 {
+		p.failures--
+		return nil, p.failure
+	}
+	return &app.ChatCompletionResponse{Object: "chat.completion", Model: model, Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "reply"}}}}, nil
+}
+func (p *httpFallbackProvider) ChatCompletionStream(_ context.Context, _ []app.Message, model string, callback func(string)) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, model)
+	if model == p.failingModel && p.failures > 0 {
+		p.failures--
+		return p.failure
+	}
 	callback("chunk")
 	return nil
 }
