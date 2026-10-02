@@ -16,6 +16,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 )
 
 type DeepAI struct{}
@@ -148,13 +151,14 @@ func (p *DeepAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return app.WrapNetworkFailure(err, "deepai", model)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("deepai: status %d, body: %s", resp.StatusCode, string(bodyBytes))
+		utils.Debug("deepai: status %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+		return app.NewProviderFailure(classifyStatus(resp.StatusCode), "deepai", model, resp.StatusCode, nil)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

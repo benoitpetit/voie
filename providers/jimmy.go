@@ -10,6 +10,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 )
 
 const (
@@ -117,7 +120,7 @@ func (p *Jimmy) ChatCompletion(ctx context.Context, messages []Message, model st
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("jimmy: request failed: %w", err)
+		return nil, app.WrapNetworkFailure(err, "jimmy", model)
 	}
 	defer resp.Body.Close()
 	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
@@ -125,7 +128,8 @@ func (p *Jimmy) ChatCompletion(ctx context.Context, messages []Message, model st
 		return nil, fmt.Errorf("jimmy: read response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("jimmy: upstream returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+		utils.Debug("jimmy: status %d: %s", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+		return nil, app.NewProviderFailure(classifyStatus(resp.StatusCode), "jimmy", model, resp.StatusCode, nil)
 	}
 	content := strings.TrimSpace(jimmyStatsMarkers.ReplaceAllString(string(responseBody), ""))
 	if content == "" {

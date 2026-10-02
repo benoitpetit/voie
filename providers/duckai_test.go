@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/benoitpetit/voie/internal/app"
 )
 
 func TestDuckAIModelResolution(t *testing.T) {
@@ -207,11 +209,20 @@ func TestDuckAIErrors(t *testing.T) {
 	})
 
 	t.Run("transport error", func(t *testing.T) {
+		cause := errors.New("offline")
 		provider := duckAITestProvider(func(*http.Request) (*http.Response, error) {
-			return nil, errors.New("offline")
+			return nil, cause
 		})
-		if err := provider.ChatCompletionStream(context.Background(), nil, "gpt-5.6-luna", func(string) {}); err == nil || !strings.Contains(err.Error(), "offline") {
-			t.Fatalf("ChatCompletionStream() error = %v, want transport error", err)
+		err := provider.ChatCompletionStream(context.Background(), nil, "gpt-5.6-luna", func(string) {})
+		if err == nil {
+			t.Fatal("ChatCompletionStream() error = nil, want transport error")
+		}
+		var pf *app.ProviderFailure
+		if !errors.As(err, &pf) || pf.Category != app.FailureTransient {
+			t.Fatalf("ChatCompletionStream() error = %v, want transient ProviderFailure", err)
+		}
+		if !errors.Is(err, cause) {
+			t.Fatalf("ChatCompletionStream() error = %v did not preserve the cause", err)
 		}
 	})
 

@@ -86,7 +86,10 @@ func TestJimmyChatCompletionReportsUpstreamErrors(t *testing.T) {
 		})},
 	}
 	_, err := provider.ChatCompletion(context.Background(), []Message{{Role: "user", Content: "Hello"}}, "llama3.1-8B")
-	if err == nil || !strings.Contains(err.Error(), "429") || !strings.Contains(err.Error(), "slow down") {
-		t.Fatalf("ChatCompletion() error = %v, want upstream status and body", err)
+	if err == nil || !strings.Contains(err.Error(), "429") {
+		t.Fatalf("ChatCompletion() error = %v, want upstream status 429", err)
+	}
+	if strings.Contains(err.Error(), "slow down") {
+		t.Fatalf("ChatCompletion() error = %v leaked upstream response body", err)
 	}
 }

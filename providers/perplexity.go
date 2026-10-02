@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 )
 
 type Perplexity struct{}
@@ -218,13 +221,14 @@ func (p *Perplexity) ChatCompletionStream(ctx context.Context, messages []Messag
 	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return app.WrapNetworkFailure(err, "perplexity", resolved)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("perplexity: status %d, body: %s", resp.StatusCode, string(body))
+		utils.Debug("perplexity: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return app.NewProviderFailure(classifyStatus(resp.StatusCode), "perplexity", resolved, resp.StatusCode, nil)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

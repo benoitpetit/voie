@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 )
 
 // CohereCommand implémente le provider CohereForAI C4AI Command (HuggingFace Space)
@@ -268,7 +271,7 @@ func (p *CohereCommand) findMessageID(data []interface{}) string {
 	return ""
 }
 
-func (p *CohereCommand) sendMessage(ctx context.Context, conv *cohereConversation, input string) (io.ReadCloser, error) {
+func (p *CohereCommand) sendMessage(ctx context.Context, conv *cohereConversation, input, model string) (io.ReadCloser, error) {
 	// Préparer le FormData
 	jsonPayload, err := json.Marshal(map[string]interface{}{
 		"inputs":      input,
@@ -310,13 +313,14 @@ func (p *CohereCommand) sendMessage(ctx context.Context, conv *cohereConversatio
 	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("cohere: send message failed: %w", err)
+		return nil, app.WrapNetworkFailure(err, "cohere", model)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		body2, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("cohere: message status %d: %s", resp.StatusCode, string(body2))
+		utils.Debug("cohere: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body2)))
+		return nil, app.NewProviderFailure(classifyStatus(resp.StatusCode), "cohere", model, resp.StatusCode, nil)
 	}
 
 	return resp.Body, nil
@@ -341,7 +345,7 @@ func (p *CohereCommand) ChatCompletion(ctx context.Context, messages []Message, 
 	}
 
 	// Step 3: Send message and read response
-	respBody, err := p.sendMessage(ctx, conv, prompt)
+	respBody, err := p.sendMessage(ctx, conv, prompt, model)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +410,7 @@ func (p *CohereCommand) ChatCompletionStream(ctx context.Context, messages []Mes
 	}
 
 	// Step 3: Send message and stream response
-	respBody, err := p.sendMessage(ctx, conv, prompt)
+	respBody, err := p.sendMessage(ctx, conv, prompt, model)
 	if err != nil {
 		return err
 	}

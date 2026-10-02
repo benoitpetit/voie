@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 )
 
 type Yqcloud struct{}
@@ -125,13 +128,14 @@ func (p *Yqcloud) ChatCompletionStream(ctx context.Context, messages []Message, 
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return app.WrapNetworkFailure(err, "yqcloud", model)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("yqcloud: status %d, body: %s", resp.StatusCode, string(body))
+		utils.Debug("yqcloud: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return app.NewProviderFailure(classifyStatus(resp.StatusCode), "yqcloud", model, resp.StatusCode, nil)
 	}
 
 	// Lire le contenu par chunks

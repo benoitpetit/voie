@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/benoitpetit/voie/internal/app"
 )
 
 type Quillbot struct{}
@@ -120,12 +122,12 @@ func (p *Quillbot) ChatCompletionStream(ctx context.Context, messages []Message,
 	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return app.WrapNetworkFailure(err, "quillbot", model)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("quillbot: status %d", resp.StatusCode)
+		return app.NewProviderFailure(classifyStatus(resp.StatusCode), "quillbot", model, resp.StatusCode, nil)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

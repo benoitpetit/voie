@@ -20,6 +20,9 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+
+	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 )
 
 const (
@@ -252,12 +255,13 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("duckai: send request: %w", err)
+		return app.WrapNetworkFailure(err, "duckai", resolvedModel)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		return fmt.Errorf("duckai: upstream returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		utils.Debug("duckai: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return app.NewProviderFailure(classifyStatus(resp.StatusCode), "duckai", resolvedModel, resp.StatusCode, nil)
 	}
 	return parseDuckAISSE(resp.Body, callback)
 }
