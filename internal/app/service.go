@@ -17,6 +17,7 @@ type CompletionRequest struct {
 	Strategy       Strategy            `json:"strategy,omitempty"`
 	Task           string              `json:"task,omitempty"`
 	Models         []string            `json:"models,omitempty"`
+	Fallback       *FallbackOverride   `json:"fallback,omitempty"`
 	ConversationID string              `json:"conversation_id,omitempty"`
 	Messages       []Message           `json:"messages"`
 	OnProgress     func(ProgressEvent) `json:"-"`
@@ -162,9 +163,15 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	var model string
 	var routing *RoutingInfo
 	var response *ChatCompletionResponse
+	var attempts []Attempt
 	switch strategy {
 	case StrategyClassic:
-		provider, model, err = s.selectProvider(request)
+		var policy FallbackPolicy
+		if policy, err = s.resolvePolicy(request); err == nil {
+			if provider, model, err = s.selectProvider(request); err == nil {
+				response, attempts, err = s.callWithFallback(callCtx, request, provider, model, strings.ToLower(strings.TrimSpace(request.Provider)), policy)
+			}
+		}
 	case StrategyAuto:
 		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
 		var candidate ModelCandidate
@@ -186,7 +193,9 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	if err != nil {
 		return nil, err
 	}
-	if strategy != StrategyEnsemble {
+	if strategy == StrategyClassic {
+		response.Routing = &RoutingInfo{Strategy: StrategyClassic, Attempts: attempts}
+	} else if strategy != StrategyEnsemble {
 		request.emitProgress(ProgressEvent{Stage: "model", Message: "Calling model " + model, Model: model, Provider: provider.GetInfo().Name, Status: "started"})
 		response, err = provider.ChatCompletion(callCtx, request.Messages, model)
 		if err != nil {
@@ -198,9 +207,7 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 			return nil, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", provider.GetInfo().Name), nil)
 		}
 		response.Provider = provider.GetInfo().Name
-		if strategy == StrategyAuto {
-			response.Model = model
-		}
+		response.Model = model
 		response.Routing = routing
 		request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call completed", Model: model, Provider: provider.GetInfo().Name, Status: "succeeded"})
 	}
@@ -266,26 +273,32 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 			return s.contextOrUpstreamError(callCtx, err)
 		}
 		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis completed", Model: model, Provider: synthesizer.GetInfo().Name, Status: "succeeded"})
-	} else {
-		var provider Provider
-		var model string
-		if strategy == StrategyAuto {
-			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
-			candidate, info, selectErr := s.selectAutomatic(callCtx, request)
-			if selectErr != nil {
-				request.emitProgress(ProgressEvent{Stage: "routing", Message: "Automatic routing failed", Status: "failed"})
-				return selectErr
-			}
-			provider, model, routing = s.registry.Get(candidate.Provider), candidate.Model, &info
-			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selected " + candidate.Model + " (" + candidate.Provider + ")", Model: candidate.Model, Provider: candidate.Provider, Status: "succeeded"})
-		} else if strategy == StrategyClassic {
-			provider, model, err = s.selectProvider(request)
-		} else {
-			return appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
+	} else if strategy == StrategyClassic {
+		policy, policyErr := s.resolvePolicy(request)
+		if policyErr != nil {
+			return policyErr
 		}
+		provider, model, err := s.selectProvider(request)
 		if err != nil {
 			return err
 		}
+		routing = &RoutingInfo{Strategy: StrategyClassic}
+		attempts, streamErr := s.streamWithFallback(callCtx, request, provider, model, strings.ToLower(strings.TrimSpace(request.Provider)), policy, streamCallback)
+		if streamErr != nil {
+			return streamErr
+		}
+		routing.Attempts = attempts
+	} else {
+		var provider Provider
+		var model string
+		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
+		candidate, info, selectErr := s.selectAutomatic(callCtx, request)
+		if selectErr != nil {
+			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Automatic routing failed", Status: "failed"})
+			return selectErr
+		}
+		provider, model, routing = s.registry.Get(candidate.Provider), candidate.Model, &info
+		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selected " + candidate.Model + " (" + candidate.Provider + ")", Model: candidate.Model, Provider: candidate.Provider, Status: "succeeded"})
 		request.emitProgress(ProgressEvent{Stage: "model", Message: "Streaming from " + model, Model: model, Provider: provider.GetInfo().Name, Status: "started"})
 		if err = provider.ChatCompletionStream(callCtx, request.Messages, model, streamCallback); err != nil {
 			request.emitProgress(ProgressEvent{Stage: "model", Message: "Model stream failed", Model: model, Provider: provider.GetInfo().Name, Status: "failed"})

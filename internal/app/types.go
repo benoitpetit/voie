@@ -54,6 +54,27 @@ type RoutingInfo struct {
 	Strategy Strategy      `json:"strategy"`
 	Task     string        `json:"task,omitempty"`
 	Models   []RoutedModel `json:"models,omitempty"`
+	Attempts []Attempt     `json:"attempts,omitempty"`
+}
+
+// FallbackOverride is a per-request fallback policy merge. Omitted pointer
+// fields inherit the global policy; an explicitly empty Models list clears
+// every fallback candidate.
+type FallbackOverride struct {
+	Enabled           *bool    `json:"enabled,omitempty"`
+	MaxRetries        *int     `json:"max_retries,omitempty"`
+	MaxFallbackModels *int     `json:"max_fallback_models,omitempty"`
+	Models            []string `json:"models,omitempty"`
+}
+
+// Attempt records one provider call for routing.attempts metadata. It carries
+// model, provider, outcome and elapsed time only; never prompts or answers.
+type Attempt struct {
+	Model          string `json:"model"`
+	Provider       string `json:"provider"`
+	Attempt        int    `json:"attempt"`
+	Outcome        string `json:"outcome"`
+	DurationMillis int64  `json:"duration_ms,omitempty"`
 }
 
 type RoutedModel struct {
