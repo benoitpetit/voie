@@ -141,7 +141,7 @@ func TestFallbackResolvePolicyRejectsInvalidOverrides(t *testing.T) {
 
 func TestFallbackClassicRetriesSameModelBeforeSucceeding(t *testing.T) {
 	a := &fallbackProvider{
-		info:    ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}},
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}},
 		failFirst: map[string]int{"a-model": 1},
 		failures:  map[string]error{"a-model": transientFailure("a", "a-model")},
 	}

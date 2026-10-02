@@ -58,6 +58,63 @@ func (s *Service) selectAutomatic(ctx context.Context, request CompletionRequest
 	}, nil
 }
 
+// autoFallbacks returns the ordered, distinct fallback model IDs for the
+// automatic path: the request-level explicit list, the primary's configured
+// list, then the task/capability-compatible pool in preferred order. Every
+// candidate must survive the same task, provider and capability constraints
+// the router applied, and the primary and router are never eligible. An
+// explicitly empty request list clears eligibility.
+func (s *Service) autoFallbacks(request CompletionRequest, primaryModel string, policy FallbackPolicy) ([]string, error) {
+	if request.Fallback != nil && request.Fallback.Models != nil && len(request.Fallback.Models) == 0 {
+		return nil, nil
+	}
+	task := strings.ToLower(strings.TrimSpace(request.Task))
+	if task != "" {
+		if _, ok := supportedTasks[task]; !ok {
+			return nil, appError(ErrInvalidInput, fmt.Sprintf("task %q is not supported", task), nil)
+		}
+	}
+	taskRule := s.options.RoutingPolicy.Tasks[task]
+	eligible, err := s.modelCandidates(request.Provider, task, taskRule, primaryModel)
+	if err != nil {
+		return nil, err
+	}
+	pool := make([]string, 0, len(eligible))
+	poolSet := make(map[string]bool, len(eligible))
+	for _, candidate := range eligible {
+		key := strings.ToLower(strings.TrimSpace(candidate.Model))
+		if key == "" || poolSet[key] {
+			continue
+		}
+		poolSet[key] = true
+		pool = append(pool, key)
+	}
+	out := make([]string, 0, len(pool))
+	seen := make(map[string]bool, len(pool))
+	add := func(id string) {
+		key := strings.ToLower(strings.TrimSpace(id))
+		if !poolSet[key] || seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, key)
+	}
+	if request.Fallback != nil {
+		for _, id := range request.Fallback.Models {
+			add(id)
+		}
+	}
+	if configured, ok := s.configuredFallbacks(policy, primaryModel); ok {
+		for _, id := range configured {
+			add(id)
+		}
+	}
+	for _, id := range pool {
+		add(id)
+	}
+	return out, nil
+}
+
 func (s *Service) selectCandidates(ctx context.Context, request CompletionRequest, limit int) ([]ModelCandidate, RouteDecision, error) {
 	return s.selectCandidatesExcluding(ctx, request, limit, "")
 }

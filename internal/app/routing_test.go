@@ -176,6 +176,165 @@ func TestServiceAutoRequiresRouterWhenSelectionIsAmbiguous(t *testing.T) {
 	}
 }
 
+func assertRouterClassifiedOnce(t *testing.T, router *routingStub) {
+	t.Helper()
+	router.mu.Lock()
+	defer router.mu.Unlock()
+	if len(router.calls) != 1 || router.calls[0] != "router-model" {
+		t.Fatalf("router calls = %v, want exactly one router-model classification", router.calls)
+	}
+}
+
+func TestServiceAutoFallbackSucceedsOnEligibleCandidate(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"coding","model":"model-a","reason":"primary"}`}}
+	pa := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}},
+		failFirst: map[string]int{"model-a": 10},
+		failures:  map[string]error{"model-a": transientFailure("a", "model-a")},
+	}
+	pb := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", pa)
+	registry.Register("b", pb)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Description: "coding model", Capabilities: []string{"coding"}},
+			"model-b": {Description: "coding model", Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model-a"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "write a function"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Provider != "b" || response.Model != "model-b" {
+		t.Fatalf("response = %+v", response)
+	}
+	attempts := response.Routing.Attempts
+	if len(attempts) != 3 || attempts[0].Outcome != OutcomeRetryableFailure || attempts[1].Outcome != OutcomeRetryableFailure || attempts[2].Outcome != OutcomeSucceeded {
+		t.Fatalf("attempts = %+v", attempts)
+	}
+	if response.Routing.Strategy != StrategyAuto || response.Routing.Task != "coding" {
+		t.Fatalf("routing = %+v", response.Routing)
+	}
+	assertRouterClassifiedOnce(t, router)
+}
+
+func TestServiceAutoFallbackRequestListPrecedence(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"coding","model":"model-a","reason":"primary"}`}}
+	pa := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}},
+		failFirst: map[string]int{"model-a": 10},
+		failures:  map[string]error{"model-a": transientFailure("a", "model-a")},
+	}
+	pb := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	pc := &fallbackProvider{info: ProviderInfo{Name: "c", Working: true, SupportedModels: []string{"model-c"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", pa)
+	registry.Register("b", pb)
+	registry.Register("c", pc)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}}, "model-c": {Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model-a", "model-b"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{
+		Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}},
+		Fallback: &FallbackOverride{Models: []string{"model-c", "model-b"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Provider != "c" {
+		t.Fatalf("response provider = %q, want request list first candidate c", response.Provider)
+	}
+	if len(pc.calls) != 1 || len(pb.calls) != 0 {
+		t.Fatalf("calls c=%v b=%v, want request list precedence", pc.calls, pb.calls)
+	}
+	assertRouterClassifiedOnce(t, router)
+}
+
+func TestServiceAutoFallbackDiscardsIneligibleExplicitCandidate(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"coding","model":"model-a","reason":"primary"}`}}
+	pa := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}},
+		failFirst: map[string]int{"model-a": 10},
+		failures:  map[string]error{"model-a": transientFailure("a", "model-a")},
+	}
+	pw := &fallbackProvider{info: ProviderInfo{Name: "w", Working: true, SupportedModels: []string{"model-wrong"}}}
+	pb := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", pa)
+	registry.Register("w", pw)
+	registry.Register("b", pb)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Capabilities: []string{"coding"}}, "model-wrong": {Capabilities: []string{"writing"}}, "model-b": {Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{
+		Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}},
+		Fallback: &FallbackOverride{Models: []string{"model-wrong", "model-b"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Provider != "b" {
+		t.Fatalf("response provider = %q, want b after discarding ineligible candidate", response.Provider)
+	}
+	if len(pw.calls) != 0 || len(pb.calls) != 1 {
+		t.Fatalf("calls w=%v b=%v, want ineligible candidate discarded", pw.calls, pb.calls)
+	}
+	assertRouterClassifiedOnce(t, router)
+}
+
+func TestServiceAutoFallbackReturnsFinalErrorWhenExhausted(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"coding","model":"model-a","reason":"primary"}`}}
+	pa := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}},
+		failFirst: map[string]int{"model-a": 10},
+		failures:  map[string]error{"model-a": transientFailure("a", "model-a")},
+	}
+	pb := &fallbackProvider{
+		info:      ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}},
+		failFirst: map[string]int{"model-b": 10},
+		failures:  map[string]error{"model-b": transientFailure("b", "model-b")},
+	}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", pa)
+	registry.Register("b", pb)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}}},
+		Tasks:  map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}}})
+	if !errors.Is(err, ErrUpstream) {
+		t.Fatalf("error = %v, want ErrUpstream", err)
+	}
+	if len(pb.calls) == 0 {
+		t.Fatalf("fallback candidate b was never attempted")
+	}
+	assertRouterClassifiedOnce(t, router)
+}
+
 type routingStub struct {
 	info      ProviderInfo
 	responses map[string]string

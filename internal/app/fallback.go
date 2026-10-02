@@ -145,7 +145,7 @@ func (s *Service) classicFallbackCandidates(primaryModel string) []string {
 		return nil
 	}
 	excluded := map[string]struct{}{
-		strings.ToLower(strings.TrimSpace(primaryModel)):            {},
+		strings.ToLower(strings.TrimSpace(primaryModel)):          {},
 		strings.ToLower(strings.TrimSpace(s.options.RouterModel)): {},
 	}
 	seen := make(map[string]struct{})
@@ -182,9 +182,7 @@ func (s *Service) classicFallbackCandidates(primaryModel string) []string {
 }
 
 // callWithFallback runs the non-streaming completion with the shared retry and
-// fallback policy. The first model is the primary; fallback candidates are
-// tried in eligibility order up to MaxFallbackModels. Same-model retries only
-// happen on transient failures while the caller context stays active.
+// fallback policy, resolving the fallback list through classic eligibility.
 func (s *Service) callWithFallback(ctx context.Context, request CompletionRequest, primary Provider, primaryModel string, pin string, policy FallbackPolicy) (*ChatCompletionResponse, []Attempt, error) {
 	if !policy.Enabled {
 		policy.MaxRetries, policy.MaxFallbackModels = 0, 0
@@ -193,10 +191,23 @@ func (s *Service) callWithFallback(ctx context.Context, request CompletionReques
 	if err != nil {
 		return nil, nil, err
 	}
+	return s.callWithFallbacks(ctx, request, primary, primaryModel, fallbacks, pin, 1, policy)
+}
+
+// callWithFallbacks runs the non-streaming completion against an explicit model
+// list. The first entry is the primary; the remainder are the fallback
+// candidates tried in order up to MaxFallbackModels. Same-model retries only
+// happen on transient failures while the caller context stays active. Attempt
+// ordinals start at startOrdinal so callers can continue a global ordinal
+// sequence.
+func (s *Service) callWithFallbacks(ctx context.Context, request CompletionRequest, primary Provider, primaryModel string, fallbacks []string, pin string, startOrdinal int, policy FallbackPolicy) (*ChatCompletionResponse, []Attempt, error) {
+	if !policy.Enabled {
+		policy.MaxRetries, policy.MaxFallbackModels = 0, 0
+	}
 	models := append([]string{strings.ToLower(strings.TrimSpace(primaryModel))}, fallbacks...)
 	attempts := make([]Attempt, 0, 1)
 	var lastErr error
-	ordinal := 0
+	ordinal := startOrdinal - 1
 	for index, candidate := range models {
 		if ctx.Err() != nil {
 			return nil, attempts, s.contextOrUpstreamError(ctx, ctx.Err())
@@ -252,9 +263,8 @@ func (s *Service) callWithFallback(ctx context.Context, request CompletionReques
 	return nil, attempts, s.contextOrUpstreamError(ctx, lastErr)
 }
 
-// streamWithFallback runs the streaming completion with the shared policy.
-// Models may only switch before the first content chunk is delivered; after
-// that a failure terminates with the upstream error, never splicing answers.
+// streamWithFallback runs the streaming completion with the shared policy,
+// resolving the fallback list through classic eligibility.
 func (s *Service) streamWithFallback(ctx context.Context, request CompletionRequest, primary Provider, primaryModel string, pin string, policy FallbackPolicy, onChunk func(string)) ([]Attempt, error) {
 	if !policy.Enabled {
 		policy.MaxRetries, policy.MaxFallbackModels = 0, 0
@@ -263,10 +273,21 @@ func (s *Service) streamWithFallback(ctx context.Context, request CompletionRequ
 	if err != nil {
 		return nil, err
 	}
+	return s.streamWithFallbacks(ctx, request, primary, primaryModel, fallbacks, pin, 1, policy, onChunk)
+}
+
+// streamWithFallbacks runs the streaming completion against an explicit model
+// list. Models may only switch before the first content chunk is delivered;
+// after that a failure terminates with the upstream error, never splicing
+// answers. Attempt ordinals start at startOrdinal.
+func (s *Service) streamWithFallbacks(ctx context.Context, request CompletionRequest, primary Provider, primaryModel string, fallbacks []string, pin string, startOrdinal int, policy FallbackPolicy, onChunk func(string)) ([]Attempt, error) {
+	if !policy.Enabled {
+		policy.MaxRetries, policy.MaxFallbackModels = 0, 0
+	}
 	models := append([]string{strings.ToLower(strings.TrimSpace(primaryModel))}, fallbacks...)
 	attempts := make([]Attempt, 0, 1)
 	var lastErr error
-	ordinal := 0
+	ordinal := startOrdinal - 1
 	delivered := false
 	for index, candidate := range models {
 		if ctx.Err() != nil {
