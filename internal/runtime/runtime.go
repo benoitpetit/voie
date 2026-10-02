@@ -66,6 +66,33 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 	for task, rule := range policyConfig.Tasks {
 		policy.Tasks[task] = app.TaskRule{RequiredCapabilities: append([]string(nil), rule.RequiredCapabilities...), PreferredModels: append([]string(nil), rule.PreferredModels...)}
 	}
+	fallback := app.FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1}
+	if cfg.FallbackEnabled != nil {
+		fallback.Enabled = *cfg.FallbackEnabled
+	}
+	if cfg.FallbackMaxRetries != nil {
+		fallback.MaxRetries = *cfg.FallbackMaxRetries
+	}
+	if cfg.FallbackMaxModels != nil {
+		fallback.MaxFallbackModels = *cfg.FallbackMaxModels
+	}
+	if policyConfig.Fallback != nil {
+		if policyConfig.Fallback.Enabled != nil {
+			fallback.Enabled = *policyConfig.Fallback.Enabled
+		}
+		if policyConfig.Fallback.MaxRetries != nil {
+			fallback.MaxRetries = *policyConfig.Fallback.MaxRetries
+		}
+		if policyConfig.Fallback.MaxFallbackModels != nil {
+			fallback.MaxFallbackModels = *policyConfig.Fallback.MaxFallbackModels
+		}
+		if policyConfig.Fallback.Models != nil {
+			fallback.Models = make(map[string][]string, len(policyConfig.Fallback.Models))
+			for model, candidates := range policyConfig.Fallback.Models {
+				fallback.Models[model] = append([]string(nil), candidates...)
+			}
+		}
+	}
 	conversationPath := strings.TrimSpace(cfg.ConversationDBPath)
 	if conversationPath == "" {
 		configDir, err := os.UserConfigDir()
@@ -83,6 +110,7 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 		RouterModel:     cfg.RouterModel,
 		SynthesisModel:  cfg.SynthesisModel,
 		RoutingPolicy:   policy,
+		Fallback:        &fallback,
 		Conversations:   conversationStore,
 		Timeout:         cfg.Timeout,
 	})

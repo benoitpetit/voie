@@ -103,6 +103,15 @@ type TaskRule struct {
 	PreferredModels      []string
 }
 
+// FallbackPolicy is the validated runtime fallback policy. Models maps a
+// routed model ID to an ordered list of fallback model IDs.
+type FallbackPolicy struct {
+	Enabled           bool
+	MaxRetries        int
+	MaxFallbackModels int
+	Models            map[string][]string
+}
+
 type Provider interface {
 	ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error)
 	ChatCompletionStream(ctx context.Context, messages []Message, model string, callback func(chunk string)) error

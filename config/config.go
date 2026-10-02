@@ -22,6 +22,9 @@ type Config struct {
 	RoutingConfigPath  string
 	ConversationDBPath string
 	ConversationTTL    time.Duration
+	FallbackEnabled    *bool
+	FallbackMaxRetries *int
+	FallbackMaxModels  *int
 }
 
 func Load() (*Config, error) {
@@ -69,6 +72,18 @@ func Load() (*Config, error) {
 		}
 		conversationTTL = parsed
 	}
+	fallbackEnabled, err := parseOptionalBool("FALLBACK_ENABLED")
+	if err != nil {
+		return nil, err
+	}
+	fallbackMaxRetries, err := parseOptionalInt("FALLBACK_MAX_RETRIES")
+	if err != nil {
+		return nil, err
+	}
+	fallbackMaxModels, err := parseOptionalInt("FALLBACK_MAX_MODELS")
+	if err != nil {
+		return nil, err
+	}
 	cfg := &Config{
 		Host: host, Port: port, EnableDebug: debug,
 		DefaultProvider: strings.ToLower(strings.TrimSpace(os.Getenv("DEFAULT_PROVIDER"))),
@@ -76,7 +91,10 @@ func Load() (*Config, error) {
 		RouterModel:       strings.TrimSpace(os.Getenv("ROUTER_MODEL")),
 		SynthesisModel:    strings.TrimSpace(os.Getenv("SYNTHESIS_MODEL")),
 		RoutingConfigPath: routingConfigPath, ConversationDBPath: conversationDBPath,
-		ConversationTTL: conversationTTL,
+		ConversationTTL:    conversationTTL,
+		FallbackEnabled:    fallbackEnabled,
+		FallbackMaxRetries: fallbackMaxRetries,
+		FallbackMaxModels:  fallbackMaxModels,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -107,7 +125,36 @@ func (c *Config) Validate() error {
 	if !isLoopbackHost(c.Host) && strings.TrimSpace(c.APIToken) == "" {
 		return fmt.Errorf("API_TOKEN is required when HOST is not loopback")
 	}
+	for name, value := range map[string]*int{"FALLBACK_MAX_RETRIES": c.FallbackMaxRetries, "FALLBACK_MAX_MODELS": c.FallbackMaxModels} {
+		if value != nil && (*value < 0 || *value > 3) {
+			return fmt.Errorf("%s must be between 0 and 3", name)
+		}
+	}
 	return nil
+}
+
+func parseOptionalBool(name string) (*bool, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s value %q: %w", name, value, err)
+	}
+	return &parsed, nil
+}
+
+func parseOptionalInt(name string) (*int, error) {
+	value := strings.TrimSpace(os.Getenv(name))
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s value %q: %w", name, value, err)
+	}
+	return &parsed, nil
 }
 
 func isLoopbackHost(host string) bool {

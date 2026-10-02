@@ -76,6 +76,7 @@ type ServiceOptions struct {
 	RouterModel     string
 	SynthesisModel  string
 	RoutingPolicy   RoutingPolicy
+	Fallback        *FallbackPolicy
 	Conversations   ConversationStore
 	Timeout         time.Duration
 	HealthProbe     func(context.Context, string) bool
@@ -104,6 +105,9 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 	if options.SynthesisModel != "" && registry.GetForModel(options.SynthesisModel) == nil {
 		return nil, appError(ErrUnknownModel, fmt.Sprintf("configured synthesis model %q is unknown", options.SynthesisModel), nil)
 	}
+	if options.Fallback == nil {
+		options.Fallback = &FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1}
+	}
 	if options.Timeout < 0 {
 		return nil, appError(ErrInvalidInput, "timeout must be positive", nil)
 	}
@@ -120,6 +124,24 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 		}
 	}
 	return &Service{registry: registry, options: options}, nil
+}
+
+// FallbackPolicy returns a copy of the resolved fallback policy. A nil
+// configured policy resolves to the documented defaults.
+func (s *Service) FallbackPolicy() FallbackPolicy {
+	fallback := s.options.Fallback
+	if fallback == nil {
+		return FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1}
+	}
+	out := *fallback
+	if fallback.Models != nil {
+		models := make(map[string][]string, len(fallback.Models))
+		for model, candidates := range fallback.Models {
+			models[model] = append([]string(nil), candidates...)
+		}
+		out.Models = models
+	}
+	return out
 }
 
 func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*ChatCompletionResponse, error) {

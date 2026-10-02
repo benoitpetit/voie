@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,9 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("ROUTING_CONFIG_PATH", "")
 	t.Setenv("CONVERSATION_DB_PATH", "")
 	t.Setenv("CONVERSATION_TTL", "")
+	t.Setenv("FALLBACK_ENABLED", "")
+	t.Setenv("FALLBACK_MAX_RETRIES", "")
+	t.Setenv("FALLBACK_MAX_MODELS", "")
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
 	cfg, err := Load()
@@ -29,6 +33,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.ConversationTTL != 720*time.Hour || cfg.RoutingConfigPath != filepath.Join(configHome, "voie", "routing.json") || cfg.ConversationDBPath != filepath.Join(configHome, "voie", "conversations.db") {
 		t.Fatalf("routing/conversation defaults = %+v", cfg)
+	}
+	if cfg.FallbackEnabled != nil || cfg.FallbackMaxRetries != nil || cfg.FallbackMaxModels != nil {
+		t.Fatalf("fallback defaults must stay nil = %+v", cfg)
 	}
 }
 
@@ -92,5 +99,45 @@ func TestLoopbackDoesNotRequireToken(t *testing.T) {
 	t.Setenv("API_TOKEN", "")
 	if _, err := Load(); err != nil {
 		t.Fatalf("Load() rejected loopback without token: %v", err)
+	}
+}
+
+func TestLoadParsesFallbackEnvironment(t *testing.T) {
+	t.Setenv("FALLBACK_ENABLED", "false")
+	t.Setenv("FALLBACK_MAX_RETRIES", "3")
+	t.Setenv("FALLBACK_MAX_MODELS", "2")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.FallbackEnabled == nil || *cfg.FallbackEnabled {
+		t.Fatalf("FallbackEnabled = %v, want false", cfg.FallbackEnabled)
+	}
+	if cfg.FallbackMaxRetries == nil || *cfg.FallbackMaxRetries != 3 {
+		t.Fatalf("FallbackMaxRetries = %v, want 3", cfg.FallbackMaxRetries)
+	}
+	if cfg.FallbackMaxModels == nil || *cfg.FallbackMaxModels != 2 {
+		t.Fatalf("FallbackMaxModels = %v, want 2", cfg.FallbackMaxModels)
+	}
+}
+
+func TestLoadRejectsInvalidFallbackVariables(t *testing.T) {
+	t.Setenv("FALLBACK_ENABLED", "not-a-bool")
+	t.Setenv("FALLBACK_MAX_RETRIES", "")
+	t.Setenv("FALLBACK_MAX_MODELS", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FALLBACK_ENABLED") {
+		t.Fatalf("Load() = %v, want FALLBACK_ENABLED error", err)
+	}
+
+	t.Setenv("FALLBACK_ENABLED", "")
+	t.Setenv("FALLBACK_MAX_RETRIES", "not-a-number")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FALLBACK_MAX_RETRIES") {
+		t.Fatalf("Load() = %v, want FALLBACK_MAX_RETRIES error", err)
+	}
+
+	t.Setenv("FALLBACK_MAX_RETRIES", "")
+	t.Setenv("FALLBACK_MAX_MODELS", "-1")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FALLBACK_MAX_MODELS") {
+		t.Fatalf("Load() = %v, want FALLBACK_MAX_MODELS error", err)
 	}
 }
