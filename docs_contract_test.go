@@ -4,6 +4,10 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/runtime"
+	"github.com/benoitpetit/voie/providers"
 )
 
 // readDoc reads a documentation file relative to the repository root.
@@ -50,5 +54,45 @@ func TestInterfaceDocsDiscloseRelay(t *testing.T) {
 		{"skills/voie/SKILL.md", "no local inference"},
 	} {
 		assertContains(t, tc.file, readDoc(t, tc.file), tc.needle)
+	}
+}
+
+func TestDocumentedCountsMatchCode(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	rt, err := runtime.NewWithRegistry(cfg, providers.NewRegistry())
+	if err != nil {
+		t.Fatalf("runtime.NewWithRegistry: %v", err)
+	}
+
+	names := rt.Registry.GetProviderNames()
+	if len(names) != 7 {
+		t.Errorf("registered providers = %d, want 7", len(names))
+	}
+
+	declared := 0
+	for _, name := range names {
+		declared += len(rt.Registry.Get(name).GetInfo().SupportedModels)
+	}
+	if declared != 49 {
+		t.Errorf("declared model IDs = %d, want 49", declared)
+	}
+
+	if resolved := len(rt.AppService.ListModels()); resolved != 49 {
+		t.Errorf("resolved model IDs = %d, want 49", resolved)
+	}
+}
+
+func TestDocumentedCommandsAndStatusCodes(t *testing.T) {
+	readme := readDoc(t, "README.md")
+	for _, cmd := range []string{"serve", "chat", "conversations", "models", "providers", "mcp", "completion", "version", "update"} {
+		assertContains(t, "README.md", readme, "`"+cmd+"`")
+	}
+
+	api := readDoc(t, "api-reference.md")
+	for _, code := range []string{"400", "401", "404", "408", "409", "410", "500", "502", "503", "504"} {
+		assertContains(t, "api-reference.md", api, "| `"+code+"` |")
 	}
 }
