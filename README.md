@@ -34,7 +34,7 @@ Both install `~/.local/bin/voie` by default. The installer does not add that dir
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/benoitpetit/voie/main/install.sh
-sh install.sh --version 0.0.3 --install-dir /your/bin
+sh install.sh --version 0.0.4 --install-dir /your/bin
 ```
 
 **Windows** (amd64, PowerShell):
@@ -47,7 +47,7 @@ This installs `%LOCALAPPDATA%\Programs\voie\voie.exe`. The installer does not ad
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/benoitpetit/voie/main/install.ps1 -OutFile install.ps1
-./install.ps1 -Version 0.0.3 -InstallDir C:\Tools\voie
+./install.ps1 -Version 0.0.4 -InstallDir C:\Tools\voie
 ```
 
 The release archives are named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS, and `voie_VERSION_windows_amd64.zip` for Windows.
