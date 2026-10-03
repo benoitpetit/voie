@@ -6,7 +6,7 @@
 
 **voie does not run models.** Inference happens on third-party consumer services. The binary is an adapter, not a runtime: nothing is downloaded, loaded, or executed on the host except the binary itself and an optional SQLite conversation database.
 
-Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call `claude45sonnet`, `gpt5`, `gemini2flash`, or any other ID from `voie models`. No account and no API key. Run `GET /v1/models` against a live server for the current catalogue.
+Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID that `voie models` returns. No account and no API key. The catalogue is runtime data and is deliberately not listed here: read it with `voie models --json` or `GET /v1/models` against a running server.
 
 All seven registered providers are reverse-engineered public endpoints. Their availability can change without notice, and they may rate-limit or block automated access. Duck.ai chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
 
