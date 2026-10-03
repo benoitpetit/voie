@@ -2,6 +2,8 @@
 
 `voie` is one Go program with three entry points: an HTTP API, a local CLI, and an MCP stdio server. Each adapter calls the same application service and provider registry.
 
+Every interface forwards the request to a third-party provider; there is no local inference and no local model weight.
+
 ## Packages
 
 | Package | Responsibility |

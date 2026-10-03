@@ -5,7 +5,9 @@ description: Use when an agent needs to install voie or discover and call a supp
 
 # voie
 
-Use the `voie` runtime catalogue to choose a model, then call it through the interface available in the current environment.
+Use the `voie` registry catalogue to choose a model, then call it through the interface available in the current environment.
+
+Every interface forwards the request to a third-party provider; there is no local inference and no local model weight.
 
 Public providers receive the prompts sent to them; avoid confidential data unless the provider's handling has been reviewed. Discover model IDs at runtime because upstream catalogues and availability can change.
 

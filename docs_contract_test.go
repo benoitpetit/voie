@@ -41,3 +41,14 @@ func TestReadmeFramesVoieAsRelay(t *testing.T) {
 	assertContains(t, "README.md", readme, "relays requests to public model providers")
 	assertContains(t, "README.md", readme, "does not run models")
 }
+
+func TestInterfaceDocsDiscloseRelay(t *testing.T) {
+	for _, tc := range []struct{ file, needle string }{
+		{"api-reference.md", "no local inference"},
+		{"docs/architecture.md", "no local inference"},
+		{"docs/mcp.md", "no local inference"},
+		{"skills/voie/SKILL.md", "no local inference"},
+	} {
+		assertContains(t, tc.file, readDoc(t, tc.file), tc.needle)
+	}
+}

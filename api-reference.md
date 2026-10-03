@@ -2,6 +2,8 @@
 
 The `voie` HTTP transport exposes an OpenAI-compatible chat endpoint and provider/model discovery. For CLI and MCP interfaces, see the [CLI guide](docs/cli.md) and [MCP guide](docs/mcp.md).
 
+Every interface forwards the request to a third-party provider; there is no local inference and no local model weight.
+
 ## Base URL and authentication
 
 The default base URL is `http://127.0.0.1:8080`. Configure it with `HOST` and `PORT`.
