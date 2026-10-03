@@ -2,9 +2,13 @@
 
 ![voie — free ai api](docs/voie-banner.png)
 
-`voie` is a free AI API for local agents to discover and call supported models through one Go executable. It provides an OpenAI-compatible HTTP API, a local CLI, and an MCP server over stdio. Each interface uses the same provider registry, routing, validation, timeouts, and error handling.
+`voie` is a free OpenAI-compatible API layer for agents. One Go executable relays requests to public model providers and serves the same registry over an OpenAI-compatible HTTP API, a CLI, and an MCP server on stdio. Every interface shares provider selection, routing, validation, timeouts, and error handling.
 
-Providers use public or reverse-engineered endpoints. Their availability can change. Duck.ai chat requires Chrome or Chromium on the host; the other modes and providers do not require a browser.
+**voie does not run models.** Inference happens on third-party consumer services. The binary is an adapter, not a runtime: nothing is downloaded, loaded, or executed on the host except the binary itself and an optional SQLite conversation database.
+
+Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call `claude45sonnet`, `gpt5`, `gemini2flash`, or any other ID from `voie models`. No account and no API key. Run `GET /v1/models` against a live server for the current catalogue.
+
+All seven registered providers are reverse-engineered public endpoints. Their availability can change without notice, and they may rate-limit or block automated access. Duck.ai chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
 
 Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices. Some providers return complete responses rather than streaming tokens, so `voie` emits one final content chunk for those requests.
 

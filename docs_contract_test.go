@@ -34,3 +34,10 @@ func TestLicenceAndReleaseLink(t *testing.T) {
 	assertContains(t, "LICENSE", readDoc(t, "LICENSE"), "MIT License")
 	assertOmits(t, "README.md", readDoc(t, "README.md"), "releases/tag/v0.0.3")
 }
+
+func TestReadmeFramesVoieAsRelay(t *testing.T) {
+	readme := readDoc(t, "README.md")
+	assertOmits(t, "README.md", readme, "to discover and call supported models")
+	assertContains(t, "README.md", readme, "relays requests to public model providers")
+	assertContains(t, "README.md", readme, "does not run models")
+}
