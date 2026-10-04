@@ -34,7 +34,7 @@ Both install `~/.local/bin/voie` by default. The installer does not add that dir
 
 ```sh
 curl -fsSLO https://raw.githubusercontent.com/benoitpetit/voie/main/install.sh
-sh install.sh --version 0.0.4 --install-dir /your/bin
+sh install.sh --version 0.0.5 --install-dir /your/bin
 ```
 
 **Windows** (amd64, PowerShell):
@@ -47,7 +47,7 @@ This installs `%LOCALAPPDATA%\Programs\voie\voie.exe`. The installer does not ad
 
 ```powershell
 Invoke-WebRequest https://raw.githubusercontent.com/benoitpetit/voie/main/install.ps1 -OutFile install.ps1
-./install.ps1 -Version 0.0.4 -InstallDir C:\Tools\voie
+./install.ps1 -Version 0.0.5 -InstallDir C:\Tools\voie
 ```
 
 The release archives are named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS, and `voie_VERSION_windows_amd64.zip` for Windows.
@@ -93,7 +93,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.4 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.4) contains these archives.
+The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.5 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.5) contains these archives.
 
 ## Use the CLI
 
