@@ -44,12 +44,18 @@ var duckAIModels = []string{
 	"gpt-5.4-nano",
 	"gpt-5.4-mini",
 	"claude-haiku-4-5",
+	"mistral-small-2603",
+	"tinfoil/gpt-oss-120b",
+	"tinfoil/gemma4-31b",
 }
 
 var duckAIModelAliases = map[string]string{
-	"gpt-4o-mini":    "gpt-5.6-luna",
-	"claude-3-haiku": "claude-haiku-4-5",
-	"o4mini":         "gpt-5.4-mini",
+	"gpt-4o-mini":     "gpt-5.6-luna",
+	"claude-3-haiku":  "claude-haiku-4-5",
+	"o4mini":          "gpt-5.4-mini",
+	"mistral-small-4": "mistral-small-2603",
+	"gpt-oss-120b":    "tinfoil/gpt-oss-120b",
+	"gemma-4-31b":     "tinfoil/gemma4-31b",
 }
 
 type DuckAI struct {
@@ -215,6 +221,10 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 	if headers.VQDHash1 == "" || headers.FESignals == "" || headers.FEVersion == "" || headers.UserAgent == "" {
 		return fmt.Errorf("duckai: browser returned incomplete chat headers")
 	}
+	reasoningEffort := "none"
+	if resolvedModel == "tinfoil/gpt-oss-120b" || resolvedModel == "tinfoil/gemma4-31b" {
+		reasoningEffort = "low"
+	}
 	durableStream, err := newDuckAIDurableStream()
 	if err != nil {
 		return err
@@ -224,7 +234,7 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 		Messages:             messages,
 		CanUseTools:          false,
 		CanUseApproxLocation: true,
-		ReasoningEffort:      "none",
+		ReasoningEffort:      reasoningEffort,
 		DurableStream:        durableStream,
 	})
 	if err != nil {

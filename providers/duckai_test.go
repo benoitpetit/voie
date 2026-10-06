@@ -17,13 +17,19 @@ import (
 func TestDuckAIModelResolution(t *testing.T) {
 	provider := NewDuckAI()
 	want := map[string]string{
-		"gpt-5.6-luna":     "gpt-5.6-luna",
-		"gpt-5.4-mini":     "gpt-5.4-mini",
-		"claude-haiku-4-5": "claude-haiku-4-5",
-		"gpt-5.4-nano":     "gpt-5.4-nano",
-		"gpt-4o-mini":      "gpt-5.6-luna",
-		"claude-3-haiku":   "claude-haiku-4-5",
-		"o4mini":           "gpt-5.4-mini",
+		"gpt-5.6-luna":         "gpt-5.6-luna",
+		"gpt-5.4-mini":         "gpt-5.4-mini",
+		"claude-haiku-4-5":     "claude-haiku-4-5",
+		"gpt-5.4-nano":         "gpt-5.4-nano",
+		"mistral-small-2603":   "mistral-small-2603",
+		"tinfoil/gpt-oss-120b": "tinfoil/gpt-oss-120b",
+		"tinfoil/gemma4-31b":   "tinfoil/gemma4-31b",
+		"mistral-small-4":      "mistral-small-2603",
+		"gpt-oss-120b":         "tinfoil/gpt-oss-120b",
+		"gemma-4-31b":          "tinfoil/gemma4-31b",
+		"gpt-4o-mini":          "gpt-5.6-luna",
+		"claude-3-haiku":       "claude-haiku-4-5",
+		"o4mini":               "gpt-5.4-mini",
 	}
 	for model, expected := range want {
 		t.Run(model, func(t *testing.T) {
@@ -47,7 +53,6 @@ func TestDuckAIModelResolution(t *testing.T) {
 		t.Fatal("SupportsModel(openai) = true, want false for automatic routing")
 	}
 	for _, model := range []string{
-		"mistral-small-4", "gpt-oss-120b", "gemma-4-31b",
 		"gpt-5.6-terra", "claude-sonnet-4-6", "claude-opus-4-8", "gpt-5.6-sol",
 		"llama", "mixtral",
 	} {
@@ -58,7 +63,7 @@ func TestDuckAIModelResolution(t *testing.T) {
 			t.Errorf("resolveDuckAIModel(%q) error = nil, want unsupported model error", model)
 		}
 	}
-	wantCatalog := []string{"gpt-5.6-luna", "gpt-5.4-nano", "gpt-5.4-mini", "claude-haiku-4-5"}
+	wantCatalog := []string{"gpt-5.6-luna", "gpt-5.4-nano", "gpt-5.4-mini", "claude-haiku-4-5", "mistral-small-2603", "tinfoil/gpt-oss-120b", "tinfoil/gemma4-31b"}
 	if got := provider.GetInfo().SupportedModels; strings.Join(got, ",") != strings.Join(wantCatalog, ",") {
 		t.Fatalf("Duck.ai supported catalog = %v, want %v", got, wantCatalog)
 	}
@@ -174,6 +179,29 @@ func TestDuckAIRequestAndSSE(t *testing.T) {
 	}
 	if gotPayload["durableStream"] == nil || gotPayload["messages"] == nil {
 		t.Fatalf("payload is missing durableStream or messages: %#v", gotPayload)
+	}
+}
+
+func TestDuckAITinfoilModelsUseSupportedIDsAndLowReasoning(t *testing.T) {
+	for _, model := range []string{"tinfoil/gpt-oss-120b", "tinfoil/gemma4-31b"} {
+		t.Run(model, func(t *testing.T) {
+			var payload map[string]interface{}
+			provider := duckAITestProvider(func(req *http.Request) (*http.Response, error) {
+				if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+					return nil, err
+				}
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("data: [DONE]\n"))}, nil
+			})
+			if err := provider.ChatCompletionStream(context.Background(), []Message{{Role: "user", Content: "hello"}}, model, func(string) {}); err != nil {
+				t.Fatalf("ChatCompletionStream(%q) error = %v", model, err)
+			}
+			if payload["model"] != model {
+				t.Errorf("payload model = %v, want %q", payload["model"], model)
+			}
+			if payload["reasoningEffort"] != "low" {
+				t.Errorf("payload reasoningEffort = %v, want low", payload["reasoningEffort"])
+			}
+		})
 	}
 }
 
