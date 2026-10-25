@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,6 +20,7 @@ import (
 func TestDuckAIModelResolution(t *testing.T) {
 	provider := NewDuckAI()
 	want := map[string]string{
+		"gpt-6-luna":           "gpt-6-luna",
 		"gpt-5.6-luna":         "gpt-5.6-luna",
 		"gpt-5.4-mini":         "gpt-5.4-mini",
 		"claude-haiku-4-5":     "claude-haiku-4-5",
@@ -27,6 +31,8 @@ func TestDuckAIModelResolution(t *testing.T) {
 		"mistral-small-4":      "mistral-small-2603",
 		"gpt-oss-120b":         "tinfoil/gpt-oss-120b",
 		"gemma-4-31b":          "tinfoil/gemma4-31b",
+		"llama":                "tinfoil/gpt-oss-120b",
+		"mixtral":              "mistral-small-2603",
 		"gpt-4o-mini":          "gpt-5.6-luna",
 		"claude-3-haiku":       "claude-haiku-4-5",
 		"o4mini":               "gpt-5.4-mini",
@@ -54,7 +60,6 @@ func TestDuckAIModelResolution(t *testing.T) {
 	}
 	for _, model := range []string{
 		"gpt-5.6-terra", "claude-sonnet-4-6", "claude-opus-4-8", "gpt-5.6-sol",
-		"llama", "mixtral",
 	} {
 		if provider.SupportsModel(model) {
 			t.Errorf("SupportsModel(%q) = true, want false for removed model", model)
@@ -63,15 +68,41 @@ func TestDuckAIModelResolution(t *testing.T) {
 			t.Errorf("resolveDuckAIModel(%q) error = nil, want unsupported model error", model)
 		}
 	}
-	wantCatalog := []string{"gpt-5.6-luna", "gpt-5.4-nano", "gpt-5.4-mini", "claude-haiku-4-5", "mistral-small-2603", "tinfoil/gpt-oss-120b", "tinfoil/gemma4-31b"}
+	wantCatalog := []string{"gpt-6-luna", "gpt-5.6-luna", "gpt-5.4-nano", "gpt-5.4-mini", "claude-haiku-4-5", "mistral-small-2603", "tinfoil/gpt-oss-120b", "tinfoil/gemma4-31b"}
 	if got := provider.GetInfo().SupportedModels; strings.Join(got, ",") != strings.Join(wantCatalog, ",") {
 		t.Fatalf("Duck.ai supported catalog = %v, want %v", got, wantCatalog)
 	}
-	if got, err := resolveDuckAIModel("openai", true); err != nil || got != "gpt-5.6-luna" {
-		t.Fatalf("explicit resolveDuckAIModel(openai) = %q, %v; want gpt-5.6-luna", got, err)
+	if got, err := resolveDuckAIModel("openai", true); err != nil || got != "gpt-6-luna" {
+		t.Fatalf("explicit resolveDuckAIModel(openai) = %q, %v; want gpt-6-luna", got, err)
 	}
 	if _, err := resolveDuckAIModel("unknown-model", false); err == nil {
 		t.Fatal("resolveDuckAIModel(unknown-model) error = nil, want error")
+	}
+}
+
+func TestDuckAIHeadersFromMapPreservesBrowserContext(t *testing.T) {
+	headers := duckAIHeadersFromMap(map[string]interface{}{
+		"X-Vqd-Hash-1":       "proof",
+		"x-fe-signals":       "signals",
+		"X-FE-Version":       "version",
+		"x-ddg-journey-id":   "journey",
+		"Accept-Language":    "fr-FR,fr;q=0.9",
+		"Sec-Ch-Ua":          `"Chromium";v="155"`,
+		"Sec-Ch-Ua-Platform": `"Windows"`,
+	})
+	encoded, err := json.Marshal(headers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"JourneyID":"journey"`,
+		`"AcceptLanguage":"fr-FR,fr;q=0.9"`,
+		`"sec-ch-ua":"\"Chromium\";v=\"155\""`,
+		`"sec-ch-ua-platform":"\"Windows\""`,
+	} {
+		if !strings.Contains(string(encoded), want) {
+			t.Errorf("captured browser context %s does not contain %s", encoded, want)
+		}
 	}
 }
 
@@ -129,12 +160,17 @@ func TestDuckAIRequestAndSSE(t *testing.T) {
 			))}, nil
 		})},
 		captureHeaders: func(context.Context) (duckAIHeaders, error) {
-			return duckAIHeaders{VQDHash1: "proof", FESignals: "signals", FEVersion: "version", UserAgent: "browser"}, nil
+			return duckAIHeaders{
+				VQDHash1: "proof", FESignals: "signals", FEVersion: "version", UserAgent: "browser",
+				AcceptLanguage: "fr-FR,fr;q=0.9", JourneyID: "journey",
+				BrowserHeaders: map[string]string{"sec-ch-ua": `"Chromium";v="155"`, "sec-fetch-site": "same-origin"},
+				BrowserCookies: []*http.Cookie{{Name: "duckai-session", Value: "from-browser"}},
+			}, nil
 		},
 	}
 
 	var chunks []string
-	err := provider.ChatCompletionStream(context.Background(), []Message{{Role: "user", Content: "hi"}}, "gpt-4o-mini", func(chunk string) {
+	err := provider.ChatCompletionStream(context.Background(), []Message{{Role: "user", Content: "hi"}}, "openai", func(chunk string) {
 		chunks = append(chunks, chunk)
 	})
 	if err != nil {
@@ -152,33 +188,42 @@ func TestDuckAIRequestAndSSE(t *testing.T) {
 	for key, expected := range map[string]string{
 		"Origin":           duckAIOrigin,
 		"Referer":          duckAIReferer,
-		"Accept-Language":  "en-US,en;q=0.9",
+		"Accept-Language":  "fr-FR,fr;q=0.9",
 		"X-Vqd-Hash-1":     "proof",
 		"X-Fe-Signals":     "signals",
 		"X-Fe-Version":     "version",
+		"Sec-Ch-Ua":        `"Chromium";v="155"`,
+		"Sec-Fetch-Site":   "same-origin",
+		"X-Ddg-Journey-Id": "journey",
 		"User-Agent":       "browser",
-		"X-Ddg-Journey-Id": "",
 	} {
-		if key == "X-Ddg-Journey-Id" {
-			if gotRequest.Header.Get(key) == "" {
-				t.Fatalf("header %s is empty", key)
-			}
-			continue
-		}
 		if got := gotRequest.Header.Get(key); got != expected {
 			t.Errorf("header %s = %q, want %q", key, got, expected)
 		}
 	}
-	for _, name := range []string{"5", "dcm", "dcs"} {
-		if got := gotRequest.Header.Get("Cookie"); !strings.Contains(got, name+"=") {
-			t.Errorf("Cookie header %q is missing required Duck.ai cookie %q", got, name)
-		}
+	if got := gotRequest.Header.Get("Cookie"); !strings.Contains(got, "duckai-session=from-browser") {
+		t.Errorf("Cookie header %q is missing the captured browser cookie", got)
 	}
-	if gotPayload["model"] != "gpt-5.6-luna" || gotPayload["canUseTools"] != false || gotPayload["canUseApproxLocation"] != true || gotPayload["reasoningEffort"] != "none" {
+	if gotPayload["model"] != "gpt-6-luna" || gotPayload["canUseTools"] != false || gotPayload["canUseApproxLocation"] != nil || gotPayload["canShowGreeting"] != true || gotPayload["reasoningEffort"] != "none" {
 		t.Fatalf("unexpected Duck.ai payload fields: %#v", gotPayload)
 	}
 	if gotPayload["durableStream"] == nil || gotPayload["messages"] == nil {
 		t.Fatalf("payload is missing durableStream or messages: %#v", gotPayload)
+	}
+}
+
+func TestDuckAIRequestAllowsOptionalBrowserHeadersToBeAbsent(t *testing.T) {
+	provider := duckAITestProvider(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK, Header: make(http.Header),
+			Body: io.NopCloser(strings.NewReader("data: [DONE]\n")),
+		}, nil
+	})
+	provider.captureHeaders = func(context.Context) (duckAIHeaders, error) {
+		return duckAIHeaders{VQDHash1: "proof"}, nil
+	}
+	if err := provider.ChatCompletionStream(context.Background(), []Message{{Role: "user", Content: "hi"}}, "gpt-6-luna", func(string) {}); err != nil {
+		t.Fatalf("ChatCompletionStream() with only required proof failed: %v", err)
 	}
 }
 
@@ -217,8 +262,35 @@ func TestDuckAINonStreamingAggregatesAssistantText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChatCompletion() error = %v", err)
 	}
-	if response.Model != duckAIDefault || response.Choices[0].Message.Content != "one two" {
+	if response.Model != "gpt-6-luna" || response.Choices[0].Message.Content != "one two" {
 		t.Fatalf("ChatCompletion() response = model %q content %q", response.Model, response.Choices[0].Message.Content)
+	}
+}
+
+func TestFindDuckAIBrowserFindsWindowsChromeInstall(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows install path lookup is specific to Windows")
+	}
+	programFiles := t.TempDir()
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("PROGRAMFILES", programFiles)
+	t.Setenv("PROGRAMFILES(X86)", "")
+	t.Setenv("LOCALAPPDATA", "")
+
+	want := filepath.Join(programFiles, "Google", "Chrome", "Application", "chrome.exe")
+	if err := os.MkdirAll(filepath.Dir(want), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(want, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := findDuckAIBrowser()
+	if err != nil {
+		t.Fatalf("findDuckAIBrowser() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("findDuckAIBrowser() = %q, want %q", got, want)
 	}
 }
 

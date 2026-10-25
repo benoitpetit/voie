@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -18,7 +19,11 @@ func TestMCPStdioBinaryProtocolUsesStdoutAndDiagnosticsUseStderr(t *testing.T) {
 		t.Fatal(err)
 	}
 	repoRoot := filepath.Clean(filepath.Join(workingDir, "..", "..", ".."))
-	binaryPath := filepath.Join(t.TempDir(), "voie")
+	binaryName := "voie"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
 	build := exec.Command("go", "build", "-o", binaryPath, ".")
 	build.Dir = repoRoot
 	if output, err := build.CombinedOutput(); err != nil {

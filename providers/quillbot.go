@@ -24,14 +24,14 @@ func (p *Quillbot) GetInfo() ProviderInfo {
 		Name:         "quillbot",
 		Label:        "Quillbot AI",
 		URL:          "https://quillbot.com/ai-chat",
-		Working:      true,
+		Working:      false,
 		DefaultModel: "quillbot",
 		SupportedModels: []string{
 			"quillbot", "quillbot-search",
 		},
 		SupportsStream:     true,
 		NeedsAuth:          false,
-		Description:        "Quillbot AI Chat - reverse-engineered, no auth required",
+		Description:        "QuillBot chat is unavailable: repeated upstream HTTP 502 responses.",
 		ReverseEngineering: true,
 	}
 }

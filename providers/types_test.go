@@ -39,9 +39,9 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 	}
 
 	for _, model := range []string{
-		"gpt-5.6-luna", "gpt-5.4-mini", "claude-haiku-4-5", "gpt-5.4-nano",
+		"gpt-6-luna", "gpt-5.6-luna", "gpt-5.4-mini", "claude-haiku-4-5", "gpt-5.4-nano",
 		"mistral-small-2603", "tinfoil/gpt-oss-120b", "tinfoil/gemma4-31b",
-		"gpt-4o-mini", "claude-3-haiku", "o4mini", "mistral-small-4", "gpt-oss-120b", "gemma-4-31b",
+		"gpt-4o-mini", "claude-3-haiku", "o4mini", "mistral-small-4", "gpt-oss-120b", "gemma-4-31b", "llama", "mixtral",
 	} {
 		routed := registry.GetForModel(model)
 		if routed == nil || routed.GetInfo().Name != "duckai" {
@@ -50,7 +50,6 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 	}
 	for _, model := range []string{
 		"gpt-5.6-terra", "claude-sonnet-4-6", "claude-opus-4-8", "gpt-5.6-sol",
-		"llama", "mixtral",
 	} {
 		if routed := registry.GetForModel(model); routed != nil && routed.GetInfo().Name == "duckai" {
 			t.Errorf("GetForModel(%q) routed to Duck.ai, want removed model to use another provider", model)

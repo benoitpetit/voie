@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,16 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("FALLBACK_MAX_RETRIES", "")
 	t.Setenv("FALLBACK_MAX_MODELS", "")
 	configHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", configHome)
+	configDir := configHome
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("APPDATA", configHome)
+	case "darwin":
+		t.Setenv("HOME", configHome)
+		configDir = filepath.Join(configHome, "Library", "Application Support")
+	default:
+		t.Setenv("XDG_CONFIG_HOME", configHome)
+	}
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +41,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Host != "127.0.0.1" || cfg.Port != "8080" || cfg.Timeout.String() != "2m0s" {
 		t.Fatalf("defaults = %+v", cfg)
 	}
-	if cfg.ConversationTTL != 720*time.Hour || cfg.RoutingConfigPath != filepath.Join(configHome, "voie", "routing.json") || cfg.ConversationDBPath != filepath.Join(configHome, "voie", "conversations.db") {
+	if cfg.ConversationTTL != 720*time.Hour || cfg.RoutingConfigPath != filepath.Join(configDir, "voie", "routing.json") || cfg.ConversationDBPath != filepath.Join(configDir, "voie", "conversations.db") {
 		t.Fatalf("routing/conversation defaults = %+v", cfg)
 	}
 	if cfg.FallbackEnabled != nil || cfg.FallbackMaxRetries != nil || cfg.FallbackMaxModels != nil {

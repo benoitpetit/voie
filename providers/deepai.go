@@ -21,9 +21,35 @@ import (
 	"github.com/benoitpetit/voie/utils"
 )
 
-type DeepAI struct{}
+type DeepAI struct {
+	endpoint string
+	client   *http.Client
+}
 
-const deepaiUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+const (
+	deepaiUA      = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+	deepaiChatURL = "https://api.deepai.org/hacking_is_a_serious_crime"
+)
+
+var deepaiCanonicalModels = []string{
+	"standard",
+	"claude-haiku-5-5",
+	"glm-5.3-flash",
+	"qwen3.8-flash",
+	"deepseek-v4.1-flash",
+	"gpt-6-luna",
+	"tencent-hy3",
+	"gemma-4",
+	"gpt-oss-120b",
+	"llama-3.3-70b-instruct",
+	"llama-3.1-8b-instant",
+}
+
+var deepaiModelAliases = map[string]string{
+	"online":                "standard",
+	"gemini-2.5-flash-lite": "claude-haiku-5-5",
+	"deepseek-v3.2":         "deepseek-v4.1-flash",
+}
 
 // deepaiHash calcule le MD5 d'une chaîne puis inverse l'ordre de ses
 // caractères hexadécimaux — la transformation appliquée par deepai.org.
@@ -51,14 +77,12 @@ func generateDeepAIKey(userAgent string) string {
 
 func (p *DeepAI) GetInfo() ProviderInfo {
 	return ProviderInfo{
-		Name:         "deepai",
-		Label:        "DeepAI Chat",
-		URL:          "https://deepai.org/chat",
-		Working:      true,
-		DefaultModel: "standard",
-		SupportedModels: []string{
-			"standard", "online", "gemma-4", "gemini-2.5-flash-lite", "deepseek-v3.2",
-		},
+		Name:               "deepai",
+		Label:              "DeepAI Chat",
+		URL:                "https://deepai.org/chat",
+		Working:            true,
+		DefaultModel:       "standard",
+		SupportedModels:    append([]string(nil), deepaiCanonicalModels...),
 		SupportsStream:     true,
 		NeedsAuth:          false,
 		Description:        "DeepAI chat - reverse-engineered anonymous API key generation",
@@ -66,50 +90,55 @@ func (p *DeepAI) GetInfo() ProviderInfo {
 	}
 }
 
-var deepaiModels = map[string]bool{
-	"standard":              true,
-	"online":                true,
-	"gemma-4":               true,
-	"gemini-2.5-flash-lite": true,
-	"deepseek-v3.2":         true,
-}
-
-func (p *DeepAI) resolveModel(model string) string {
-	lower := strings.ToLower(model)
-	if deepaiModels[lower] {
-		return lower
+func (p *DeepAI) resolveModel(model string) (string, error) {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	if lower == "" {
+		return "standard", nil
 	}
-	return "standard"
+	if canonical, ok := deepaiModelAliases[lower]; ok {
+		return canonical, nil
+	}
+	for _, supported := range deepaiCanonicalModels {
+		if lower == supported {
+			return lower, nil
+		}
+	}
+	return "", fmt.Errorf("deepai: unsupported model %q", model)
 }
 
 func (p *DeepAI) SupportsModel(model string) bool {
-	lower := strings.ToLower(model)
-	if deepaiModels[lower] {
-		return true
-	}
-	return strings.Contains(lower, "deepseek-v3")
+	_, err := p.resolveModel(model)
+	return err == nil
 }
 
 func (p *DeepAI) ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
+	resolvedModel, err := p.resolveModel(model)
+	if err != nil {
+		return nil, err
+	}
+
 	var fullContent strings.Builder
-	err := p.ChatCompletionStream(ctx, messages, model, func(chunk string) {
+	err = p.ChatCompletionStream(ctx, messages, resolvedModel, func(chunk string) {
 		fullContent.WriteString(chunk)
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
 	return CreateResponse(
 		fmt.Sprintf("chatcmpl-%s", strings.ReplaceAll(uuid.New().String(), "-", "")[:24]),
-		p.resolveModel(model),
+		resolvedModel,
 		fullContent.String(),
 		EstimatePromptTokens(messages),
 	), nil
 }
 
 func (p *DeepAI) ChatCompletionStream(ctx context.Context, messages []Message, model string, callback func(chunk string)) error {
-	model = p.resolveModel(model)
+	resolvedModel, err := p.resolveModel(model)
+	if err != nil {
+		return err
+	}
+	model = resolvedModel
 
 	history, err := json.Marshal(messages)
 	if err != nil {
@@ -121,7 +150,10 @@ func (p *DeepAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 
 	fields := [][2]string{
 		{"chat_style", "chat"},
+		{"language", "en"},
 		{"chatHistory", string(history)},
+		{"tool_activity_support", "1"},
+		{"thinking_image_tool_support", "1"},
 		{"model", model},
 		{"session_uuid", uuid.New().String()},
 		{"sensitivity_request_id", uuid.New().String()},
@@ -137,18 +169,26 @@ func (p *DeepAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.deepai.org/hacking_is_a_serious_crime", &body)
+	endpoint := p.endpoint
+	if endpoint == "" {
+		endpoint = deepaiChatURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, &body)
 	if err != nil {
 		return err
 	}
 
+	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("api-key", generateDeepAIKey(deepaiUA))
 	req.Header.Set("User-Agent", deepaiUA)
 	req.Header.Set("Origin", "https://deepai.org")
 	req.Header.Set("Referer", "https://deepai.org/chat")
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := p.client
+	if client == nil {
+		client = &http.Client{Timeout: 120 * time.Second}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return app.WrapNetworkFailure(err, "deepai", model)

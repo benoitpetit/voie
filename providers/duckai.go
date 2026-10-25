@@ -12,10 +12,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	cdpbrowser "github.com/chromedp/cdproto/browser"
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
@@ -29,17 +35,16 @@ const (
 	duckAIChatURL          = "https://duck.ai/duckchat/v1/chat"
 	duckAIOrigin           = "https://duck.ai"
 	duckAIReferer          = "https://duck.ai/"
-	duckAIDefault          = "gpt-5.6-luna"
+	duckAIDefault          = "gpt-6-luna"
 	duckAIBootstrap        = "https://duck.ai/"
 	duckAIName             = "duckai"
-	duckAIUserAgent        = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
-	duckAIRequiredCookies  = "5=1; dcm=3; dcs=1"
 	duckAIBootstrapTimeout = 60 * time.Second
 	duckAIHTTPTimeout      = 180 * time.Second
 	duckAISSEMaxLine       = 4 << 20
 )
 
 var duckAIModels = []string{
+	"gpt-6-luna",
 	"gpt-5.6-luna",
 	"gpt-5.4-nano",
 	"gpt-5.4-mini",
@@ -56,19 +61,26 @@ var duckAIModelAliases = map[string]string{
 	"mistral-small-4": "mistral-small-2603",
 	"gpt-oss-120b":    "tinfoil/gpt-oss-120b",
 	"gemma-4-31b":     "tinfoil/gemma4-31b",
+	"llama":           "tinfoil/gpt-oss-120b",
+	"mixtral":         "mistral-small-2603",
 }
 
 type DuckAI struct {
 	endpoint       string
 	client         *http.Client
+	cookieJar      http.CookieJar
 	captureHeaders func(context.Context) (duckAIHeaders, error)
 }
 
 type duckAIHeaders struct {
-	VQDHash1  string
-	FESignals string
-	FEVersion string
-	UserAgent string
+	VQDHash1       string
+	FESignals      string
+	FEVersion      string
+	UserAgent      string
+	AcceptLanguage string
+	JourneyID      string
+	BrowserHeaders map[string]string
+	BrowserCookies []*http.Cookie
 }
 
 type duckAIHeaderCaptureResult struct {
@@ -80,7 +92,9 @@ type duckAIChatPayload struct {
 	Model                string               `json:"model"`
 	Messages             []Message            `json:"messages"`
 	CanUseTools          bool                 `json:"canUseTools"`
-	CanUseApproxLocation bool                 `json:"canUseApproxLocation"`
+	CanUseApproxLocation *bool                `json:"canUseApproxLocation"`
+	CanShowGreeting      bool                 `json:"canShowGreeting"`
+	CanDelegateImage     *bool                `json:"canDelegateImageGeneration"`
 	ReasoningEffort      string               `json:"reasoningEffort"`
 	DurableStream        *duckAIDurableStream `json:"durableStream"`
 }
@@ -107,9 +121,11 @@ type duckAIPublicJWK struct {
 }
 
 func NewDuckAI() *DuckAI {
+	jar, _ := cookiejar.New(nil)
 	return &DuckAI{
-		endpoint: duckAIChatURL,
-		client:   &http.Client{Timeout: duckAIHTTPTimeout},
+		endpoint:  duckAIChatURL,
+		client:    &http.Client{Timeout: duckAIHTTPTimeout, Jar: jar},
+		cookieJar: jar,
 		captureHeaders: func(ctx context.Context) (duckAIHeaders, error) {
 			return captureDuckAIHeaders(ctx)
 		},
@@ -218,8 +234,8 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 	if err != nil {
 		return fmt.Errorf("duckai: capture browser proof: %w", err)
 	}
-	if headers.VQDHash1 == "" || headers.FESignals == "" || headers.FEVersion == "" || headers.UserAgent == "" {
-		return fmt.Errorf("duckai: browser returned incomplete chat headers")
+	if headers.VQDHash1 == "" {
+		return fmt.Errorf("duckai: browser returned no X-Vqd-Hash-1 proof")
 	}
 	reasoningEffort := "none"
 	if resolvedModel == "tinfoil/gpt-oss-120b" || resolvedModel == "tinfoil/gemma4-31b" {
@@ -233,7 +249,8 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 		Model:                resolvedModel,
 		Messages:             messages,
 		CanUseTools:          false,
-		CanUseApproxLocation: true,
+		CanUseApproxLocation: nil,
+		CanShowGreeting:      true,
 		ReasoningEffort:      reasoningEffort,
 		DurableStream:        durableStream,
 	})
@@ -249,19 +266,49 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 		return fmt.Errorf("duckai: build request: %w", err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	if headers.AcceptLanguage != "" {
+		req.Header.Set("Accept-Language", headers.AcceptLanguage)
+	} else {
+		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", duckAIRequiredCookies)
 	req.Header.Set("Origin", duckAIOrigin)
 	req.Header.Set("Referer", duckAIReferer)
-	req.Header.Set("User-Agent", headers.UserAgent)
+	if headers.UserAgent != "" {
+		req.Header.Set("User-Agent", headers.UserAgent)
+	}
+	for name, value := range headers.BrowserHeaders {
+		req.Header.Set(name, value)
+	}
 	req.Header.Set("X-Vqd-Hash-1", headers.VQDHash1)
-	req.Header.Set("x-fe-signals", headers.FESignals)
-	req.Header.Set("x-fe-version", headers.FEVersion)
-	req.Header.Set("x-ddg-journey-id", durableStream.ConversationID)
+	if headers.FESignals != "" {
+		req.Header.Set("x-fe-signals", headers.FESignals)
+	}
+	if headers.FEVersion != "" {
+		req.Header.Set("x-fe-version", headers.FEVersion)
+	}
+	if headers.JourneyID != "" {
+		req.Header.Set("x-ddg-journey-id", headers.JourneyID)
+	}
 	client := p.client
 	if client == nil {
 		client = &http.Client{Timeout: duckAIHTTPTimeout}
+		if p.cookieJar != nil {
+			client.Jar = p.cookieJar
+		}
+	}
+	jar := p.cookieJar
+	if jar == nil {
+		jar = client.Jar
+	}
+	if len(headers.BrowserCookies) > 0 {
+		if jar != nil {
+			jar.SetCookies(req.URL, headers.BrowserCookies)
+		} else {
+			for _, cookie := range headers.BrowserCookies {
+				req.AddCookie(cookie)
+			}
+		}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -324,7 +371,7 @@ func handleDuckAIPausedRequest(isChatRequest bool, rawHeaders map[string]interfa
 }
 
 func duckAIHeadersFromMap(raw map[string]interface{}) duckAIHeaders {
-	var headers duckAIHeaders
+	headers := duckAIHeaders{BrowserHeaders: make(map[string]string)}
 	for name, value := range raw {
 		text := fmt.Sprint(value)
 		switch strings.ToLower(name) {
@@ -336,7 +383,16 @@ func duckAIHeadersFromMap(raw map[string]interface{}) duckAIHeaders {
 			headers.FEVersion = text
 		case "user-agent":
 			headers.UserAgent = text
+		case "accept-language":
+			headers.AcceptLanguage = text
+		case "x-ddg-journey-id":
+			headers.JourneyID = text
+		case "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform", "sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site", "sec-gpc", "dnt", "priority", "x-duckai-continuation", "x-duckai-response-id", "x-duckai-tool-approval":
+			headers.BrowserHeaders[strings.ToLower(name)] = text
 		}
+	}
+	if len(headers.BrowserHeaders) == 0 {
+		headers.BrowserHeaders = nil
 	}
 	return headers
 }
@@ -354,7 +410,6 @@ func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
-		chromedp.Flag("user-agent", duckAIUserAgent),
 	)
 	allocatorCtx, cancelAllocator := chromedp.NewExecAllocator(parent, allocatorOptions...)
 	defer cancelAllocator()
@@ -405,22 +460,50 @@ func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
   button.click();
   return 'clicked';
 })()`
-	var result string
+	const pageReady = `(function() {
+  const body = (document.body?.innerText || '').toLowerCase();
+  if (body.includes('too many requests') || body.includes('trop de requêtes') || body.includes('trop de requetes') || body.includes('err_rate_limit')) return 'rate-limited';
+  const textarea = document.querySelector('textarea[name="user-prompt"]');
+  return textarea && textarea.getClientRects().length ? 'ready' : '';
+})()`
+	const submitState = `(function() {
+  const body = (document.body?.innerText || '').toLowerCase();
+  if (body.includes('too many requests') || body.includes('trop de requêtes') || body.includes('trop de requetes') || body.includes('err_rate_limit')) return 'rate-limited';
+  const button = document.querySelector('button[type="submit"]');
+  return button && !button.disabled ? 'ready' : '';
+})()`
+	var result, state, browserUserAgent string
 	err = chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			_, err := page.AddScriptToEvaluateOnNewDocument(`
-Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-Object.defineProperty(navigator, 'platform', { get: () => 'Linux x86_64' });
-			`).Do(ctx)
+			_, err := page.AddScriptToEvaluateOnNewDocument(`Object.defineProperty(navigator, 'webdriver', { get: () => undefined });`).Do(ctx)
 			return err
+		}),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, _, _, userAgent, _, err := cdpbrowser.GetVersion().Do(ctx)
+			if err != nil {
+				return err
+			}
+			browserUserAgent = normalDuckAIBrowserUserAgent(userAgent)
+			return emulation.SetUserAgentOverride(browserUserAgent).Do(ctx)
 		}),
 		network.Enable(),
 		fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*duckchat/v1/chat*", RequestStage: fetch.RequestStageRequest}}),
 		chromedp.Navigate(duckAIBootstrap),
-		chromedp.WaitVisible(`textarea[name="user-prompt"]`),
+		chromedp.Poll(pageReady, &state, chromedp.WithPollingInterval(100*time.Millisecond)),
+		chromedp.ActionFunc(func(context.Context) error {
+			if state == "rate-limited" {
+				return fmt.Errorf("duckai: browser session is rate-limited by Duck.ai")
+			}
+			return nil
+		}),
 		chromedp.Evaluate(setPrompt, &result),
-		chromedp.Sleep(500*time.Millisecond),
+		chromedp.Poll(submitState, &state, chromedp.WithPollingInterval(100*time.Millisecond)),
+		chromedp.ActionFunc(func(context.Context) error {
+			if state == "rate-limited" {
+				return fmt.Errorf("duckai: browser session is rate-limited by Duck.ai")
+			}
+			return nil
+		}),
 		chromedp.Evaluate(clickPrompt, &result),
 	)
 	if err != nil {
@@ -432,8 +515,32 @@ Object.defineProperty(navigator, 'platform', { get: () => 'Linux x86_64' });
 			return duckAIHeaders{}, fmt.Errorf("duckai: handle paused calibration request: %w", result.err)
 		}
 		headers := result.headers
-		if headers.VQDHash1 == "" || headers.FESignals == "" || headers.FEVersion == "" || headers.UserAgent == "" {
-			return duckAIHeaders{}, fmt.Errorf("duckai: browser returned incomplete chat headers")
+		if headers.VQDHash1 == "" {
+			return duckAIHeaders{}, fmt.Errorf("duckai: browser request had no X-Vqd-Hash-1 proof")
+		}
+		if headers.UserAgent == "" {
+			headers.UserAgent = browserUserAgent
+		}
+		var cookies []*network.Cookie
+		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			var err error
+			cookies, err = network.GetCookies().WithURLs([]string{duckAIChatURL}).Do(ctx)
+			return err
+		})); err != nil {
+			return duckAIHeaders{}, fmt.Errorf("duckai: read browser cookies: %w", err)
+		}
+		for _, cookie := range cookies {
+			if cookie == nil {
+				continue
+			}
+			browserCookie := &http.Cookie{
+				Name: cookie.Name, Value: cookie.Value, Domain: cookie.Domain,
+				Path: cookie.Path, Secure: cookie.Secure, HttpOnly: cookie.HTTPOnly,
+			}
+			if !cookie.Session && cookie.Expires > 0 {
+				browserCookie.Expires = time.Unix(int64(cookie.Expires), 0)
+			}
+			headers.BrowserCookies = append(headers.BrowserCookies, browserCookie)
 		}
 		return headers, nil
 	case <-ctx.Done():
@@ -442,10 +549,56 @@ Object.defineProperty(navigator, 'platform', { get: () => 'Linux x86_64' });
 }
 
 func findDuckAIBrowser() (string, error) {
-	for _, name := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"} {
+	var names []string
+	switch runtime.GOOS {
+	case "darwin":
+		names = []string{"google-chrome", "chromium", "Google Chrome", "Chromium"}
+	case "windows":
+		names = []string{"chrome.exe", "chromium.exe", "chrome", "chromium"}
+	default:
+		names = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"}
+	}
+	for _, name := range names {
 		if path, err := exec.LookPath(name); err == nil {
 			return path, nil
 		}
 	}
-	return "", fmt.Errorf("duckai: Chrome/Chromium is required for chat requests")
+	for _, path := range duckAIBrowserInstallPaths(runtime.GOOS) {
+		if executable, err := exec.LookPath(path); err == nil {
+			return executable, nil
+		}
+	}
+	return "", fmt.Errorf("duckai: Chrome/Chromium is required for chat requests; install Chrome or Chromium and make sure it is available on PATH")
+}
+
+func duckAIBrowserInstallPaths(goos string) []string {
+	var paths []string
+	switch goos {
+	case "darwin":
+		paths = append(paths,
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			"/Applications/Chromium.app/Contents/MacOS/Chromium",
+		)
+		if userHome, err := os.UserHomeDir(); err == nil {
+			paths = append(paths,
+				filepath.Join(userHome, "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
+				filepath.Join(userHome, "Applications", "Chromium.app", "Contents", "MacOS", "Chromium"),
+			)
+		}
+	case "windows":
+		for _, programFiles := range []string{os.Getenv("PROGRAMFILES"), os.Getenv("PROGRAMFILES(X86)"), os.Getenv("LOCALAPPDATA")} {
+			if programFiles == "" {
+				continue
+			}
+			paths = append(paths,
+				filepath.Join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+				filepath.Join(programFiles, "Chromium", "Application", "chrome.exe"),
+			)
+		}
+	}
+	return paths
+}
+
+func normalDuckAIBrowserUserAgent(userAgent string) string {
+	return strings.Replace(userAgent, "HeadlessChrome/", "Chrome/", 1)
 }

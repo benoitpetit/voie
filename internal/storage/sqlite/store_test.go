@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -61,7 +62,9 @@ func TestStoreKeepsExistingDirectoryModeAndSecuresDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if db.Mode().Perm() != 0600 {
+	// Windows applies file access through ACLs and does not expose POSIX
+	// permission bits through FileMode.Perm.
+	if runtime.GOOS != "windows" && db.Mode().Perm() != 0600 {
 		t.Fatalf("database mode=%o, want 0600", db.Mode().Perm())
 	}
 }
