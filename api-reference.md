@@ -186,7 +186,7 @@ Conversation storage is local SQLite, configured by `CONVERSATION_DB_PATH` (defa
 - `GET /v1/conversations/{id}` returns the transcript.
 - `DELETE /v1/conversations/{id}` removes it and returns `204`.
 
-Send `conversation_id` in a completion request to append a turn and include saved turns as context. Only successful completions are saved. Conversations are capped at 200 messages and 2 MiB. A stale concurrent turn returns `409`; expired IDs return `410` during the 30-day tombstone period and then `404`. Requests without `conversation_id` never open the local conversation database.
+Send `conversation_id` in a completion request to append a turn and include saved turns as context. The ID must already exist — create it with `POST /v1/conversations` first; an unknown ID returns `404`. Only successful completions are saved. Conversations are capped at 200 messages and 2 MiB. A stale concurrent turn returns `409`; expired IDs return `410` during the 30-day tombstone period and then `404`. Requests without `conversation_id` never open the local conversation database.
 
 ## `GET /`
 
@@ -214,7 +214,7 @@ Errors use this JSON envelope:
 | --- | --- |
 | `400` | Invalid input, unknown model, provider/model mismatch, or invalid fallback bounds/IDs |
 | `401` | Missing or invalid bearer token |
-| `404` | Unknown provider |
+| `404` | Unknown provider, unknown conversation, or unmatched route |
 | `408` | Request canceled |
 | `503` | Provider disabled |
 | `502` | Upstream provider failure |

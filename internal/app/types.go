@@ -41,13 +41,22 @@ type Usage struct {
 }
 
 type StreamChunk struct {
-	ID             string       `json:"id"`
-	Object         string       `json:"object"`
-	Created        int64        `json:"created"`
-	Model          string       `json:"model"`
-	ConversationID string       `json:"conversation_id,omitempty"`
-	Routing        *RoutingInfo `json:"routing,omitempty"`
-	Choices        []Choice     `json:"choices"`
+	ID             string         `json:"id"`
+	Object         string         `json:"object"`
+	Created        int64          `json:"created"`
+	Model          string         `json:"model"`
+	ConversationID string         `json:"conversation_id,omitempty"`
+	Routing        *RoutingInfo   `json:"routing,omitempty"`
+	Choices        []StreamChoice `json:"choices"`
+}
+
+// StreamChoice is the OpenAI streaming choice shape. It deliberately has no
+// message field: a chat.completion.chunk carries only delta, finish_reason and
+// index, while a non-streaming chat.completion carries message.
+type StreamChoice struct {
+	Delta        *Delta  `json:"delta,omitempty"`
+	FinishReason *string `json:"finish_reason"`
+	Index        int     `json:"index"`
 }
 
 type RoutingInfo struct {

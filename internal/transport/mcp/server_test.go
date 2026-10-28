@@ -175,6 +175,15 @@ func TestMCPCompletionHonorsTimeout(t *testing.T) {
 	}
 }
 
+func TestMCPRunTreatsContextCancellationAsCleanShutdown(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := Run(ctx, service); err != nil {
+		t.Fatalf("Run after cancellation = %v, want nil", err)
+	}
+}
+
 func connectTestClient(t *testing.T, server *mcp.Server) (*mcp.ClientSession, func()) {
 	t.Helper()
 	ctx := context.Background()

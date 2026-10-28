@@ -332,7 +332,7 @@ func parseDuckAISSE(body io.Reader, callback func(string)) error {
 			continue
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "[DONE]" {
+		if data == "[DONE]" || strings.HasPrefix(data, "[DONE]") {
 			return nil
 		}
 		if data == "" || data == "ping" || data == "[PING]" || strings.HasPrefix(data, "[CHAT_TITLE:") {

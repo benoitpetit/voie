@@ -191,6 +191,40 @@ func TestHTTPRoutesPreserveJSONAndSSEShapes(t *testing.T) {
 	if stream.Code != http.StatusOK || !strings.Contains(stream.Body.String(), `"role":"assistant"`) || !strings.Contains(stream.Body.String(), `"content":"chunk"`) || !strings.Contains(stream.Body.String(), "data: [DONE]") {
 		t.Fatalf("stream response = %d %s", stream.Code, stream.Body.String())
 	}
+	if strings.Contains(stream.Body.String(), `"message"`) {
+		t.Fatalf("stream chunk contains a non-streaming message field: %s", stream.Body.String())
+	}
+	type streamChunk struct {
+		Choices []struct {
+			FinishReason json.RawMessage `json:"finish_reason"`
+		} `json:"choices"`
+	}
+	var chunks []streamChunk
+	for _, line := range strings.Split(stream.Body.String(), "\n") {
+		if !strings.HasPrefix(line, "data: {") {
+			continue
+		}
+		var chunk streamChunk
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk); err != nil {
+			t.Fatal(err)
+		}
+		chunks = append(chunks, chunk)
+	}
+	if len(chunks) < 2 {
+		t.Fatalf("stream returned %d chunks, want at least a start and finish chunk", len(chunks))
+	}
+	for i, chunk := range chunks {
+		if len(chunk.Choices) != 1 {
+			t.Fatalf("chunk %d choices = %d, want one", i, len(chunk.Choices))
+		}
+		want := "null"
+		if i == len(chunks)-1 {
+			want = `"stop"`
+		}
+		if got := string(chunk.Choices[0].FinishReason); got != want {
+			t.Errorf("chunk %d finish_reason = %s, want %s", i, got, want)
+		}
+	}
 	var streamID string
 	for _, line := range strings.Split(stream.Body.String(), "\n") {
 		if !strings.HasPrefix(line, "data: {") {

@@ -93,7 +93,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
 			ConversationID: request.ConversationID, Routing: routing,
-			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{Role: "assistant"}}},
+			Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{Role: "assistant"}}},
 		})
 	}
 	err := h.service.CompleteStreamWithInfo(r.Context(), request, func(chunk string, routing *app.RoutingInfo) {
@@ -104,7 +104,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
 			ConversationID: request.ConversationID, Routing: routing,
-			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{Content: chunk}}},
+			Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{Content: chunk}}},
 		})
 	})
 	if err != nil && !started {
@@ -117,9 +117,10 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
 	} else {
+		finishReason := "stop"
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
-			Choices: []app.Choice{{Index: 0, Delta: &app.Delta{}, FinishReason: "stop"}},
+			Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{}, FinishReason: &finishReason}},
 		})
 	}
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")

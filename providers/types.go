@@ -12,6 +12,7 @@ type Choice = app.Choice
 type Delta = app.Delta
 type Usage = app.Usage
 type StreamChunk = app.StreamChunk
+type StreamChoice = app.StreamChoice
 type ProviderInfo = app.ProviderInfo
 type Provider = app.Provider
 type ProviderRegistry = app.Registry
@@ -22,7 +23,7 @@ func NewProviderRegistry() *app.Registry { return NewRegistry() }
 func CreateStreamChunk(id, model, content string) StreamChunk {
 	return StreamChunk{
 		ID: id, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: model,
-		Choices: []Choice{{Index: 0, Delta: &Delta{Content: content}}},
+		Choices: []StreamChoice{{Index: 0, Delta: &Delta{Content: content}}},
 	}
 }
 

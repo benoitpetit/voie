@@ -242,7 +242,7 @@ func (p *Perplexity) ChatCompletionStream(ctx context.Context, messages []Messag
 			continue
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if data == "" || data == "[DONE]" {
+		if data == "" || data == "[DONE]" || strings.HasPrefix(data, "[DONE]") {
 			continue
 		}
 

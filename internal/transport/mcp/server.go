@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -161,7 +162,11 @@ func NewServer(service *app.Service) *mcp.Server {
 
 func Run(ctx context.Context, service *app.Service) error {
 	utils.Info("Starting %s MCP server version %s; tools: %s", brand.Name, brand.Version, strings.Join(toolNames, ", "))
-	return NewServer(service).Run(ctx, &mcp.StdioTransport{})
+	err := NewServer(service).Run(ctx, &mcp.StdioTransport{})
+	if ctx.Err() != nil && errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
 }
 
 func textToolResult(text string) *mcp.CallToolResult {
