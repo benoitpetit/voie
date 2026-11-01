@@ -294,6 +294,47 @@ func TestFindDuckAIBrowserFindsWindowsChromeInstall(t *testing.T) {
 	}
 }
 
+func TestSelectDuckAIBrowserPrefersNewestVersionBelowUsageLimit(t *testing.T) {
+	versions := map[string]int{"chrome": 156, "chromium-old": 140, "chromium": 155}
+	got := selectDuckAIBrowser([]string{"chrome", "chromium-old", "chromium"}, func(path string) int {
+		return versions[path]
+	})
+	if got != "chromium" {
+		t.Fatalf("selectDuckAIBrowser() = %q, want newest browser below the usage-limit version", got)
+	}
+}
+
+func TestSelectDuckAIBrowserFallsBackToNewestWhenAllAreAtUsageLimit(t *testing.T) {
+	versions := map[string]int{"chrome": 156, "chromium": 158}
+	got := selectDuckAIBrowser([]string{"chrome", "chromium"}, func(path string) int {
+		return versions[path]
+	})
+	if got != "chromium" {
+		t.Fatalf("selectDuckAIBrowser() = %q, want newest available fallback", got)
+	}
+}
+
+func TestDuckAIPageRateLimitMessages(t *testing.T) {
+	for _, message := range []string{
+		"Too many requests. Please take a short break and try again.",
+		"ERR_RATE_LIMIT",
+		"ERR_USER_LIMIT",
+		"Daily limit reached",
+		"6-hour usage limit reached",
+		"Weekly usage limit reached",
+		"Monthly limit reached",
+		"Limite quotidienne atteinte",
+		"Limite hebdomadaire atteinte",
+	} {
+		if !duckAIPageRateLimited(message) {
+			t.Errorf("duckAIPageRateLimited(%q) = false, want true", message)
+		}
+	}
+	if duckAIPageRateLimited("Your chat is ready. Ask anything.") {
+		t.Fatal("normal chat page was classified as rate limited")
+	}
+}
+
 func TestDuckAIErrors(t *testing.T) {
 	t.Run("browser bootstrap error", func(t *testing.T) {
 		provider := duckAITestProvider(func(*http.Request) (*http.Response, error) {

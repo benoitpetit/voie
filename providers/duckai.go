@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,7 +42,29 @@ const (
 	duckAIBootstrapTimeout = 60 * time.Second
 	duckAIHTTPTimeout      = 180 * time.Second
 	duckAISSEMaxLine       = 4 << 20
+	// The frontend began surfacing the anonymous usage banner with this major
+	// version in live checks; prefer an installed older browser when available.
+	duckAIUsageLimitBrowserMajor = 156
+	// Warning banners use role="status"; this selector matches exhausted limits.
+	duckAIUsageLimitSelector = `[data-testid="UsageLimitBanner"][role="alert"]`
 )
+
+var duckAIPageRateLimitPhrases = []string{
+	"too many requests",
+	"trop de requêtes",
+	"trop de requetes",
+	"err_rate_limit",
+	"err_user_limit",
+	"err_account_limit",
+	"daily limit reached",
+	"6-hour usage limit reached",
+	"weekly usage limit reached",
+	"monthly limit reached",
+	"limite quotidienne atteinte",
+	"limite de 6 heures atteinte",
+	"limite hebdomadaire atteinte",
+	"limite mensuelle atteinte",
+}
 
 var duckAIModels = []string{
 	"gpt-6-luna",
@@ -460,15 +483,17 @@ func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
   button.click();
   return 'clicked';
 })()`
-	const pageReady = `(function() {
+	pageReady := `(function() {
   const body = (document.body?.innerText || '').toLowerCase();
-  if (body.includes('too many requests') || body.includes('trop de requêtes') || body.includes('trop de requetes') || body.includes('err_rate_limit')) return 'rate-limited';
+  if (document.querySelector('` + duckAIUsageLimitSelector + `')) return 'usage-limited';
+  if (` + duckAIPageRateLimitJS("body") + `) return 'rate-limited';
   const textarea = document.querySelector('textarea[name="user-prompt"]');
   return textarea && textarea.getClientRects().length ? 'ready' : '';
 })()`
-	const submitState = `(function() {
+	submitState := `(function() {
   const body = (document.body?.innerText || '').toLowerCase();
-  if (body.includes('too many requests') || body.includes('trop de requêtes') || body.includes('trop de requetes') || body.includes('err_rate_limit')) return 'rate-limited';
+  if (document.querySelector('` + duckAIUsageLimitSelector + `')) return 'usage-limited';
+  if (` + duckAIPageRateLimitJS("body") + `) return 'rate-limited';
   const button = document.querySelector('button[type="submit"]');
   return button && !button.disabled ? 'ready' : '';
 })()`
@@ -491,6 +516,9 @@ func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
 		chromedp.Navigate(duckAIBootstrap),
 		chromedp.Poll(pageReady, &state, chromedp.WithPollingInterval(100*time.Millisecond)),
 		chromedp.ActionFunc(func(context.Context) error {
+			if state == "usage-limited" {
+				return fmt.Errorf("duckai: browser session has reached its usage limit")
+			}
 			if state == "rate-limited" {
 				return fmt.Errorf("duckai: browser session is rate-limited by Duck.ai")
 			}
@@ -499,6 +527,9 @@ func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
 		chromedp.Evaluate(setPrompt, &result),
 		chromedp.Poll(submitState, &state, chromedp.WithPollingInterval(100*time.Millisecond)),
 		chromedp.ActionFunc(func(context.Context) error {
+			if state == "usage-limited" {
+				return fmt.Errorf("duckai: browser session has reached its usage limit")
+			}
 			if state == "rate-limited" {
 				return fmt.Errorf("duckai: browser session is rate-limited by Duck.ai")
 			}
@@ -558,17 +589,83 @@ func findDuckAIBrowser() (string, error) {
 	default:
 		names = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"}
 	}
+	var candidates []string
 	for _, name := range names {
 		if path, err := exec.LookPath(name); err == nil {
-			return path, nil
+			candidates = append(candidates, path)
 		}
 	}
 	for _, path := range duckAIBrowserInstallPaths(runtime.GOOS) {
 		if executable, err := exec.LookPath(path); err == nil {
-			return executable, nil
+			candidates = append(candidates, executable)
 		}
 	}
+	if executable := selectDuckAIBrowser(candidates, duckAIBrowserMajorVersion); executable != "" {
+		return executable, nil
+	}
 	return "", fmt.Errorf("duckai: Chrome/Chromium is required for chat requests; install Chrome or Chromium and make sure it is available on PATH")
+}
+
+func selectDuckAIBrowser(candidates []string, majorVersion func(string) int) string {
+	var preferred, fallback string
+	var preferredMajor, fallbackMajor int
+	for _, candidate := range candidates {
+		major := majorVersion(candidate)
+		if major > 0 && major < duckAIUsageLimitBrowserMajor {
+			if major > preferredMajor {
+				preferred, preferredMajor = candidate, major
+			}
+			continue
+		}
+		if major > fallbackMajor {
+			fallback, fallbackMajor = candidate, major
+		}
+	}
+	if preferred != "" {
+		return preferred
+	}
+	if fallback != "" {
+		return fallback
+	}
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return ""
+}
+
+func duckAIBrowserMajorVersion(executable string) int {
+	output, err := exec.Command(executable, "--version").Output()
+	if err != nil {
+		return 0
+	}
+	for _, field := range strings.Fields(string(output)) {
+		if strings.Count(field, ".") < 2 {
+			continue
+		}
+		major, err := strconv.Atoi(strings.SplitN(field, ".", 2)[0])
+		if err == nil {
+			return major
+		}
+	}
+	return 0
+}
+
+func duckAIPageRateLimited(pageText string) bool {
+	text := strings.ToLower(pageText)
+	for _, phrase := range duckAIPageRateLimitPhrases {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+func duckAIPageRateLimitJS(bodyVariable string) string {
+	phrases := make([]string, 0, len(duckAIPageRateLimitPhrases))
+	for _, phrase := range duckAIPageRateLimitPhrases {
+		phrases = append(phrases, bodyVariable+".includes("+strconv.Quote(phrase)+")")
+	}
+	return strings.Join(phrases, " || ")
 }
 
 func duckAIBrowserInstallPaths(goos string) []string {
