@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	cdpbrowser "github.com/chromedp/cdproto/browser"
@@ -333,7 +334,14 @@ func (p *DuckAI) ChatCompletionStream(ctx context.Context, messages []Message, m
 			}
 		}
 	}
-	resp, err := client.Do(req)
+	// Never forward a live proof header to a redirect destination.
+	safeClient := &http.Client{
+		Transport:     client.Transport,
+		Jar:           client.Jar,
+		Timeout:       client.Timeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := safeClient.Do(req)
 	if err != nil {
 		return app.WrapNetworkFailure(err, "duckai", resolvedModel)
 	}
@@ -421,9 +429,12 @@ func duckAIHeadersFromMap(raw map[string]interface{}) duckAIHeaders {
 }
 
 func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
-	executable, err := findDuckAIBrowser()
+	executable, err := nextDuckAIBrowserExecutable()
 	if err != nil {
-		return duckAIHeaders{}, err
+		executable, err = findDuckAIBrowser()
+		if err != nil {
+			return duckAIHeaders{}, err
+		}
 	}
 	allocatorOptions := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
 	allocatorOptions = append(allocatorOptions,
@@ -433,6 +444,10 @@ func captureDuckAIHeaders(parent context.Context) (duckAIHeaders, error) {
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.Flag("disable-features", "AutomationControlled"),
+		chromedp.Flag("no-first-run", true),
+		chromedp.Flag("no-default-browser-check", true),
+		chromedp.Flag("disable-extensions", true),
 	)
 	allocatorCtx, cancelAllocator := chromedp.NewExecAllocator(parent, allocatorOptions...)
 	defer cancelAllocator()
@@ -583,11 +598,11 @@ func findDuckAIBrowser() (string, error) {
 	var names []string
 	switch runtime.GOOS {
 	case "darwin":
-		names = []string{"google-chrome", "chromium", "Google Chrome", "Chromium"}
+		names = []string{"google-chrome", "chromium", "Google Chrome", "Chromium", "brave", "Brave Browser", "Microsoft Edge"}
 	case "windows":
-		names = []string{"chrome.exe", "chromium.exe", "chrome", "chromium"}
+		names = []string{"chrome.exe", "chromium.exe", "chrome", "chromium", "brave.exe", "msedge.exe"}
 	default:
-		names = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser"}
+		names = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "brave", "brave-browser", "microsoft-edge", "microsoft-edge-stable"}
 	}
 	var candidates []string
 	for _, name := range names {
@@ -604,6 +619,57 @@ func findDuckAIBrowser() (string, error) {
 		return executable, nil
 	}
 	return "", fmt.Errorf("duckai: Chrome/Chromium is required for chat requests; install Chrome or Chromium and make sure it is available on PATH")
+}
+
+var duckAIBrowserRotationIndex uint64
+
+// duckAIBrowserCandidates returns all available Chromium-based browser
+// executables, ordered with older (<156) builds first to avoid the anonymous
+// usage limit, so successive captures can rotate among them.
+func duckAIBrowserCandidates() []string {
+	var names []string
+	switch runtime.GOOS {
+	case "darwin":
+		names = []string{"google-chrome", "chromium", "Google Chrome", "Chromium", "brave", "Brave Browser", "Microsoft Edge"}
+	case "windows":
+		names = []string{"chrome.exe", "chromium.exe", "chrome", "chromium", "brave.exe", "msedge.exe"}
+	default:
+		names = []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "brave", "brave-browser", "microsoft-edge", "microsoft-edge-stable"}
+	}
+	seen := map[string]bool{}
+	var candidates []string
+	for _, name := range names {
+		if path, err := exec.LookPath(name); err == nil && !seen[path] {
+			seen[path] = true
+			candidates = append(candidates, path)
+		}
+	}
+	for _, path := range duckAIBrowserInstallPaths(runtime.GOOS) {
+		if executable, err := exec.LookPath(path); err == nil && !seen[executable] {
+			seen[executable] = true
+			candidates = append(candidates, executable)
+		}
+	}
+	var preferred, fallback []string
+	for _, c := range candidates {
+		if v := duckAIBrowserMajorVersion(c); v > 0 && v < duckAIUsageLimitBrowserMajor {
+			preferred = append(preferred, c)
+		} else {
+			fallback = append(fallback, c)
+		}
+	}
+	return append(preferred, fallback...)
+}
+
+// nextDuckAIBrowserExecutable picks the next available browser in round-robin
+// order, so successive browser creations can use a different browser/fingerprint.
+func nextDuckAIBrowserExecutable() (string, error) {
+	cands := duckAIBrowserCandidates()
+	if len(cands) == 0 {
+		return "", fmt.Errorf("no Chromium-based browser found")
+	}
+	idx := atomic.AddUint64(&duckAIBrowserRotationIndex, 1) - 1
+	return cands[idx%uint64(len(cands))], nil
 }
 
 func selectDuckAIBrowser(candidates []string, majorVersion func(string) int) string {
