@@ -1,8 +1,6 @@
 package providers
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/benoitpetit/voie/internal/app"
@@ -12,11 +10,7 @@ func TestPerplexityClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "perplexity-internal-body"
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, secret, tc.status)
-			}))
-			defer srv.Close()
-			useServer(t, srv)
+			useProviderResponse(t, tc.status, secret)
 
 			err := (&Perplexity{}).ChatCompletionStream(testProviderContext(),
 				[]Message{{Role: "user", Content: "hello"}}, "turbo", func(string) {})
@@ -26,9 +20,7 @@ func TestPerplexityClassifiesUpstreamFailures(t *testing.T) {
 }
 
 func TestPerplexityNetworkFailureIsTransient(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	useServer(t, srv)
-	srv.Close()
+	useProviderNetworkFailure(t)
 
 	err := (&Perplexity{}).ChatCompletionStream(testProviderContext(),
 		[]Message{{Role: "user", Content: "hello"}}, "turbo", func(string) {})

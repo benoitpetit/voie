@@ -2,8 +2,6 @@ package providers
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 )
 
@@ -11,13 +9,9 @@ func TestDuckAIClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "duckai-internal-body"
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, secret, tc.status)
-			}))
-			defer srv.Close()
+			useProviderResponse(t, tc.status, secret)
 
 			provider := &DuckAI{
-				endpoint: srv.URL,
 				captureHeaders: func(context.Context) (duckAIHeaders, error) {
 					return duckAIHeaders{VQDHash1: "proof", FESignals: "signals", FEVersion: "version", UserAgent: "browser"}, nil
 				},

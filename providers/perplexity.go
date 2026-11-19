@@ -142,8 +142,9 @@ func systemMessageOf(messages []Message) string {
 }
 
 func (p *Perplexity) ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
+	resolvedModel := p.resolveModel(model)
 	var fullContent strings.Builder
-	err := p.ChatCompletionStream(ctx, messages, model, func(chunk string) {
+	err := p.ChatCompletionStream(ctx, messages, resolvedModel, func(chunk string) {
 		fullContent.WriteString(chunk)
 	})
 
@@ -153,7 +154,7 @@ func (p *Perplexity) ChatCompletion(ctx context.Context, messages []Message, mod
 
 	return CreateResponse(
 		fmt.Sprintf("chatcmpl-%s", strings.ReplaceAll(uuid.New().String(), "-", "")[:24]),
-		model,
+		resolvedModel,
 		fullContent.String(),
 		EstimatePromptTokens(messages),
 	), nil

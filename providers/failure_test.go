@@ -3,9 +3,9 @@ package providers
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -53,32 +53,60 @@ func statusTable() []struct {
 	}
 }
 
-// useServer redirects every outbound request through the given test server by
-// swapping http.DefaultTransport; the previous transport is restored on
-// cleanup.
-func useServer(t *testing.T, srv *httptest.Server) {
+// useProviderHandler keeps adapter tests deterministic without opening sockets.
+func useProviderHandler(t *testing.T, handler http.Handler) {
 	t.Helper()
-	u, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prev := http.DefaultTransport
-	http.DefaultTransport = redirectTo{target: u, base: prev}
-	t.Cleanup(func() { http.DefaultTransport = prev })
+	useProviderRoundTripper(t, providerRoundTripper(func(request *http.Request) (*http.Response, error) {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return &http.Response{
+			StatusCode: recorder.Code,
+			Header:     recorder.Header(),
+			Body:       io.NopCloser(strings.NewReader(recorder.Body.String())),
+			Request:    request,
+		}, nil
+	}))
 }
 
-type redirectTo struct {
-	target *url.URL
-	base   http.RoundTripper
+func useProviderResponse(t *testing.T, status int, body string) {
+	t.Helper()
+	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	}))
 }
 
-func (r redirectTo) RoundTrip(req *http.Request) (*http.Response, error) {
-	clone := req.Clone(req.Context())
-	routed := *req.URL
-	routed.Scheme = r.target.Scheme
-	routed.Host = r.target.Host
-	clone.URL = &routed
-	return r.base.RoundTrip(clone)
+func useProviderNetworkFailure(t *testing.T) {
+	t.Helper()
+	useProviderRoundTripper(t, providerRoundTripper(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("connection refused")
+	}))
+}
+
+func useProviderRoundTripper(t *testing.T, transport http.RoundTripper) {
+	t.Helper()
+	previous := http.DefaultTransport
+	http.DefaultTransport = transport
+	t.Cleanup(func() { http.DefaultTransport = previous })
+}
+
+func providerHTTPClient(handler http.Handler) *http.Client {
+	return &http.Client{Transport: providerRoundTripper(func(request *http.Request) (*http.Response, error) {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return &http.Response{
+			StatusCode: recorder.Code,
+			Header:     recorder.Header(),
+			Body:       io.NopCloser(strings.NewReader(recorder.Body.String())),
+			Request:    request,
+		}, nil
+	})}
+}
+
+type providerRoundTripper func(*http.Request) (*http.Response, error)
+
+func (f providerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
 }
 
 // testProviderContext is the minimal context used to exercise adapters.

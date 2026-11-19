@@ -95,7 +95,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.0.8 release](https://github.com/benoitpetit/voie/releases/tag/v0.0.8) contains these archives.
+The GitHub Actions workflow creates a GitHub Release with archives named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS and `voie_VERSION_windows_amd64.zip` for Windows, plus `checksums.txt` (SHA-256). Linux and macOS builds are available for amd64 and arm64; Windows is currently available for amd64. The [v0.1.1 release](https://github.com/benoitpetit/voie/releases/tag/v0.1.1) contains these archives.
 
 ## Use the CLI
 

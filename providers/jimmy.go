@@ -48,7 +48,6 @@ func (p *Jimmy) GetInfo() ProviderInfo {
 		Label:              "ChatJimmy",
 		URL:                jimmyBaseURL,
 		Working:            true,
-		Alive:              true,
 		SupportedModels:    []string{jimmyModel},
 		DefaultModel:       jimmyModel,
 		SupportsStream:     false,

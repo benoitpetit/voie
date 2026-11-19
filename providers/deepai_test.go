@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -40,7 +39,7 @@ func TestDeepAIResolvesCurrentAndLegacyModels(t *testing.T) {
 
 func TestDeepAIRequestUsesCurrentFormAndCanonicalModel(t *testing.T) {
 	var requestErr error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			requestErr = fmt.Errorf("method = %q, want POST", r.Method)
 			return
@@ -63,10 +62,9 @@ func TestDeepAIRequestUsesCurrentFormAndCanonicalModel(t *testing.T) {
 			return
 		}
 		_, _ = io.WriteString(w, "PONG")
-	}))
-	defer server.Close()
+	})
 
-	provider := &DeepAI{endpoint: server.URL, client: &http.Client{Timeout: time.Second}}
+	provider := &DeepAI{endpoint: "https://deepai.test/chat", client: providerHTTPClient(handler)}
 	var response strings.Builder
 	err := provider.ChatCompletionStream(context.Background(), []Message{{Role: "user", Content: "ping"}}, "gemini-2.5-flash-lite", func(chunk string) {
 		response.WriteString(chunk)
