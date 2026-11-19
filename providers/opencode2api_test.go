@@ -14,6 +14,9 @@ func TestOpenCode2APIMetadataAndModelSupport(t *testing.T) {
 	if info.Name != "opencode2api" || info.DefaultModel != "oc2a-hy4-flash-free" {
 		t.Fatalf("GetInfo() = %#v", info)
 	}
+	if info.Label != "OpenCode Zen" {
+		t.Errorf("Label = %q, want OpenCode Zen", info.Label)
+	}
 	if len(info.SupportedModels) != 11 {
 		t.Errorf("SupportedModels = %d, want 11: %v", len(info.SupportedModels), info.SupportedModels)
 	}

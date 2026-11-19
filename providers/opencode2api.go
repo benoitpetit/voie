@@ -27,7 +27,7 @@ func opencode2apiConfig() openAIKeylessConfig {
 	}
 	return openAIKeylessConfig{
 		Name:           "opencode2api",
-		Label:          "OpenCode Zen (opencode2api)",
+		Label:          "OpenCode Zen",
 		URL:            opencode2apiBaseURL + "/healthz",
 		CompletionsURL: opencode2apiBaseURL + "/v1/chat/completions",
 		DefaultModel:   "oc2a-hy4-flash-free",
