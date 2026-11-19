@@ -125,6 +125,30 @@ func TestOpenAIKeylessPseudoStreamEmitsOneFinalChunk(t *testing.T) {
 	}
 }
 
+func TestOpenAIKeylessSendsConfiguredHeaders(t *testing.T) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer local-key" {
+			t.Errorf("Authorization = %q, want Bearer local-key", got)
+		}
+		if got := r.Header.Get("X-Custom"); got != "yes" {
+			t.Errorf("X-Custom = %q, want yes", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"OK"}}]}`)
+	}))
+
+	cfg := keylessStubConfig()
+	cfg.Headers = map[string]string{"Authorization": "Bearer local-key", "X-Custom": "yes"}
+	response, err := newOpenAIKeylessProvider(cfg, &http.Client{}).
+		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Choices[0].Message.Content != "OK" {
+		t.Fatalf("content = %q, want OK", response.Choices[0].Message.Content)
+	}
+}
+
 func TestOpenAIKeylessEmptyCompletionIsAnError(t *testing.T) {
 	useKeylessProviderResponse(t, http.StatusOK, `{"choices":[],"secret":"stub-internal-body"}`)
 

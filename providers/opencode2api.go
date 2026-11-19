@@ -1,0 +1,57 @@
+package providers
+
+import (
+	"net/http"
+	"os"
+	"strings"
+
+	"github.com/benoitpetit/voie/internal/app"
+)
+
+// OpenCode2API relays to a local opencode2api gateway, which drives the free
+// models of OpenCode Zen. The gateway exposes an OpenAI-compatible endpoint on
+// loopback and requires only a local API key.
+type OpenCode2API struct {
+	*openAIKeylessProvider
+}
+
+const (
+	opencode2apiBaseURL  = "http://127.0.0.1:8090"
+	opencode2apiLocalKey = "voie-local"
+)
+
+func opencode2apiConfig() openAIKeylessConfig {
+	key := strings.TrimSpace(os.Getenv("OPENCODE2API_KEY"))
+	if key == "" {
+		key = opencode2apiLocalKey
+	}
+	return openAIKeylessConfig{
+		Name:           "opencode2api",
+		Label:          "OpenCode Zen (opencode2api)",
+		URL:            opencode2apiBaseURL + "/healthz",
+		CompletionsURL: opencode2apiBaseURL + "/v1/chat/completions",
+		DefaultModel:   "oc2a-hy4-flash-free",
+		Description:    "Free OpenCode Zen models through a local opencode2api gateway",
+		SupportsStream: true,
+		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		ModelIDs: map[string]string{
+			"oc2a-beam-free":                   "beam-free",
+			"oc2a-big-pickle":                  "big-pickle",
+			"oc2a-deepseek-v4.1-flash-free":    "deepseek-v4.1-flash-free",
+			"oc2a-flint-40b-free":              "flint-40b-free",
+			"oc2a-hy4-flash-free":              "hy4-flash-free",
+			"oc2a-iceman-free":                 "iceman-free",
+			"oc2a-longcat-2.5-free":            "longcat-2.5-free",
+			"oc2a-mimo-v2.6-flash-free":        "mimo-v2.6-flash-free",
+			"oc2a-nemotron-3.5-lightning-free": "nemotron-3.5-lightning-free",
+			"oc2a-nemotron-3.5-super-vl-free":  "nemotron-3.5-super-vl-free",
+			"oc2a-tidepool-alpha-free":         "tidepool-alpha-free",
+		},
+	}
+}
+
+var _ app.Provider = (*OpenCode2API)(nil)
+
+func NewOpenCode2API() *OpenCode2API {
+	return &OpenCode2API{newOpenAIKeylessProvider(opencode2apiConfig(), &http.Client{Timeout: openAIKeylessTimeout})}
+}

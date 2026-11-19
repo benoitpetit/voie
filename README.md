@@ -8,7 +8,9 @@
 
 Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID that `voie models` returns. No account and no API key. The catalogue is runtime data and is deliberately not listed here: read it with `voie models --json` or `GET /v1/models` against a running server.
 
-Of the eleven registered providers, seven are reverse-engineered public endpoints and four are keyless OpenAI-compatible APIs (Kilo Code, OVHcloud, BlockRun, Pollinations.AI). Their availability can change without notice, and they may rate-limit or block automated access. Kilo Code and BlockRun may log prompts upstream; OVHcloud states that data is not used to train models. Duck.ai chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
+Of the twelve registered providers, seven are reverse-engineered public endpoints, four are keyless OpenAI-compatible APIs (Kilo Code, OVHcloud, BlockRun, Pollinations.AI), and one relays to a local `opencode2api` gateway for OpenCode Zen free models. Their availability can change without notice, and they may rate-limit or block automated access. Kilo Code and BlockRun may log prompts upstream; OVHcloud states that data is not used to train models. Duck.ai chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
+
+The `opencode2api` provider needs the gateway running at `http://127.0.0.1:8090` with a local server key. Set `OPENCODE2API_KEY` if the gateway uses a different key; it defaults to `voie-local`. Its model IDs are prefixed `oc2a-`, and free-model availability is capped by OpenCode's daily quota upstream.
 
 Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices. Some providers return complete responses rather than streaming tokens, so `voie` emits one final content chunk for those requests.
 

@@ -9,6 +9,7 @@ func TestNewKeylessModelsRouteToTheirProviders(t *testing.T) {
 		{"ovh-qwen3.8-27b", "ovh"},
 		{"blockrun-nemotron-3.5-bolt", "blockrun"},
 		{"pollinations-openai-fast", "pollinations"},
+		{"oc2a-hy4-flash-free", "opencode2api"},
 	} {
 		provider := registry.GetForModel(tc.model)
 		if provider == nil {

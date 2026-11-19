@@ -68,20 +68,20 @@ func TestDocumentedCountsMatchCode(t *testing.T) {
 	}
 
 	names := rt.Registry.GetProviderNames()
-	if len(names) != 11 {
-		t.Errorf("registered providers = %d, want 11", len(names))
+	if len(names) != 12 {
+		t.Errorf("registered providers = %d, want 12", len(names))
 	}
 
 	declared := 0
 	for _, name := range names {
 		declared += len(rt.Registry.Get(name).GetInfo().SupportedModels)
 	}
-	if declared != 78 {
-		t.Errorf("declared model IDs = %d, want 78", declared)
+	if declared != 89 {
+		t.Errorf("declared model IDs = %d, want 89", declared)
 	}
 
-	if resolved := len(rt.AppService.ListModels()); resolved != 75 {
-		t.Errorf("resolved model IDs = %d, want 75", resolved)
+	if resolved := len(rt.AppService.ListModels()); resolved != 86 {
+		t.Errorf("resolved model IDs = %d, want 86", resolved)
 	}
 }
 
