@@ -25,7 +25,7 @@ func TestBlockRunMetadataAndModelSupport(t *testing.T) {
 }
 
 func TestBlockRunMapsLightningAndKeepsResponseID(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "https://blockrun.ai/api/v1/chat/completions" {
 			t.Errorf("request = %s %s", r.Method, r.URL.String())
 		}
@@ -62,7 +62,7 @@ func TestBlockRunMapsLightningAndKeepsResponseID(t *testing.T) {
 }
 
 func TestBlockRunStreamsLightningDeltas(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Accept"); got != "text/event-stream" {
 			t.Errorf("Accept = %q, want text/event-stream", got)
 		}
@@ -101,7 +101,7 @@ func TestBlockRunClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "blockrun-internal-body"
-			useProviderResponse(t, tc.status, secret)
+			useKeylessProviderResponse(t, tc.status, secret)
 			_, err := NewBlockRun().ChatCompletion(testProviderContext(),
 				[]Message{{Role: "user", Content: "hello"}}, "blockrun-nemotron-3.5-lightning")
 			classifyFailure(t, err, tc.category, tc.status, secret)
@@ -109,7 +109,7 @@ func TestBlockRunClassifiesUpstreamFailures(t *testing.T) {
 	}
 	t.Run("capacity exhausted", func(t *testing.T) {
 		const secret = "Free model capacity exhausted"
-		useProviderResponse(t, http.StatusTooManyRequests, secret)
+		useKeylessProviderResponse(t, http.StatusTooManyRequests, secret)
 		_, err := NewBlockRun().ChatCompletion(testProviderContext(),
 			[]Message{{Role: "user", Content: "hello"}}, "blockrun-nemotron-3.5-lightning")
 		classifyFailure(t, err, app.FailureTransient, http.StatusTooManyRequests, secret)
@@ -117,7 +117,7 @@ func TestBlockRunClassifiesUpstreamFailures(t *testing.T) {
 }
 
 func TestBlockRunNetworkFailureIsTransient(t *testing.T) {
-	useProviderNetworkFailure(t)
+	useKeylessProviderNetworkFailure(t)
 
 	_, err := NewBlockRun().ChatCompletion(testProviderContext(),
 		[]Message{{Role: "user", Content: "hello"}}, "blockrun-nemotron-3.5-lightning")

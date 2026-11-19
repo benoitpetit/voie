@@ -24,7 +24,7 @@ func TestPollinationsMetadataAndModelSupport(t *testing.T) {
 }
 
 func TestPollinationsMapsFriendlyIDToUpstreamAndKeepsResponseID(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "https://text.pollinations.ai/openai" {
 			t.Errorf("request = %s %s", r.Method, r.URL.String())
 		}
@@ -58,7 +58,7 @@ func TestPollinationsClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "pollinations-internal-body"
-			useProviderResponse(t, tc.status, secret)
+			useKeylessProviderResponse(t, tc.status, secret)
 			_, err := NewPollinations().ChatCompletion(testProviderContext(),
 				[]Message{{Role: "user", Content: "hello"}}, "pollinations-openai-fast")
 			classifyFailure(t, err, tc.category, tc.status, secret)
@@ -67,7 +67,7 @@ func TestPollinationsClassifiesUpstreamFailures(t *testing.T) {
 }
 
 func TestPollinationsNetworkFailureIsTransient(t *testing.T) {
-	useProviderNetworkFailure(t)
+	useKeylessProviderNetworkFailure(t)
 
 	_, err := NewPollinations().ChatCompletion(testProviderContext(),
 		[]Message{{Role: "user", Content: "hello"}}, "pollinations-openai-fast")

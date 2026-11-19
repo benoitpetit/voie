@@ -30,7 +30,7 @@ func TestKiloMetadataAndModelSupport(t *testing.T) {
 }
 
 func TestKiloMapsFriendlyIDToUpstreamAndKeepsResponseID(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "https://api.kilo.ai/api/gateway/chat/completions" {
 			t.Errorf("request = %s %s", r.Method, r.URL.String())
 		}
@@ -64,7 +64,7 @@ func TestKiloClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "kilo-internal-body"
-			useProviderResponse(t, tc.status, secret)
+			useKeylessProviderResponse(t, tc.status, secret)
 			_, err := NewKilo().ChatCompletion(testProviderContext(),
 				[]Message{{Role: "user", Content: "hello"}}, "kilo-auto")
 			classifyFailure(t, err, tc.category, tc.status, secret)
@@ -73,7 +73,7 @@ func TestKiloClassifiesUpstreamFailures(t *testing.T) {
 }
 
 func TestKiloNetworkFailureIsTransient(t *testing.T) {
-	useProviderNetworkFailure(t)
+	useKeylessProviderNetworkFailure(t)
 
 	_, err := NewKilo().ChatCompletion(testProviderContext(),
 		[]Message{{Role: "user", Content: "hello"}}, "kilo-auto")

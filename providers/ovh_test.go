@@ -26,7 +26,7 @@ func TestOVHMetadataAndModelSupport(t *testing.T) {
 }
 
 func TestOVHMapsFriendlyIDToUpstreamAndKeepsResponseID(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1/chat/completions" {
 			t.Errorf("request = %s %s", r.Method, r.URL.String())
 		}
@@ -60,7 +60,7 @@ func TestOVHClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "ovh-internal-body"
-			useProviderResponse(t, tc.status, secret)
+			useKeylessProviderResponse(t, tc.status, secret)
 			_, err := NewOVH().ChatCompletion(testProviderContext(),
 				[]Message{{Role: "user", Content: "hello"}}, "ovh-qwen3.8-27b")
 			classifyFailure(t, err, tc.category, tc.status, secret)
@@ -69,7 +69,7 @@ func TestOVHClassifiesUpstreamFailures(t *testing.T) {
 }
 
 func TestOVHNetworkFailureIsTransient(t *testing.T) {
-	useProviderNetworkFailure(t)
+	useKeylessProviderNetworkFailure(t)
 
 	_, err := NewOVH().ChatCompletion(testProviderContext(),
 		[]Message{{Role: "user", Content: "hello"}}, "ovh-qwen3.8-27b")

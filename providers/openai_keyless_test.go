@@ -25,7 +25,7 @@ func keylessStubConfig() openAIKeylessConfig {
 }
 
 func TestOpenAIKeylessNonStreamingSendsNoAuthorizationAndKeepsVoieModelID(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "https://example.test/v1/chat/completions" {
 			t.Errorf("request = %s %s, want POST https://example.test/v1/chat/completions", r.Method, r.URL.String())
 		}
@@ -60,7 +60,7 @@ func TestOpenAIKeylessNonStreamingSendsNoAuthorizationAndKeepsVoieModelID(t *tes
 }
 
 func TestOpenAIKeylessStreamingAggregatesDeltasWithoutAuthorization(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Accept"); got != "text/event-stream" {
 			t.Errorf("Accept = %q, want text/event-stream", got)
 		}
@@ -96,7 +96,7 @@ func TestOpenAIKeylessStreamingAggregatesDeltasWithoutAuthorization(t *testing.T
 }
 
 func TestOpenAIKeylessPseudoStreamEmitsOneFinalChunk(t *testing.T) {
-	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
 			Stream bool `json:"stream"`
 		}
@@ -126,7 +126,7 @@ func TestOpenAIKeylessPseudoStreamEmitsOneFinalChunk(t *testing.T) {
 }
 
 func TestOpenAIKeylessEmptyCompletionIsAnError(t *testing.T) {
-	useProviderResponse(t, http.StatusOK, `{"choices":[],"secret":"stub-internal-body"}`)
+	useKeylessProviderResponse(t, http.StatusOK, `{"choices":[],"secret":"stub-internal-body"}`)
 
 	_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
 		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
@@ -172,7 +172,7 @@ func TestOpenAIKeylessMetadataAndModelSupport(t *testing.T) {
 func TestOpenAIKeylessClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
-			useProviderResponse(t, tc.status, "stub-internal-body")
+			useKeylessProviderResponse(t, tc.status, "stub-internal-body")
 			_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
 				ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
 			classifyFailure(t, err, tc.category, tc.status, "stub-internal-body")
@@ -181,7 +181,7 @@ func TestOpenAIKeylessClassifiesUpstreamFailures(t *testing.T) {
 }
 
 func TestOpenAIKeylessNetworkFailureIsTransient(t *testing.T) {
-	useProviderNetworkFailure(t)
+	useKeylessProviderNetworkFailure(t)
 
 	_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
 		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
