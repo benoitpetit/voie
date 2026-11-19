@@ -11,6 +11,8 @@ type Kilo struct {
 	*openAIKeylessProvider
 }
 
+// Model IDs follow the maintained catalogue at
+// https://github.com/mvalentsev/awesome-free-ai-coding/blob/main/configs/opencode.json
 var kiloConfig = openAIKeylessConfig{
 	Name:           "kilo",
 	Label:          "Kilo Code",
@@ -31,6 +33,8 @@ var kiloConfig = openAIKeylessConfig{
 		"kilo-north-mini-code":    "cohere/north-mini-code:free",
 		"kilo-dots-3-note":        "dots-studio/dots-3-note-preview:free",
 		"kilo-particle-1":         "particle-ai/particle-1:free",
+		"kilo-glyph-cluster":      "stealth/glyph-cluster",
+		"kilo-beam-free":          "reflection/beam-free",
 	},
 }
 

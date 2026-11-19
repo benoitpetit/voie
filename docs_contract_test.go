@@ -76,12 +76,12 @@ func TestDocumentedCountsMatchCode(t *testing.T) {
 	for _, name := range names {
 		declared += len(rt.Registry.Get(name).GetInfo().SupportedModels)
 	}
-	if declared != 89 {
-		t.Errorf("declared model IDs = %d, want 89", declared)
+	if declared != 91 {
+		t.Errorf("declared model IDs = %d, want 91", declared)
 	}
 
-	if resolved := len(rt.AppService.ListModels()); resolved != 86 {
-		t.Errorf("resolved model IDs = %d, want 86", resolved)
+	if resolved := len(rt.AppService.ListModels()); resolved != 88 {
+		t.Errorf("resolved model IDs = %d, want 88", resolved)
 	}
 }
 

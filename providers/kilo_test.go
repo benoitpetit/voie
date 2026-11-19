@@ -14,15 +14,15 @@ func TestKiloMetadataAndModelSupport(t *testing.T) {
 	if info.Name != "kilo" || info.DefaultModel != "kilo-auto" {
 		t.Fatalf("GetInfo() = %#v", info)
 	}
-	if len(info.SupportedModels) != 11 {
-		t.Errorf("SupportedModels = %d, want 11: %v", len(info.SupportedModels), info.SupportedModels)
+	if len(info.SupportedModels) != 13 {
+		t.Errorf("SupportedModels = %d, want 13: %v", len(info.SupportedModels), info.SupportedModels)
 	}
 	if !info.Working || info.NeedsAuth || info.ReverseEngineering || !info.SupportsStream {
 		t.Errorf("unexpected Kilo capabilities in GetInfo(): %#v", info)
 	}
 	provider := NewKilo()
-	if !provider.SupportsModel("KILO-AUTO") {
-		t.Error("SupportsModel rejected kilo-auto")
+	if !provider.SupportsModel("KILO-AUTO") || !provider.SupportsModel("kilo-glyph-cluster") || !provider.SupportsModel("kilo-beam-free") {
+		t.Error("SupportsModel rejected a configured Kilo model")
 	}
 	if provider.SupportsModel("nemotron-ultra") {
 		t.Error("SupportsModel accepted a voie ID instead of an upstream ID")
