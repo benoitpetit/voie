@@ -14,14 +14,16 @@ func TestKiloMetadataAndModelSupport(t *testing.T) {
 	if info.Name != "kilo" || info.DefaultModel != "kilo-auto" {
 		t.Fatalf("GetInfo() = %#v", info)
 	}
-	if len(info.SupportedModels) != 13 {
-		t.Errorf("SupportedModels = %d, want 13: %v", len(info.SupportedModels), info.SupportedModels)
+	if len(info.SupportedModels) != 15 {
+		t.Errorf("SupportedModels = %d, want 15: %v", len(info.SupportedModels), info.SupportedModels)
 	}
 	if !info.Working || info.NeedsAuth || info.ReverseEngineering || !info.SupportsStream {
 		t.Errorf("unexpected Kilo capabilities in GetInfo(): %#v", info)
 	}
 	provider := NewKilo()
-	if !provider.SupportsModel("KILO-AUTO") || !provider.SupportsModel("kilo-glyph-cluster") || !provider.SupportsModel("kilo-beam-free") {
+	if !provider.SupportsModel("KILO-AUTO") || !provider.SupportsModel("kilo-glyph-cluster") ||
+		!provider.SupportsModel("kilo-beam-free") || !provider.SupportsModel("kilo-ernie-5.5-flash") ||
+		!provider.SupportsModel("kilo-lfm-3-1.7b") {
 		t.Error("SupportsModel rejected a configured Kilo model")
 	}
 	if provider.SupportsModel("nemotron-ultra") {

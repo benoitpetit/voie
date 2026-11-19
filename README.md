@@ -190,3 +190,4 @@ Responses include `routing.attempts`: one entry per provider call with the model
 - [CLI](docs/cli.md): commands, flags, and output behavior.
 - [MCP](docs/mcp.md): stdio setup, tools, schemas, and troubleshooting.
 - [HTTP API reference](api-reference.md): endpoint contract and error handling.
+- [Model catalogue sync](scripts/sync-models): compare the keyless model maps with the maintained free-model config; run `scripts/sync-models --help`.

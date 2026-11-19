@@ -35,6 +35,8 @@ var kiloConfig = openAIKeylessConfig{
 		"kilo-particle-1":         "particle-ai/particle-1:free",
 		"kilo-glyph-cluster":      "stealth/glyph-cluster",
 		"kilo-beam-free":          "reflection/beam-free",
+		"kilo-ernie-5.5-flash":    "baidu/ernie-5.5-flash-preview:free",
+		"kilo-lfm-3-1.7b":         "liquid/lfm-3-1.7b:free",
 	},
 }
 

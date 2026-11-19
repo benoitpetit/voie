@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Report drift between the maintained free-model catalogue and voie's static maps.
+
+The upstream config is https://github.com/mvalentsev/awesome-free-ai-coding/blob/main/configs/opencode.json
+Only providers that need no API key are compared; key-based providers are outside
+voie's "no account, no API key" contract.
+
+Usage:
+    scripts/sync-models                 # fetch the upstream config
+    scripts/sync-models --config FILE   # compare against a local copy
+
+Exit status: 0 when the catalogues match, 1 when drift is found.
+"""
+
+import argparse
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+UPSTREAM_URL = (
+    "https://raw.githubusercontent.com/mvalentsev/awesome-free-ai-coding/"
+    "main/configs/opencode.json"
+)
+
+# upstream config key -> (voie provider name, source file)
+KEYLESS_PROVIDERS = {
+    "kilo-code": ("kilo", "providers/kilo.go"),
+    "blockrun": ("blockrun", "providers/blockrun.go"),
+    "ovh-ai-endpoints": ("ovh", "providers/ovh.go"),
+    "pollinations": ("pollinations", "providers/pollinations.go"),
+}
+
+MODEL_ENTRY = re.compile(r'"([^"]+)"\s*:\s*"([^"]+)"')
+
+
+def voie_upstream_models(source: Path) -> set[str]:
+    """Extract upstream model IDs from a provider's ModelIDs map."""
+    lines = source.read_text(encoding="utf-8").splitlines()
+    models: set[str] = set()
+    in_map = False
+    for line in lines:
+        if "ModelIDs: map[string]string{" in line:
+            in_map = True
+            continue
+        if in_map and line.strip() == "}":
+            break
+        if in_map:
+            match = MODEL_ENTRY.search(line)
+            if match:
+                models.add(match.group(2))
+    return models
+
+
+def upstream_keyless(config: dict) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = {}
+    for key, options in config.get("provider", {}).items():
+        if "apiKey" in options.get("options", {}):
+            continue
+        result[key] = set(options.get("models", {}))
+    return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", help="local path to opencode.json (default: fetch upstream)")
+    args = parser.parse_args()
+
+    if args.config:
+        config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+        source_label = args.config
+    else:
+        with urllib.request.urlopen(UPSTREAM_URL, timeout=30) as response:
+            config = json.load(response)
+        source_label = UPSTREAM_URL
+
+    repo_root = Path(__file__).resolve().parent.parent
+    upstream = upstream_keyless(config)
+    drift = 0
+
+    print(f"Source: {source_label}")
+    for key, (name, relative_path) in KEYLESS_PROVIDERS.items():
+        expected = upstream.get(key, set())
+        actual = voie_upstream_models(repo_root / relative_path)
+        added = sorted(expected - actual)
+        removed = sorted(actual - expected)
+        drift += len(added) + len(removed)
+        print(f"\n{name} ({key}): upstream {len(expected)} / voie {len(actual)}")
+        print(f"  only upstream: {', '.join(added) if added else '-'}")
+        print(f"  only voie    : {', '.join(removed) if removed else '-'}")
+
+    unknown = sorted(set(upstream) - set(KEYLESS_PROVIDERS))
+    if unknown:
+        print(f"\nKeyless providers not tracked by voie: {', '.join(unknown)}")
+
+    print(f"\nDrift: {drift} model(s)")
+    return 1 if drift else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
