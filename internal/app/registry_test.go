@@ -23,7 +23,7 @@ func TestRegistryRoutesOnlySupportedModels(t *testing.T) {
 
 func TestRegistryProviderNamesAreStable(t *testing.T) {
 	registry := providers.NewRegistry()
-	want := []string{"cohere", "deepai", "duckai", "jimmy", "perplexity", "quillbot", "yqcloud"}
+	want := []string{"blockrun", "cohere", "deepai", "duckai", "jimmy", "kilo", "ovh", "perplexity", "pollinations", "quillbot", "yqcloud"}
 	if got := registry.GetProviderNames(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("GetProviderNames() = %v, want %v", got, want)
 	}

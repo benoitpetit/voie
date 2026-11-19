@@ -11,5 +11,9 @@ func NewRegistry() *app.Registry {
 	registry.Register("yqcloud", &Yqcloud{})
 	registry.Register("cohere", &CohereCommand{})
 	registry.Register("jimmy", &Jimmy{})
+	registry.Register("kilo", NewKilo())
+	registry.Register("ovh", NewOVH())
+	registry.Register("blockrun", NewBlockRun())
+	registry.Register("pollinations", NewPollinations())
 	return registry
 }

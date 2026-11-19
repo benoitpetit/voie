@@ -8,7 +8,7 @@
 
 Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID that `voie models` returns. No account and no API key. The catalogue is runtime data and is deliberately not listed here: read it with `voie models --json` or `GET /v1/models` against a running server.
 
-All seven registered providers are reverse-engineered public endpoints. Their availability can change without notice, and they may rate-limit or block automated access. Duck.ai chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
+Of the eleven registered providers, seven are reverse-engineered public endpoints and four are keyless OpenAI-compatible APIs (Kilo Code, OVHcloud, BlockRun, Pollinations.AI). Their availability can change without notice, and they may rate-limit or block automated access. Kilo Code and BlockRun may log prompts upstream; OVHcloud states that data is not used to train models. Duck.ai chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
 
 Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices. Some providers return complete responses rather than streaming tokens, so `voie` emits one final content chunk for those requests.
 
