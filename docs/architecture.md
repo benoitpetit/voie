@@ -30,19 +30,27 @@ app.Registry → provider
 
 ## Routing and conversations
 
-`strategy` is `classic` when omitted. Classic routing remains model/provider based, including the generic `openai` default behavior. `auto` filters disabled providers and policy-ineligible models, ranks preferred models, and uses `ROUTER_MODEL` to choose when task rules do not leave one candidate. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`; it guides automatic candidate selection in `auto` and in `ensemble` when explicit model IDs are not supplied. If automatic routing is ambiguous and no router is configured, the request fails with a routing error.
+`strategy` is `classic` when omitted. Classic routing remains model/provider based, including the generic `openai` default behavior. `auto` filters unavailable providers and models outside the selected profile, then uses the first eligible model in deterministic order: `preferred_models` first, followed by model ID. A profile can set `selection` to `router` to ask `ROUTER_MODEL` to choose from the eligible pool. The optional `task` request field names a profile; when omitted, `default_profile` applies. Custom profile and capability names are accepted. The legacy `tasks` configuration remains supported for the built-in task names.
 
-`ensemble` accepts two or three distinct explicit model IDs, or asks the router to select up to three. Candidates run concurrently and at least two must succeed. `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`; intermediate answers are not returned or saved in the conversation transcript. Multi-model requests send the prompt to each selected provider and then send successful candidate answers to the synthesizer.
+`ensemble` runs two to five distinct agents and synthesizes their work with `SYNTHESIS_MODEL` (or `ROUTER_MODEL` as the synthesis fallback). Its configured default mode is `independent`: agents answer in parallel. `chain` sends each agent the previous agent's draft for review before synthesis; `chain_agents` controls the chain length. `debate` starts with parallel drafts, then gives every agent the other agents' latest drafts to critique and revise; `debate_turns` controls the number of review rounds and can be overridden per request. Explicit `models` are used as the exact agent list. Intermediate answers are not returned or saved in the conversation transcript.
 
-`ROUTING_CONFIG_PATH` points to optional JSON with `models` descriptors, `tasks` rules, and a `fallback` policy. Example:
+`ROUTING_CONFIG_PATH` points to optional JSON with model descriptors, configurable `profiles`, ensemble defaults, and a `fallback` policy. Example:
 
 ```json
 {
   "models": {
     "MODEL_ID": {"description": "Good at code review", "capabilities": ["coding", "reasoning"]}
   },
-  "tasks": {
-    "coding": {"required_capabilities": ["coding"], "preferred_models": ["MODEL_ID"]}
+  "default_profile": "general",
+  "profiles": {
+    "general": {"preferred_models": ["MODEL_ID"], "selection": "local"},
+    "code-review": {"required_capabilities": ["coding"], "preferred_models": ["MODEL_ID"], "selection": "router"}
+  },
+  "ensemble": {
+    "mode": "independent",
+    "candidate_count": 3,
+    "chain_agents": 3,
+    "debate_turns": 2
   },
   "fallback": {
     "enabled": true,
@@ -57,9 +65,9 @@ app.Registry → provider
 
 Conversation state is opt-in through `conversation_id` and stored locally in `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`, typically `~/.config/voie/conversations.db` on Linux). macOS and Windows use their standard per-user configuration directories. The default inactivity TTL is 720 hours. Reads do not extend it; successful turns do. Expired transcripts are deleted and an ID-only tombstone is retained for 30 days. Conversations cap at 200 messages and 2 MiB; concurrent stale turns receive a conflict. Classic calls without a conversation ID do not open the database.
 
-Every strategy shares the same fallback policy. Failures are classified as transient, unavailable, or permanent: network errors and HTTP `408`, `429`, or `5xx` are transient, a missing model is unavailable, and other `4xx` errors are permanent. Transient failures retry the same model up to `max_retries` and then fall back to other models up to `max_fallback_models`; unavailable failures skip straight to fallback; permanent failures stop immediately. In streaming, retries and fallback only happen before the first content chunk. The configured defaults are `enabled=true`, `max_retries=1`, and `max_fallback_models=1`, each bounded by `0`–`3`. Env vars (`FALLBACK_ENABLED`, `FALLBACK_MAX_RETRIES`, `FALLBACK_MAX_MODELS`) are overridden by `routing.json fallback`, which also defines per-model candidate lists under `models`. A request can override the policy through its transport-specific `fallback` object (fields `enabled`, `max_retries`, `max_fallback_models`, `models`); omitted fields inherit the policy, an empty `models` list clears every candidate, and invalid bounds or IDs fail before any provider call.
+Every strategy shares the same fallback policy. Failures are classified as transient, unavailable, or permanent: network errors and HTTP `408`, `429`, or `5xx` are transient, a missing model is unavailable, and other `4xx` errors are permanent. Transient failures retry the same model up to `max_retries` and then fall back to other models up to `max_fallback_models`; unavailable failures skip straight to fallback; permanent failures stop immediately. In streaming, retries and fallback only happen before the first content chunk. The configured defaults are `enabled=true`, `max_retries=1`, and `max_fallback_models=1`, each bounded by `0`–`3`. Env vars (`FALLBACK_ENABLED`, `FALLBACK_MAX_RETRIES`, `FALLBACK_MAX_MODELS`) are overridden by `routing.json fallback`, which also defines per-model candidate lists under `models`. A request can override the policy through its transport-specific `fallback` object (fields `enabled`, `max_retries`, `max_fallback_models`, `models`); omitted fields inherit the policy, an empty `models` list clears every candidate, and invalid bounds or IDs are rejected before routing calls.
 
-Fallback candidates resolve deterministically: the request's explicit `models`, then the configured per-model list, then the eligible pool. For automatic routing the pool is the same task/capability/provider-filtered candidates the router used, excluding the primary. For ensembles the pool excludes the used candidates, the synthesizer, and the router, each candidate is attempted once, and the synthesis step reuses the remaining `max_fallback_models` budget. Responses carry an `attempts` array that records each provider call's model, provider, attempt index, outcome (`succeeded`, `retryable_failure`, `unavailable`, `failed`), and duration in milliseconds. See the interface guides for request and response examples.
+Fallback candidates resolve deterministically: the request's explicit list, the configured per-model list, then the profile/provider-filtered pool. Ensemble replacement agents exclude already used models, the synthesizer, and the router. The synthesis step reuses the remaining `max_fallback_models` budget. Debate rounds keep an agent's previous draft when that agent's revision fails. Responses carry an `attempts` array that records every agent, debate, synthesis, retry, and fallback provider call. Ensemble routing also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`.
 
 `ROUTER_MODEL`, `SYNTHESIS_MODEL`, `ROUTING_CONFIG_PATH`, `CONVERSATION_DB_PATH`, and `CONVERSATION_TTL` are shared by HTTP, CLI, and MCP. See the API and interface guides for request examples.
 

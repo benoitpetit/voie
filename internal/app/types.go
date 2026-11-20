@@ -60,10 +60,14 @@ type StreamChoice struct {
 }
 
 type RoutingInfo struct {
-	Strategy Strategy      `json:"strategy"`
-	Task     string        `json:"task,omitempty"`
-	Models   []RoutedModel `json:"models,omitempty"`
-	Attempts []Attempt     `json:"attempts,omitempty"`
+	Strategy       Strategy      `json:"strategy"`
+	Task           string        `json:"task,omitempty"`
+	EnsembleMode   EnsembleMode  `json:"ensemble_mode,omitempty"`
+	Agents         int           `json:"agents,omitempty"`
+	Turns          int           `json:"turns,omitempty"`
+	SynthesisModel string        `json:"synthesis_model,omitempty"`
+	Models         []RoutedModel `json:"models,omitempty"`
+	Attempts       []Attempt     `json:"attempts,omitempty"`
 }
 
 // FallbackOverride is a per-request fallback policy merge. Omitted pointer
@@ -119,8 +123,11 @@ type ModelInfo struct {
 }
 
 type RoutingPolicy struct {
-	Models map[string]ModelDescriptor
-	Tasks  map[string]TaskRule
+	Models         map[string]ModelDescriptor
+	Profiles       map[string]TaskRule
+	Tasks          map[string]TaskRule // legacy alias for Profiles
+	DefaultProfile string
+	Ensemble       EnsemblePolicy
 }
 
 type ModelDescriptor struct {
@@ -131,6 +138,38 @@ type ModelDescriptor struct {
 type TaskRule struct {
 	RequiredCapabilities []string
 	PreferredModels      []string
+	Selection            SelectionMode
+}
+
+type SelectionMode string
+
+const (
+	SelectionLocal  SelectionMode = "local"
+	SelectionRouter SelectionMode = "router"
+)
+
+type EnsembleMode string
+
+const (
+	EnsembleIndependent EnsembleMode = "independent"
+	EnsembleChain       EnsembleMode = "chain"
+	EnsembleDebate      EnsembleMode = "debate"
+)
+
+// EnsembleRequestOptions overrides the configured ensemble defaults for one
+// request. ChainAgents is useful for chain mode; DebateTurns is useful for
+// debate mode.
+type EnsembleRequestOptions struct {
+	Mode        EnsembleMode `json:"mode,omitempty"`
+	ChainAgents *int         `json:"chain_agents,omitempty"`
+	DebateTurns *int         `json:"debate_turns,omitempty"`
+}
+
+type EnsemblePolicy struct {
+	Mode           EnsembleMode
+	CandidateCount int
+	ChainAgents    int
+	DebateTurns    int
 }
 
 // FallbackPolicy is the validated runtime fallback policy. Models maps a

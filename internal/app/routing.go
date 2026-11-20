@@ -8,6 +8,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 )
 
 var taskCategories = []string{"coding", "reasoning", "writing", "translation", "summarization", "general"}
@@ -33,10 +34,11 @@ type ModelCandidate struct {
 }
 
 type RouteDecision struct {
-	Task   string   `json:"task"`
-	Model  string   `json:"model,omitempty"`
-	Models []string `json:"models,omitempty"`
-	Reason string   `json:"reason"`
+	Task     string    `json:"task"`
+	Model    string    `json:"model,omitempty"`
+	Models   []string  `json:"models,omitempty"`
+	Reason   string    `json:"reason"`
+	Attempts []Attempt `json:"-"`
 }
 
 type routingPrompt struct {
@@ -55,6 +57,7 @@ func (s *Service) selectAutomatic(ctx context.Context, request CompletionRequest
 		Strategy: StrategyAuto,
 		Task:     decision.Task,
 		Models:   []RoutedModel{{Model: selected.Model, Provider: selected.Provider, Status: "succeeded"}},
+		Attempts: decision.Attempts,
 	}, nil
 }
 
@@ -68,13 +71,10 @@ func (s *Service) autoFallbacks(request CompletionRequest, primaryModel string, 
 	if request.Fallback != nil && request.Fallback.Models != nil && len(request.Fallback.Models) == 0 {
 		return nil, nil
 	}
-	task := strings.ToLower(strings.TrimSpace(request.Task))
-	if task != "" {
-		if _, ok := supportedTasks[task]; !ok {
-			return nil, appError(ErrInvalidInput, fmt.Sprintf("task %q is not supported", task), nil)
-		}
+	task, taskRule, err := s.resolveProfile(request.Task)
+	if err != nil {
+		return nil, err
 	}
-	taskRule := s.options.RoutingPolicy.Tasks[task]
 	eligible, err := s.modelCandidates(request.Provider, task, taskRule, primaryModel)
 	if err != nil {
 		return nil, err
@@ -120,16 +120,12 @@ func (s *Service) selectCandidates(ctx context.Context, request CompletionReques
 }
 
 func (s *Service) selectCandidatesExcluding(ctx context.Context, request CompletionRequest, limit int, excludedModel string) ([]ModelCandidate, RouteDecision, error) {
-	if limit < 1 || limit > 3 {
-		return nil, RouteDecision{}, appError(ErrInvalidInput, "automatic routing candidate limit must be between 1 and 3", nil)
+	if limit < 1 || limit > 5 {
+		return nil, RouteDecision{}, appError(ErrInvalidInput, "automatic routing candidate limit must be between 1 and 5", nil)
 	}
-	taskHint := strings.ToLower(strings.TrimSpace(request.Task))
-	var taskRule TaskRule
-	if taskHint != "" {
-		if _, ok := supportedTasks[taskHint]; !ok {
-			return nil, RouteDecision{}, appError(ErrInvalidInput, fmt.Sprintf("task %q is not supported", taskHint), nil)
-		}
-		taskRule = s.options.RoutingPolicy.Tasks[taskHint]
+	taskHint, taskRule, err := s.resolveProfile(request.Task)
+	if err != nil {
+		return nil, RouteDecision{}, err
 	}
 	candidates, err := s.modelCandidates(request.Provider, taskHint, taskRule, excludedModel)
 	if err != nil {
@@ -138,12 +134,32 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 	if len(candidates) == 0 {
 		return nil, RouteDecision{}, appError(ErrRouting, "no enabled models match the routing constraints", nil)
 	}
-	if taskHint != "" && len(candidates) == 1 {
+	if len(candidates) == 1 {
 		candidate := candidates[0]
-		return []ModelCandidate{candidate}, RouteDecision{Task: taskHint, Model: candidate.Model, Models: []string{candidate.Model}, Reason: "unique model matched task rules"}, nil
+		return []ModelCandidate{candidate}, RouteDecision{Task: taskHint, Model: candidate.Model, Models: []string{candidate.Model}, Reason: "only eligible model"}, nil
+	}
+	selectedCount := min(limit, len(candidates))
+	selection := SelectionMode(strings.ToLower(strings.TrimSpace(string(taskRule.Selection))))
+	if selection == "" {
+		selection = SelectionLocal
+	}
+	if selection == SelectionLocal {
+		selected := append([]ModelCandidate(nil), candidates[:selectedCount]...)
+		decision := RouteDecision{Task: taskHint, Reason: "selected by configured model priority", Models: make([]string, len(selected))}
+		for i, candidate := range selected {
+			decision.Models[i] = candidate.Model
+		}
+		if limit == 1 {
+			decision.Model = selected[0].Model
+			decision.Models = []string{selected[0].Model}
+		}
+		return selected, decision, nil
+	}
+	if selection != SelectionRouter {
+		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("profile %q has unsupported selection mode %q", taskHint, selection), nil)
 	}
 	if s.options.RouterModel == "" {
-		return nil, RouteDecision{}, appError(ErrRouting, "ROUTER_MODEL is required to choose among multiple candidates", nil)
+		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("profile %q uses router selection but ROUTER_MODEL is not configured", taskHint), nil)
 	}
 	router := s.registry.GetForModel(s.options.RouterModel)
 	if router == nil || !router.GetInfo().Working {
@@ -154,67 +170,41 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 		return nil, RouteDecision{}, appError(ErrRouting, "could not encode routing request", err)
 	}
 	routerMessages := []Message{
-		{Role: "system", Content: routingSystemPrompt(limit)},
+		{Role: "system", Content: routingSystemPrompt(selectedCount)},
 		{Role: "user", Content: string(input)},
 	}
+	routeStarted := time.Now()
 	response, err := router.ChatCompletion(ctx, routerMessages, s.options.RouterModel)
+	routeAttempt := Attempt{Model: s.options.RouterModel, Provider: router.GetInfo().Name, Attempt: 1, DurationMillis: time.Since(routeStarted).Milliseconds()}
 	if err != nil {
+		routeAttempt.Outcome = outcomeFor(err)
 		return nil, RouteDecision{}, appError(ErrRouting, "router model request failed", err)
 	}
 	if response == nil || len(response.Choices) == 0 {
+		routeAttempt.Outcome = OutcomeFailed
 		return nil, RouteDecision{}, appError(ErrRouting, "router model returned no decision", nil)
 	}
+	routeAttempt.Outcome = OutcomeSucceeded
 	decision, err := parseRouteDecision(response.Choices[0].Message.Content)
 	if err != nil {
 		return nil, RouteDecision{}, appError(ErrRouting, "router model returned an invalid decision", err)
 	}
 	decision.Task = strings.ToLower(strings.TrimSpace(decision.Task))
-	if taskHint != "" && decision.Task != taskHint {
+	if decision.Task == "" {
+		decision.Task = taskHint
+	}
+	if decision.Task != taskHint {
 		return nil, RouteDecision{}, appError(ErrRouting, "router task does not match the requested task", nil)
 	}
-	if _, ok := supportedTasks[decision.Task]; !ok {
-		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router returned unsupported task %q", decision.Task), nil)
-	}
-	allCandidates := append([]ModelCandidate(nil), candidates...)
-	if rule, ok := s.options.RoutingPolicy.Tasks[decision.Task]; ok {
-		candidates = filterRequiredCapabilities(candidates, rule.RequiredCapabilities)
-	}
-	if len(candidates) == 0 {
-		return nil, RouteDecision{}, appError(ErrRouting, "no models satisfy the router's task constraints", nil)
-	}
+	decision.Attempts = append(decision.Attempts, routeAttempt)
 	selectedIDs := decision.Models
-	if limit == 1 {
+	if selectedCount == 1 {
 		if decision.Model == "" || len(decision.Models) != 0 {
 			return nil, RouteDecision{}, appError(ErrRouting, "router decision must contain exactly one model", nil)
 		}
 		selectedIDs = []string{decision.Model}
-	} else if len(selectedIDs) < 2 || len(selectedIDs) > limit || decision.Model != "" {
-		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router decision must contain between 2 and %d models", limit), nil)
-	}
-	if taskHint == "" {
-		for _, id := range selectedIDs {
-			found := false
-			for _, candidate := range candidates {
-				if strings.EqualFold(candidate.Model, id) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				wasEligibleBeforeTaskFilter := false
-				for _, candidate := range allCandidates {
-					if strings.EqualFold(candidate.Model, id) {
-						wasEligibleBeforeTaskFilter = true
-						break
-					}
-				}
-				if !wasEligibleBeforeTaskFilter {
-					return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router selected ineligible model %q", id), nil)
-				}
-				request.Task = decision.Task
-				return s.selectCandidatesExcluding(ctx, request, limit, excludedModel)
-			}
-		}
+	} else if len(selectedIDs) != selectedCount || decision.Model != "" {
+		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router decision must contain exactly %d models", selectedCount), nil)
 	}
 	selected := make([]ModelCandidate, 0, len(selectedIDs))
 	seen := make(map[string]struct{}, len(selectedIDs))
@@ -240,10 +230,42 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 	for i, candidate := range selected {
 		decision.Models[i] = candidate.Model
 	}
-	if limit == 1 {
+	if selectedCount == 1 {
 		decision.Model = selected[0].Model
 	}
 	return selected, decision, nil
+}
+
+func (s *Service) resolveProfile(requested string) (string, TaskRule, error) {
+	name := strings.ToLower(strings.TrimSpace(requested))
+	if name == "" {
+		name = strings.ToLower(strings.TrimSpace(s.options.RoutingPolicy.DefaultProfile))
+		if name == "" {
+			name = "general"
+		}
+	}
+	if rule, ok := lookupTaskRule(s.options.RoutingPolicy.Profiles, name); ok {
+		return name, rule, nil
+	}
+	if rule, ok := lookupTaskRule(s.options.RoutingPolicy.Tasks, name); ok {
+		return name, rule, nil
+	}
+	if _, legacy := supportedTasks[name]; legacy {
+		if name == "general" {
+			return name, TaskRule{}, nil
+		}
+		return name, TaskRule{RequiredCapabilities: []string{name}}, nil
+	}
+	return "", TaskRule{}, appError(ErrInvalidInput, fmt.Sprintf("routing profile %q is not configured", name), nil)
+}
+
+func lookupTaskRule(rules map[string]TaskRule, name string) (TaskRule, bool) {
+	for key, rule := range rules {
+		if strings.EqualFold(strings.TrimSpace(key), strings.TrimSpace(name)) {
+			return rule, true
+		}
+	}
+	return TaskRule{}, false
 }
 
 func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, excludedModel string) ([]ModelCandidate, error) {
@@ -331,16 +353,6 @@ func hasCapabilities(available, required []string) bool {
 	return true
 }
 
-func filterRequiredCapabilities(candidates []ModelCandidate, required []string) []ModelCandidate {
-	filtered := make([]ModelCandidate, 0, len(candidates))
-	for _, candidate := range candidates {
-		if hasCapabilities(candidate.Capabilities, required) {
-			filtered = append(filtered, candidate)
-		}
-	}
-	return filtered
-}
-
 func parseRouteDecision(content string) (RouteDecision, error) {
 	decoder := json.NewDecoder(bytes.NewBufferString(strings.TrimSpace(content)))
 	decoder.DisallowUnknownFields()
@@ -356,9 +368,11 @@ func parseRouteDecision(content string) (RouteDecision, error) {
 }
 
 func routingSystemPrompt(limit int) string {
-	tasks := strings.Join(taskCategories, ", ")
-	if limit == 1 {
-		return fmt.Sprintf(`Classify the task and choose one model from the supplied candidates. Return only JSON with keys "task", "model", and "reason". The task must be one of %s. Never invent a model ID.`, tasks)
+	if limit < 1 {
+		limit = 1
 	}
-	return fmt.Sprintf(`Classify the task and choose between 2 and %d distinct models from the supplied candidates. Return only JSON with keys "task", "models" (array), and "reason". The task must be one of %s. Never invent a model ID.`, limit, tasks)
+	if limit == 1 {
+		return `Choose the best model for the supplied routing profile from the supplied candidates. Return only JSON with keys "task", "model", and "reason". Set "task" to the supplied profile name. Never invent a model ID.`
+	}
+	return fmt.Sprintf(`Choose exactly %d distinct models for the supplied routing profile from the supplied candidates. Return only JSON with keys "task", "models" (array), and "reason". Set "task" to the supplied profile name. Never invent a model ID.`, limit)
 }

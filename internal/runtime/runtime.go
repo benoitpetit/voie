@@ -59,12 +59,34 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 	if err := config.ValidateRoutingPolicy(policyConfig, registeredModels); err != nil {
 		return nil, err
 	}
-	policy := app.RoutingPolicy{Models: make(map[string]app.ModelDescriptor, len(policyConfig.Models)), Tasks: make(map[string]app.TaskRule, len(policyConfig.Tasks))}
+	policy := app.RoutingPolicy{
+		Models:         make(map[string]app.ModelDescriptor, len(policyConfig.Models)),
+		Profiles:       make(map[string]app.TaskRule, len(policyConfig.Profiles)),
+		Tasks:          make(map[string]app.TaskRule, len(policyConfig.Tasks)),
+		DefaultProfile: policyConfig.DefaultProfile,
+	}
 	for model, descriptor := range policyConfig.Models {
 		policy.Models[model] = app.ModelDescriptor{Description: descriptor.Description, Capabilities: append([]string(nil), descriptor.Capabilities...)}
 	}
+	for profile, rule := range policyConfig.Profiles {
+		policy.Profiles[profile] = app.TaskRule{RequiredCapabilities: append([]string(nil), rule.RequiredCapabilities...), PreferredModels: append([]string(nil), rule.PreferredModels...), Selection: app.SelectionMode(strings.ToLower(strings.TrimSpace(rule.Selection)))}
+	}
 	for task, rule := range policyConfig.Tasks {
-		policy.Tasks[task] = app.TaskRule{RequiredCapabilities: append([]string(nil), rule.RequiredCapabilities...), PreferredModels: append([]string(nil), rule.PreferredModels...)}
+		policy.Tasks[task] = app.TaskRule{RequiredCapabilities: append([]string(nil), rule.RequiredCapabilities...), PreferredModels: append([]string(nil), rule.PreferredModels...), Selection: app.SelectionMode(strings.ToLower(strings.TrimSpace(rule.Selection)))}
+	}
+	if policyConfig.Ensemble != nil {
+		if mode := strings.ToLower(strings.TrimSpace(policyConfig.Ensemble.Mode)); mode != "" {
+			policy.Ensemble.Mode = app.EnsembleMode(mode)
+		}
+		if policyConfig.Ensemble.CandidateCount != nil {
+			policy.Ensemble.CandidateCount = *policyConfig.Ensemble.CandidateCount
+		}
+		if policyConfig.Ensemble.ChainAgents != nil {
+			policy.Ensemble.ChainAgents = *policyConfig.Ensemble.ChainAgents
+		}
+		if policyConfig.Ensemble.DebateTurns != nil {
+			policy.Ensemble.DebateTurns = *policyConfig.Ensemble.DebateTurns
+		}
 	}
 	fallback := app.FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1}
 	if cfg.FallbackEnabled != nil {

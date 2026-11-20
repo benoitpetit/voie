@@ -12,15 +12,16 @@ import (
 )
 
 type CompletionRequest struct {
-	Model          string              `json:"model"`
-	Provider       string              `json:"provider,omitempty"`
-	Strategy       Strategy            `json:"strategy,omitempty"`
-	Task           string              `json:"task,omitempty"`
-	Models         []string            `json:"models,omitempty"`
-	Fallback       *FallbackOverride   `json:"fallback,omitempty"`
-	ConversationID string              `json:"conversation_id,omitempty"`
-	Messages       []Message           `json:"messages"`
-	OnProgress     func(ProgressEvent) `json:"-"`
+	Model          string                  `json:"model"`
+	Provider       string                  `json:"provider,omitempty"`
+	Strategy       Strategy                `json:"strategy,omitempty"`
+	Task           string                  `json:"task,omitempty"`
+	Models         []string                `json:"models,omitempty"`
+	Ensemble       *EnsembleRequestOptions `json:"ensemble,omitempty"`
+	Fallback       *FallbackOverride       `json:"fallback,omitempty"`
+	ConversationID string                  `json:"conversation_id,omitempty"`
+	Messages       []Message               `json:"messages"`
+	OnProgress     func(ProgressEvent)     `json:"-"`
 	progress       *progressEmitter
 }
 
@@ -109,6 +110,31 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 	if options.Fallback == nil {
 		options.Fallback = &FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1}
 	}
+	if options.RoutingPolicy.Models == nil {
+		options.RoutingPolicy.Models = make(map[string]ModelDescriptor)
+	}
+	if options.RoutingPolicy.Profiles == nil {
+		options.RoutingPolicy.Profiles = make(map[string]TaskRule)
+	}
+	if options.RoutingPolicy.Tasks == nil {
+		options.RoutingPolicy.Tasks = make(map[string]TaskRule)
+	}
+	options.RoutingPolicy.DefaultProfile = strings.ToLower(strings.TrimSpace(options.RoutingPolicy.DefaultProfile))
+	if options.RoutingPolicy.DefaultProfile == "" {
+		options.RoutingPolicy.DefaultProfile = "general"
+	}
+	if options.RoutingPolicy.Ensemble.Mode == "" {
+		options.RoutingPolicy.Ensemble.Mode = EnsembleIndependent
+	}
+	if options.RoutingPolicy.Ensemble.CandidateCount == 0 {
+		options.RoutingPolicy.Ensemble.CandidateCount = 3
+	}
+	if options.RoutingPolicy.Ensemble.ChainAgents == 0 {
+		options.RoutingPolicy.Ensemble.ChainAgents = 3
+	}
+	if options.RoutingPolicy.Ensemble.DebateTurns == 0 {
+		options.RoutingPolicy.Ensemble.DebateTurns = 2
+	}
 	if options.Timeout < 0 {
 		return nil, appError(ErrInvalidInput, "timeout must be positive", nil)
 	}
@@ -145,10 +171,39 @@ func (s *Service) FallbackPolicy() FallbackPolicy {
 	return out
 }
 
+// RoutingProfiles returns the configured profile names together with legacy
+// built-in task names for CLI completions and clients.
+func (s *Service) RoutingProfiles() []string {
+	values := map[string]struct{}{}
+	for _, name := range taskCategories {
+		values[name] = struct{}{}
+	}
+	for name := range s.options.RoutingPolicy.Tasks {
+		values[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	}
+	for name := range s.options.RoutingPolicy.Profiles {
+		values[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	}
+	out := make([]string, 0, len(values))
+	for name := range values {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*ChatCompletionResponse, error) {
 	initProgress(&request)
 	if err := validateMessages(request.Messages); err != nil {
 		request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Invalid completion request", Status: "failed"})
+		return nil, err
+	}
+	strategy := normalizeStrategy(request.Strategy)
+	if err := s.validateRequestOptions(request, strategy); err != nil {
+		return nil, err
+	}
+	policy, err := s.resolvePolicy(request)
+	if err != nil {
 		return nil, err
 	}
 	callCtx, cancel := s.completionContext(ctx)
@@ -157,7 +212,6 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	if err != nil {
 		return nil, err
 	}
-	strategy := normalizeStrategy(request.Strategy)
 	request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Completion accepted: " + string(strategy), Status: "started"})
 	var provider Provider
 	var model string
@@ -166,34 +220,28 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	var attempts []Attempt
 	switch strategy {
 	case StrategyClassic:
-		var policy FallbackPolicy
-		if policy, err = s.resolvePolicy(request); err == nil {
-			if provider, model, err = s.selectProvider(request); err == nil {
-				response, attempts, err = s.callWithFallback(callCtx, request, provider, model, strings.ToLower(strings.TrimSpace(request.Provider)), policy)
-			}
+		if provider, model, err = s.selectProvider(request); err == nil {
+			response, attempts, err = s.callWithFallback(callCtx, request, provider, model, strings.ToLower(strings.TrimSpace(request.Provider)), policy)
 		}
 	case StrategyAuto:
-		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
+		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selecting model from routing profile", Status: "started"})
 		var candidate ModelCandidate
 		var decision RoutingInfo
-		var policy FallbackPolicy
 		candidate, decision, err = s.selectAutomatic(callCtx, request)
 		if err == nil {
 			request.Task = decision.Task
 			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selected " + candidate.Model + " (" + candidate.Provider + ")", Model: candidate.Model, Provider: candidate.Provider, Status: "succeeded"})
 			var fallbacks []string
-			if policy, err = s.resolvePolicy(request); err == nil {
-				fallbacks, err = s.autoFallbacks(request, candidate.Model, policy)
-			}
+			fallbacks, err = s.autoFallbacks(request, candidate.Model, policy)
 			if err == nil {
 				provider = s.registry.Get(candidate.Provider)
-				response, attempts, err = s.callWithFallbacks(callCtx, request, provider, candidate.Model, fallbacks, strings.ToLower(strings.TrimSpace(request.Provider)), 1, policy)
+				response, attempts, err = s.callWithFallbacks(callCtx, request, provider, candidate.Model, fallbacks, strings.ToLower(strings.TrimSpace(request.Provider)), len(decision.Attempts)+1, policy)
 			}
 			if err == nil {
 				last := attempts[len(attempts)-1]
 				response.Model = last.Model
 				response.Provider = last.Provider
-				decision.Attempts = attempts
+				decision.Attempts = append(decision.Attempts, attempts...)
 				decision.Models = []RoutedModel{{Model: last.Model, Provider: last.Provider, Status: "succeeded"}}
 				response.Routing = &decision
 			}
@@ -250,13 +298,20 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 	if callback == nil {
 		return appError(ErrInvalidInput, "stream callback is required", nil)
 	}
+	strategy := normalizeStrategy(request.Strategy)
+	if err := s.validateRequestOptions(request, strategy); err != nil {
+		return err
+	}
+	policy, err := s.resolvePolicy(request)
+	if err != nil {
+		return err
+	}
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
 	_, version, userMessages, err := s.prepareConversation(callCtx, &request)
 	if err != nil {
 		return err
 	}
-	strategy := normalizeStrategy(request.Strategy)
 	request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Completion accepted: " + string(strategy), Status: "started"})
 	var routing *RoutingInfo
 	var streamText strings.Builder
@@ -268,16 +323,35 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		}
 		routing = run.routing
 		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Streaming synthesized completion", Model: run.model, Provider: run.synthesizer.GetInfo().Name, Status: "started"})
-		if err := run.synthesizer.ChatCompletionStream(callCtx, run.synthesis, run.model, func(chunk string) { streamCallback(chunk) }); err != nil {
-			request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis failed", Model: run.model, Provider: run.synthesizer.GetInfo().Name, Status: "failed"})
-			return s.contextOrUpstreamError(callCtx, err)
-		}
-		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis completed", Model: run.model, Provider: run.synthesizer.GetInfo().Name, Status: "succeeded"})
-	} else if strategy == StrategyClassic {
-		policy, policyErr := s.resolvePolicy(request)
+		synthesisPolicy, policyErr := s.resolvePolicy(request)
 		if policyErr != nil {
 			return policyErr
 		}
+		if !synthesisPolicy.Enabled {
+			synthesisPolicy.MaxRetries, synthesisPolicy.MaxFallbackModels = 0, 0
+		}
+		synthesisPolicy.MaxFallbackModels = run.budget
+		synthesisRequest := request
+		synthesisRequest.Messages = run.synthesis
+		synthesisRequest.OnProgress = func(event ProgressEvent) {
+			if event.Stage == "model" && event.Status == "started" {
+				run.routing.SynthesisModel = event.Model
+			}
+			request.emitProgress(event)
+		}
+		initProgress(&synthesisRequest)
+		fallbacks := s.ensembleSynthesisFallbacks(request, synthesisPolicy, run.model, run.used)
+		attempts, streamErr := s.streamWithFallbacks(callCtx, synthesisRequest, run.synthesizer, run.model, fallbacks, "", len(run.routing.Attempts)+1, synthesisPolicy, func(chunk string) { streamCallback(chunk) })
+		run.routing.Attempts = append(run.routing.Attempts, attempts...)
+		if streamErr != nil {
+			request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis failed", Model: run.model, Provider: run.synthesizer.GetInfo().Name, Status: "failed"})
+			return s.contextOrUpstreamError(callCtx, streamErr)
+		}
+		if len(attempts) > 0 {
+			run.routing.SynthesisModel = attempts[len(attempts)-1].Model
+		}
+		request.emitProgress(ProgressEvent{Stage: "synthesis", Message: "Synthesis completed", Model: run.model, Provider: run.synthesizer.GetInfo().Name, Status: "succeeded"})
+	} else if strategy == StrategyClassic {
 		provider, model, err := s.selectProvider(request)
 		if err != nil {
 			return err
@@ -289,7 +363,7 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		}
 		routing.Attempts = attempts
 	} else {
-		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Classifying request", Status: "started"})
+		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selecting model from routing profile", Status: "started"})
 		candidate, info, selectErr := s.selectAutomatic(callCtx, request)
 		if selectErr != nil {
 			request.emitProgress(ProgressEvent{Stage: "routing", Message: "Automatic routing failed", Status: "failed"})
@@ -297,20 +371,16 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		}
 		request.Task = info.Task
 		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selected " + candidate.Model + " (" + candidate.Provider + ")", Model: candidate.Model, Provider: candidate.Provider, Status: "succeeded"})
-		policy, policyErr := s.resolvePolicy(request)
-		if policyErr != nil {
-			return policyErr
-		}
 		fallbacks, fbErr := s.autoFallbacks(request, candidate.Model, policy)
 		if fbErr != nil {
 			return fbErr
 		}
-		routing = &RoutingInfo{Strategy: StrategyAuto, Task: info.Task}
-		attempts, streamErr := s.streamWithFallbacks(callCtx, request, s.registry.Get(candidate.Provider), candidate.Model, fallbacks, strings.ToLower(strings.TrimSpace(request.Provider)), 1, policy, streamCallback)
+		routing = &RoutingInfo{Strategy: StrategyAuto, Task: info.Task, Attempts: append([]Attempt(nil), info.Attempts...)}
+		attempts, streamErr := s.streamWithFallbacks(callCtx, request, s.registry.Get(candidate.Provider), candidate.Model, fallbacks, strings.ToLower(strings.TrimSpace(request.Provider)), len(info.Attempts)+1, policy, streamCallback)
 		if streamErr != nil {
 			return streamErr
 		}
-		routing.Attempts = attempts
+		routing.Attempts = append(routing.Attempts, attempts...)
 		if len(attempts) > 0 {
 			last := attempts[len(attempts)-1]
 			routing.Models = []RoutedModel{{Model: last.Model, Provider: last.Provider, Status: "succeeded"}}
@@ -330,6 +400,41 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		}
 		_ = updated
 		request.emitProgress(ProgressEvent{Stage: "conversation", Message: "Conversation turn saved", Status: "succeeded"})
+	}
+	return nil
+}
+
+func (s *Service) validateRequestOptions(request CompletionRequest, strategy Strategy) error {
+	switch strategy {
+	case StrategyClassic:
+		if strings.TrimSpace(request.Task) != "" || len(request.Models) != 0 || request.Ensemble != nil {
+			return appError(ErrInvalidInput, "task, models, and ensemble options require auto or ensemble strategy", nil)
+		}
+	case StrategyAuto:
+		if strings.TrimSpace(request.Model) != "" || len(request.Models) != 0 || request.Ensemble != nil {
+			return appError(ErrInvalidInput, "auto selects its model from a profile; model, models, and ensemble options are not accepted", nil)
+		}
+	case StrategyEnsemble:
+		if strings.TrimSpace(request.Model) != "" {
+			return appError(ErrInvalidInput, "ensemble uses models for candidates and does not accept model", nil)
+		}
+	default:
+		return appError(ErrInvalidInput, fmt.Sprintf("unsupported strategy %q", strategy), nil)
+	}
+	if strategy == StrategyEnsemble {
+		if _, err := s.resolveEnsembleOptions(request); err != nil {
+			return err
+		}
+		if strings.TrimSpace(request.Task) != "" {
+			if _, _, err := s.resolveProfile(request.Task); err != nil {
+				return err
+			}
+		}
+	}
+	if strategy == StrategyAuto {
+		if _, _, err := s.resolveProfile(request.Task); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 )
 
@@ -14,14 +13,12 @@ var taskNames = map[string]struct{}{
 	"summarization": {}, "general": {},
 }
 
-var capabilityNames = map[string]struct{}{
-	"coding": {}, "reasoning": {}, "writing": {}, "translation": {},
-	"summarization": {}, "streaming": {},
-}
-
 type RoutingPolicy struct {
-	Models map[string]ModelDescriptor `json:"models"`
-	Tasks  map[string]TaskRule        `json:"tasks"`
+	Models         map[string]ModelDescriptor `json:"models"`
+	Profiles       map[string]TaskRule        `json:"profiles,omitempty"`
+	Tasks          map[string]TaskRule        `json:"tasks,omitempty"` // legacy alias for Profiles
+	DefaultProfile string                     `json:"default_profile,omitempty"`
+	Ensemble       *EnsemblePolicy            `json:"ensemble,omitempty"`
 	// Fallback overrides the global fallback policy per routing model. Its
 	// pointer fields (enabled, max_retries, max_fallback_models) override
 	// environment and defaults; Models maps a routed model ID to an ordered
@@ -44,10 +41,18 @@ type ModelDescriptor struct {
 type TaskRule struct {
 	RequiredCapabilities []string `json:"required_capabilities,omitempty"`
 	PreferredModels      []string `json:"preferred_models,omitempty"`
+	Selection            string   `json:"selection,omitempty"`
+}
+
+type EnsemblePolicy struct {
+	Mode           string `json:"mode,omitempty"`
+	CandidateCount *int   `json:"candidate_count,omitempty"`
+	ChainAgents    *int   `json:"chain_agents,omitempty"`
+	DebateTurns    *int   `json:"debate_turns,omitempty"`
 }
 
 func LoadRoutingPolicy(path string) (RoutingPolicy, error) {
-	policy := RoutingPolicy{Models: make(map[string]ModelDescriptor), Tasks: make(map[string]TaskRule)}
+	policy := RoutingPolicy{Models: make(map[string]ModelDescriptor), Profiles: make(map[string]TaskRule), Tasks: make(map[string]TaskRule)}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return policy, nil
@@ -64,6 +69,9 @@ func LoadRoutingPolicy(path string) (RoutingPolicy, error) {
 	if policy.Tasks == nil {
 		policy.Tasks = make(map[string]TaskRule)
 	}
+	if policy.Profiles == nil {
+		policy.Profiles = make(map[string]TaskRule)
+	}
 	return policy, nil
 }
 
@@ -76,17 +84,56 @@ func ValidateRoutingPolicy(policy RoutingPolicy, registeredModels map[string]str
 			return fmt.Errorf("routing policy model %q: %w", model, err)
 		}
 	}
-	for task, rule := range policy.Tasks {
-		if _, ok := taskNames[task]; !ok {
-			return fmt.Errorf("routing policy contains unknown task %q", task)
+	profiles := make(map[string]TaskRule, len(policy.Profiles)+len(policy.Tasks))
+	for name, rule := range policy.Tasks {
+		if _, ok := taskNames[name]; !ok {
+			return fmt.Errorf("routing policy contains unknown legacy task %q; use profiles for custom names", name)
 		}
+		profiles[name] = rule
+	}
+	for name, rule := range policy.Profiles {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key == "" {
+			return fmt.Errorf("routing policy contains an empty profile name")
+		}
+		if _, exists := profiles[key]; exists {
+			return fmt.Errorf("routing policy defines profile %q more than once", key)
+		}
+		profiles[key] = rule
+	}
+	for name, rule := range profiles {
 		if err := validateCapabilities(rule.RequiredCapabilities); err != nil {
-			return fmt.Errorf("routing policy task %q: %w", task, err)
+			return fmt.Errorf("routing policy profile %q: %w", name, err)
+		}
+		selection := strings.ToLower(strings.TrimSpace(rule.Selection))
+		if selection != "" && selection != "local" && selection != "router" {
+			return fmt.Errorf("routing policy profile %q selection must be local or router", name)
 		}
 		for _, model := range rule.PreferredModels {
 			if !isRegisteredModel(registeredModels, model) {
-				return fmt.Errorf("routing policy task %q references unknown model %q", task, model)
+				return fmt.Errorf("routing policy profile %q references unknown model %q", name, model)
 			}
+		}
+	}
+	defaultProfile := strings.ToLower(strings.TrimSpace(policy.DefaultProfile))
+	if defaultProfile == "" {
+		defaultProfile = "general"
+	}
+	if _, ok := profiles[defaultProfile]; !ok && defaultProfile != "general" {
+		return fmt.Errorf("routing policy default_profile %q is not configured", defaultProfile)
+	}
+	if policy.Ensemble != nil {
+		if mode := strings.ToLower(strings.TrimSpace(policy.Ensemble.Mode)); mode != "" && mode != "independent" && mode != "chain" && mode != "debate" {
+			return fmt.Errorf("routing policy ensemble mode must be independent, chain, or debate")
+		}
+		if err := validateEnsembleCount("candidate_count", policy.Ensemble.CandidateCount, 2, 5); err != nil {
+			return err
+		}
+		if err := validateEnsembleCount("chain_agents", policy.Ensemble.ChainAgents, 2, 5); err != nil {
+			return err
+		}
+		if err := validateEnsembleCount("debate_turns", policy.Ensemble.DebateTurns, 1, 5); err != nil {
+			return err
 		}
 	}
 	if policy.Fallback != nil {
@@ -149,18 +196,16 @@ func isRegisteredModel(registeredModels map[string]struct{}, model string) bool 
 
 func validateCapabilities(capabilities []string) error {
 	for _, capability := range capabilities {
-		if _, ok := capabilityNames[capability]; !ok {
-			return fmt.Errorf("unknown capability %q; supported capabilities: %s", capability, strings.Join(sortedKeys(capabilityNames), ", "))
+		if strings.TrimSpace(capability) == "" {
+			return fmt.Errorf("capability names must not be empty")
 		}
 	}
 	return nil
 }
 
-func sortedKeys(values map[string]struct{}) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
+func validateEnsembleCount(name string, value *int, min, max int) error {
+	if value == nil || (*value >= min && *value <= max) {
+		return nil
 	}
-	sort.Strings(keys)
-	return keys
+	return fmt.Errorf("ensemble %s must be between %d and %d", name, min, max)
 }

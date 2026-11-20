@@ -13,17 +13,17 @@ import (
 )
 
 func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
-	var model, provider, task, conversation string
+	var model, provider, task, conversation, ensembleMode string
 	var strategy string
 	var models []string
+	var chainAgents, debateTurns int
 	var fallbackEnabled, fallbackDisabled bool
 	var fallbackRetries, fallbackLimit int
 	var fallbackModels []string
-	taskCategories := app.SupportedTaskCategories()
 	command := &cobra.Command{
 		Use:   "chat [prompt...]",
 		Short: "Generate a completion from a prompt",
-		Long:  fmt.Sprintf("Send a prompt using classic model selection or opt-in automatic/ensemble routing. Classic requests require --model; auto and ensemble can select models without it. --task is an optional hint for auto and ensemble; supported values: %s. Use --provider to constrain the provider and --conversation to resume local history. Fallback behavior for this request can be tuned with --fallback, --no-fallback, --fallback-retries, --fallback-limit, and repeatable --fallback-model. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.", strings.Join(taskCategories, ", ")),
+		Long:  "Send a prompt using classic model selection or automatic/ensemble routing. Classic requests require --model; auto and ensemble select models from a configured routing profile. --task names that profile. Ensemble algorithms are independent, chain, or debate; chain agents and debate turns can be tuned per request. Use --provider to constrain candidates and --conversation to resume local history. Fallback behavior can be tuned with --fallback, --no-fallback, --fallback-retries, --fallback-limit, and repeatable --fallback-model. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.",
 		Example: `  voie chat --model MODEL_ID "Summarize this text"
   cat prompt.txt | voie chat --model MODEL_ID
   voie chat --model MODEL_ID --provider PROVIDER "Hello"
@@ -47,6 +47,23 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 			if effectiveStrategy == "classic" && task != "" {
 				return fmt.Errorf("--task requires auto or ensemble")
 			}
+			ensembleFlagsSet := command.Flags().Changed("ensemble-mode") || command.Flags().Changed("chain-agents") || command.Flags().Changed("debate-turns")
+			if effectiveStrategy != "ensemble" && ensembleFlagsSet {
+				return fmt.Errorf("--ensemble-mode, --chain-agents, and --debate-turns require --strategy ensemble")
+			}
+			var ensemble *app.EnsembleRequestOptions
+			if ensembleFlagsSet {
+				ensemble = &app.EnsembleRequestOptions{}
+				if command.Flags().Changed("ensemble-mode") {
+					ensemble.Mode = app.EnsembleMode(ensembleMode)
+				}
+				if command.Flags().Changed("chain-agents") {
+					ensemble.ChainAgents = &chainAgents
+				}
+				if command.Flags().Changed("debate-turns") {
+					ensemble.DebateTurns = &debateTurns
+				}
+			}
 			fallback, err := buildFallbackOverride(command.Flags(), fallbackEnabled, fallbackDisabled, fallbackRetries, fallbackLimit, fallbackModels)
 			if err != nil {
 				return err
@@ -56,17 +73,28 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 				return err
 			}
 			stderr := command.ErrOrStderr()
-			return runChatWithReporter(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), stderr, isTerminalWriter(stderr), service, model, provider, app.Strategy(strategy), task, models, fallback, conversation)
+			return runChatWithReporter(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), stderr, isTerminalWriter(stderr), service, model, provider, app.Strategy(strategy), task, models, ensemble, fallback, conversation)
 		},
 	}
-	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required)")
+	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required for classic)")
 	command.Flags().StringVarP(&provider, "provider", "p", "", "provider to use")
 	command.Flags().StringVar(&strategy, "strategy", "", "completion strategy: classic, auto, or ensemble")
-	command.Flags().StringVar(&task, "task", "", fmt.Sprintf("task hint for auto or ensemble; supported: %s", strings.Join(taskCategories, ", ")))
-	if err := command.RegisterFlagCompletionFunc("task", cobra.FixedCompletions(taskCategories, cobra.ShellCompDirectiveNoFileComp)); err != nil {
+	command.Flags().StringVar(&task, "task", "", "routing profile for auto or automatically selected ensemble candidates")
+	if err := command.RegisterFlagCompletionFunc("task", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		if service, err := getService(); err == nil {
+			return service.RoutingProfiles(), cobra.ShellCompDirectiveNoFileComp
+		}
+		return app.SupportedTaskCategories(), cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
 		panic(err)
 	}
 	command.Flags().StringSliceVar(&models, "models", nil, "models to include in an ensemble")
+	command.Flags().StringVar(&ensembleMode, "ensemble-mode", "", "ensemble algorithm: independent, chain, or debate")
+	if err := command.RegisterFlagCompletionFunc("ensemble-mode", cobra.FixedCompletions([]string{"independent", "chain", "debate"}, cobra.ShellCompDirectiveNoFileComp)); err != nil {
+		panic(err)
+	}
+	command.Flags().IntVar(&chainAgents, "chain-agents", 0, "number of sequential reviewers in chain mode (2-5)")
+	command.Flags().IntVar(&debateTurns, "debate-turns", 0, "number of mutual review rounds in debate mode (0-5)")
 	command.Flags().BoolVar(&fallbackEnabled, "fallback", false, "enable fallback retries and candidates for this request")
 	command.Flags().BoolVar(&fallbackDisabled, "no-fallback", false, "disable fallback retries and candidates for this request")
 	command.Flags().IntVar(&fallbackRetries, "fallback-retries", 0, "same-model retries for transient provider failures (0-3)")
@@ -120,14 +148,14 @@ func buildFallbackOverride(flags *pflag.FlagSet, enabled, disabled bool, retries
 }
 
 func runChat(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string) error {
-	return runChatWithOptions(ctx, args, stdin, stdout, service, model, provider, app.StrategyClassic, "", nil, nil, "")
+	return runChatWithOptions(ctx, args, stdin, stdout, service, model, provider, app.StrategyClassic, "", nil, nil, nil, "")
 }
 
-func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, fallback *app.FallbackOverride, conversation string) error {
-	return runChatWithReporter(ctx, args, stdin, stdout, io.Discard, false, service, model, provider, strategy, task, models, fallback, conversation)
+func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string) error {
+	return runChatWithReporter(ctx, args, stdin, stdout, io.Discard, false, service, model, provider, strategy, task, models, ensemble, fallback, conversation)
 }
 
-func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, isTerminal bool, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, fallback *app.FallbackOverride, conversation string) error {
+func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, isTerminal bool, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string) error {
 	prompt := strings.TrimSpace(strings.Join(args, " "))
 	if prompt == "" {
 		if stdin == nil {
@@ -143,7 +171,7 @@ func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, st
 		return fmt.Errorf("chat prompt must not be empty")
 	}
 	reporter := newProgressReporter(stderr, isTerminal)
-	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, Fallback: fallback, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}, OnProgress: reporter.Handle})
+	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, Ensemble: ensemble, Fallback: fallback, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}, OnProgress: reporter.Handle})
 	reporter.Finish(err)
 	if err != nil {
 		return err

@@ -18,7 +18,7 @@ Public services receive the prompts you send, so keep secrets out of requests un
 
 ### Install a release
 
-The installer scripts download the latest public release and verify its SHA-256 checksum before installing. They do not change your `PATH` or shell configuration. With Node.js installed, the [voie-ai package](https://www.npmjs.com/package/voie-ai) fetches the same binary with `npm install -g voie-ai`; `npx voie-ai ...` runs it without a global install. See [all releases](https://github.com/benoitpetit/voie/releases) for manual archive downloads.
+The installer scripts download the latest public release and verify its SHA-256 checksum before installing. They do not change your `PATH` or shell configuration. See [all releases](https://github.com/benoitpetit/voie/releases) for manual archive downloads.
 
 **Linux** (amd64 or arm64):
 
@@ -54,6 +54,27 @@ Invoke-WebRequest https://raw.githubusercontent.com/benoitpetit/voie/main/instal
 
 The release archives are named `voie_VERSION_OS_ARCH.tar.gz` for Linux and macOS, and `voie_VERSION_windows_amd64.zip` for Windows.
 
+### Install with npm
+
+Requires Node.js 18 or newer. The [voie-ai package](https://www.npmjs.com/package/voie-ai) fetches the same release binary for your platform.
+
+Install globally, list the available models, then start the local API:
+
+```sh
+npm install -g voie-ai
+voie models --json
+voie serve
+```
+
+To run the CLI without a global install, use `npx`:
+
+```sh
+npx voie-ai models --json
+npx voie-ai serve
+```
+
+The API listens on `127.0.0.1:8080` by default. `npx` runs the package for each command without adding the CLI to your `PATH`.
+
 ### Build from source
 
 ```bash
@@ -73,9 +94,9 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `DEFAULT_PROVIDER` | empty | Provider used for the generic `openai` model in API requests |
 | `TIMEOUT` | `120` | End-to-end completion timeout in seconds |
 | `API_TOKEN` | empty | Bearer token required for non-loopback binds |
-| `ROUTER_MODEL` | empty | Model that classifies ambiguous automatic-routing requests |
+| `ROUTER_MODEL` | empty | Optional model used by profiles with `selection: "router"`; also the ensemble synthesizer fallback |
 | `SYNTHESIS_MODEL` | empty | Model that merges ensemble answers; falls back to `ROUTER_MODEL` |
-| `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local model descriptions and task rules |
+| `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local model descriptions, routing profiles, ensemble defaults, and fallback rules |
 | `CONVERSATION_DB_PATH` | `<user-config-dir>/voie/conversations.db` | Local SQLite conversation database |
 | `CONVERSATION_TTL` | `720h` | Inactivity lifetime for local conversations |
 | `FALLBACK_ENABLED` | `true` | Enable retries and fallback on provider failures |
@@ -111,11 +132,11 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
-The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts, including the supported `--task` values. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
+The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts; `--task` completion uses configured routing profile names. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
 
 `chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
 
-Automatic strategies are opt-in. `auto` uses task rules first and asks `ROUTER_MODEL` only when more than one eligible model remains. `ensemble` runs two or three models and synthesizes their answers. `--task` accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general` when voie selects candidates automatically; the CLI offers these values as completions. Examples: `voie chat --strategy auto --task coding "Review this function"` and `voie chat --strategy ensemble --task reasoning "Compare these approaches"`. An explicit ensemble can use `voie chat --strategy ensemble --models model-a,model-b "Compare these approaches"`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
+Automatic strategies are opt-in. `auto` picks the first eligible model from a routing profile in deterministic order; a profile can opt into `ROUTER_MODEL`. Profiles and capability labels are defined in `routing.json`. `ensemble` supports independent answers, a sequential review chain, and a multi-round debate before synthesis. Configure defaults in `routing.json` and override the mode, chain length, or debate turns on each request. Examples: `voie chat --strategy auto --task coding "Review this function"`, `voie chat --strategy ensemble --ensemble-mode chain --chain-agents 3 "Review this proposal"`, and `voie chat --strategy ensemble --ensemble-mode debate --debate-turns 2 "Compare these approaches"`. Exact ensemble candidates can be supplied with `--models model-a,model-b`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
 
 ## Use MCP
 
@@ -171,7 +192,7 @@ A retry repeats the same model; fallback then tries other models. `FALLBACK_MAX_
 }
 ```
 
-Fallback candidates are chosen in this order: the request's explicit `fallback.models`, then the configured per-model list, then, for automatic and ensemble strategies, the other eligible models (limited by `max_fallback_models`). An explicit `provider` constraint is honored when candidates resolve. Ensemble candidates each get one attempt, exclude the synthesizer and router, and the synthesis step reuses any remaining fallback budget. An explicitly empty `fallback.models` list clears every candidate.
+Fallback candidates are chosen in this order: the request's explicit `fallback.models`, then the configured per-model list, then the other eligible models (limited by `max_fallback_models`). An explicit `provider` constraint is honored when candidates resolve. Failed ensemble candidates can be replaced; the synthesis step reuses any remaining fallback budget. An explicitly empty `fallback.models` list clears every candidate.
 
 Each request can override the policy with a `fallback` object. HTTP and MCP accept `{"enabled": false, "max_retries": 0, "max_fallback_models": 0, "models": ["model-b"]}`, and the CLI exposes the same controls as `--fallback`, `--no-fallback`, `--fallback-retries N`, `--fallback-limit N`, and repeatable `--fallback-model ID`. Bound and ID validation happens before any provider is called, so an invalid override fails fast with an input error.
 

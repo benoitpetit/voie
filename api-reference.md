@@ -18,7 +18,7 @@ Cross-origin browser requests are rejected. Requests without an `Origin` header 
 
 ## `POST /v1/chat/completions`
 
-Creates a completion. The `model` must be a supported model ID or alias. The generic `openai` model or an omitted model uses `DEFAULT_PROVIDER` when configured, otherwise Perplexity's `turbo` default. An explicit `provider` must support the requested model.
+Creates a completion. Classic requests use a supported `model` ID or alias; `auto` and `ensemble` choose models from a routing profile. The generic `openai` model or an omitted classic model uses `DEFAULT_PROVIDER` when configured, otherwise Perplexity's `turbo` default. An explicit `provider` must support the requested model or every explicit ensemble candidate.
 
 ### Request
 
@@ -27,8 +27,6 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
   "model": "MODEL_ID",
   "provider": "optional-provider-name",
   "strategy": "classic",
-  "task": "coding",
-  "models": ["MODEL_A", "MODEL_B"],
   "fallback": {
     "enabled": true,
     "max_retries": 1,
@@ -43,11 +41,13 @@ Creates a completion. The `model` must be a supported model ID or alias. The gen
 }
 ```
 
-`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `conversation_id`, and `stream` are optional. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
+`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `ensemble`, `conversation_id`, and `stream` are optional, subject to the selected strategy. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
 
-`strategy` defaults to `classic`, preserving existing model/provider selection. `auto` selects one eligible model. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general` and guides automatic candidate selection in `auto` and in `ensemble` when `models` is omitted. `ROUTER_MODEL` is required when automatic selection has more than one eligible candidate; a unique task-rule match needs no router call. `ensemble` runs 2 or 3 distinct models concurrently and synthesizes after at least 2 succeed. `models` may explicitly supply ensemble candidates; otherwise `ROUTER_MODEL` selects them. `SYNTHESIS_MODEL` is used for the final answer and falls back to `ROUTER_MODEL`. Multi-model requests send the prompt to each selected provider and send successful intermediate answers to the synthesizer.
+`strategy` defaults to `classic`, preserving model/provider selection. `auto` selects one eligible model from a routing profile. The optional `task` field names that profile; when omitted, `default_profile` from `routing.json` applies. Local selection is deterministic by default: preferred models are considered first, followed by model ID. A profile can set `selection` to `router` to use `ROUTER_MODEL` for a semantic choice within its eligible candidates.
 
-When supplying `models` explicitly, list only ensemble candidates; the synthesis model must be separate.
+`ensemble` runs two to five agents and synthesizes their work. `models` may explicitly supply the exact agent list; otherwise the selected profile and its selection mode choose the agents. `ensemble.mode` is `independent`, `chain`, or `debate`; it defaults to the configured value (initially `independent`). Independent agents answer in parallel. In chain mode, each later agent reviews the previous draft; `chain_agents` sets the chain length in configuration or per request. Debate starts with parallel drafts, then each agent reviews the others' latest drafts; `debate_turns` sets the review rounds per request (0–5). `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`. The `provider` constraint applies to automatic candidates and is validated against every explicit ensemble model.
+
+When supplying `models` explicitly, list 2–5 ensemble candidates; the synthesis model must be separate. `model` is not used by `auto` or `ensemble`, and strategy-specific fields are rejected when they do not apply.
 
 `fallback` is an optional per-request override of the global fallback policy. Omitted fields inherit the policy; `enabled` (boolean), `max_retries`, and `max_fallback_models` (each `0`–`3`) override the configured bounds, and `models` supplies candidate model IDs in fallback order, replacing the configured per-model list. An empty `models` list clears every candidate. `max_retries: 0` skips same-model retries, `max_fallback_models: 0` skips fallback, and `enabled: false` disables both. Bounds and model IDs are validated before any provider is called, so an invalid override returns `400`. Retries and fallback only happen before the first streamed content chunk.
 
@@ -59,7 +59,7 @@ When supplying `models` explicitly, list only ensemble candidates; the synthesis
 {"model":"MODEL_ID","fallback":{"models":["MODEL_B"]},"messages":[{"role":"user","content":"Hello"}]}
 ```
 
-An optional `routing` object in responses identifies the strategy, inferred task, per-model selection, and the `attempts` array. Each `attempts` entry records one provider call: `model`, `provider`, `attempt` index, `outcome`, and `duration_ms` when known. Outcomes are `succeeded`, `retryable_failure`, `unavailable`, and `failed`. `conversation_id` appears in responses when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
+An optional `routing` object identifies the strategy, selected profile, per-model results, and the `attempts` array. For ensembles it also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`. Each `attempts` entry records one provider call: `model`, `provider`, `attempt` index, `outcome`, and `duration_ms` when known. `conversation_id` appears when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
 
 Automatic routing:
 
@@ -70,7 +70,19 @@ Automatic routing:
 Ensemble with automatic candidate selection and a task hint:
 
 ```json
-{"strategy":"ensemble","task":"reasoning","messages":[{"role":"user","content":"Compare these approaches"}]}
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent"},"messages":[{"role":"user","content":"Compare these approaches"}]}
+```
+
+Sequential review chain with a request-level agent count:
+
+```json
+{"strategy":"ensemble","task":"code-review","ensemble":{"mode":"chain","chain_agents":4},"messages":[{"role":"user","content":"Review this proposal"}]}
+```
+
+Mutual debate with request-level review rounds:
+
+```json
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"debate","debate_turns":2},"messages":[{"role":"user","content":"Compare these approaches"}]}
 ```
 
 To select exact ensemble candidates, provide them in `models`; in that case, `task` does not change the explicit list.
@@ -225,4 +237,4 @@ Errors use this JSON envelope:
 
 Completions use the configured end-to-end `TIMEOUT` (seconds), defaulting to 120 seconds. Unknown model IDs are rejected instead of being silently sent to another provider.
 
-Routing and conversation configuration: `ROUTER_MODEL` chooses among eligible models, `SYNTHESIS_MODEL` produces ensemble output (fallback: router), `ROUTING_CONFIG_PATH` defaults to `<user-config-dir>/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `<user-config-dir>/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.
+Routing and conversation configuration: `ROUTER_MODEL` is used only by profiles with `selection: "router"` and as the ensemble synthesis fallback; `SYNTHESIS_MODEL` produces ensemble output. `ROUTING_CONFIG_PATH` defaults to `<user-config-dir>/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `<user-config-dir>/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.

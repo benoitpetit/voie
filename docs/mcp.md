@@ -35,7 +35,7 @@ Takes an empty object. Returns provider names, labels, `alive`, default model ID
 
 ### `chat_completion`
 
-Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, `fallback`, and `conversation_id`. `task` guides automatic candidate selection in `auto` or in `ensemble` when `models` is omitted; supported values are `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`.
+Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, `ensemble`, `fallback`, and `conversation_id`. `task` names a routing profile from `routing.json`; omitted values use `default_profile`. Profile selection is local and deterministic unless the profile sets `selection: "router"`.
 
 ```json
 {
@@ -74,12 +74,22 @@ Automatic routing example:
 Ensemble example with automatic candidate selection and a task hint:
 
 ```json
-{"strategy":"ensemble","task":"reasoning","messages":[{"role":"user","content":"Compare these designs"}]}
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent"},"messages":[{"role":"user","content":"Compare these designs"}]}
+```
+
+Chain and debate requests can set their agent count or turn count:
+
+```json
+{"strategy":"ensemble","ensemble":{"mode":"chain","chain_agents":3},"messages":[{"role":"user","content":"Review this proposal"}]}
+```
+
+```json
+{"strategy":"ensemble","ensemble":{"mode":"debate","debate_turns":2},"messages":[{"role":"user","content":"Compare these designs"}]}
 ```
 
 When `models` contains explicit ensemble candidates, voie uses that exact list and `task` does not change it.
 
-The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. The `routing` object identifies the strategy and may include an `attempts` array recording each provider call's model, provider, attempt index, outcome (`succeeded`, `retryable_failure`, `unavailable`, `failed`), and duration in milliseconds. Automatic routing uses `ROUTER_MODEL` only when local task rules do not identify one model. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`. Selected providers receive the prompt, and the synthesizer receives successful intermediate answers.
+The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. Ensemble routing reports its algorithm, agent count, debate turns, synthesis model, and each provider call in `attempts`. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`; the synthesizer receives successful agent drafts.
 
 ### Conversation tools
 

@@ -16,15 +16,16 @@ import (
 )
 
 type chatRequest struct {
-	Model          string                `json:"model"`
-	Provider       string                `json:"provider,omitempty"`
-	Strategy       app.Strategy          `json:"strategy,omitempty"`
-	Task           string                `json:"task,omitempty"`
-	Models         []string              `json:"models,omitempty"`
-	Fallback       *app.FallbackOverride `json:"fallback,omitempty"`
-	ConversationID string                `json:"conversation_id,omitempty"`
-	Messages       []app.Message         `json:"messages"`
-	Stream         bool                  `json:"stream,omitempty"`
+	Model          string                      `json:"model"`
+	Provider       string                      `json:"provider,omitempty"`
+	Strategy       app.Strategy                `json:"strategy,omitempty"`
+	Task           string                      `json:"task,omitempty"`
+	Models         []string                    `json:"models,omitempty"`
+	Ensemble       *app.EnsembleRequestOptions `json:"ensemble,omitempty"`
+	Fallback       *app.FallbackOverride       `json:"fallback,omitempty"`
+	ConversationID string                      `json:"conversation_id,omitempty"`
+	Messages       []app.Message               `json:"messages"`
+	Stream         bool                        `json:"stream,omitempty"`
 }
 
 func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
@@ -58,7 +59,7 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Bad request: invalid JSON — "+err.Error())
 		return
 	}
-	appRequest := app.CompletionRequest{Model: request.Model, Provider: request.Provider, Strategy: request.Strategy, Task: request.Task, Models: request.Models, Fallback: request.Fallback, ConversationID: request.ConversationID, Messages: request.Messages}
+	appRequest := app.CompletionRequest{Model: request.Model, Provider: request.Provider, Strategy: request.Strategy, Task: request.Task, Models: request.Models, Ensemble: request.Ensemble, Fallback: request.Fallback, ConversationID: request.ConversationID, Messages: request.Messages}
 	if !request.Stream {
 		response, err := h.service.Complete(r.Context(), appRequest)
 		if err != nil {
@@ -83,8 +84,12 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 			return
 		}
 		started = true
-		if resolvedModel == "" && routing != nil && len(routing.Models) > 0 {
-			resolvedModel = routing.Models[0].Model
+		if resolvedModel == "" && routing != nil {
+			if routing.SynthesisModel != "" {
+				resolvedModel = routing.SynthesisModel
+			} else if len(routing.Models) > 0 {
+				resolvedModel = routing.Models[0].Model
+			}
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
