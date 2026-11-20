@@ -1,6 +1,6 @@
 {
   "name": "voie-ai",
-  "version": "0.1.2",
+  "version": "1.0.0",
   "description": "Install the voie CLI binary from the latest GitHub release",
   "bin": {
     "voie": "bin/voie.js",
