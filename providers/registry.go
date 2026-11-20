@@ -16,5 +16,6 @@ func NewRegistry() *app.Registry {
 	registry.Register("blockrun", NewBlockRun())
 	registry.Register("pollinations", NewPollinations())
 	registry.Register("opencode2api", NewOpenCode2API())
+	registry.Register("opencode-go", NewOpenCodeGo())
 	return registry
 }

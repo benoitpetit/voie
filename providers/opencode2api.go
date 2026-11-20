@@ -20,11 +20,16 @@ const (
 	opencode2apiLocalKey = "voie-local"
 )
 
-func opencode2apiConfig() openAIKeylessConfig {
+// opencodeGatewayKey is the local gateway's own key, never an OpenCode credential.
+func opencodeGatewayKey() string {
 	key := strings.TrimSpace(os.Getenv("OPENCODE2API_KEY"))
 	if key == "" {
-		key = opencode2apiLocalKey
+		return opencode2apiLocalKey
 	}
+	return key
+}
+
+func opencode2apiConfig() openAIKeylessConfig {
 	return openAIKeylessConfig{
 		Name:           "opencode2api",
 		Label:          "OpenCode Zen",
@@ -33,7 +38,7 @@ func opencode2apiConfig() openAIKeylessConfig {
 		DefaultModel:   "oc2a-hy4-flash-free",
 		Description:    "Free OpenCode Zen models through a local opencode2api gateway",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		Headers:        map[string]string{"Authorization": "Bearer " + opencodeGatewayKey()},
 		ModelIDs: map[string]string{
 			"oc2a-beam-free":                   "beam-free",
 			"oc2a-big-pickle":                  "big-pickle",
