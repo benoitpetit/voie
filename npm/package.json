@@ -1,0 +1,34 @@
+{
+  "name": "voie-ai",
+  "version": "0.1.2",
+  "description": "Install the voie CLI binary from the latest GitHub release",
+  "bin": {
+    "voie": "bin/voie.js",
+    "voie-ai": "bin/voie.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "test": "node --test scripts/*.test.js"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "!scripts/*.test.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benoitpetit/voie.git",
+    "directory": "npm"
+  },
+  "license": "MIT",
+  "keywords": [
+    "voie",
+    "cli",
+    "ai",
+    "openai"
+  ]
+}
