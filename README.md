@@ -1,18 +1,18 @@
 # voie
 
-![voie — free ai api](docs/voie-banner.png)
+![voie free ai api](docs/voie-banner.png)
 
-`voie` is a free OpenAI-compatible API layer for agents. One Go executable relays requests to public model providers and serves the same registry over an OpenAI-compatible HTTP API, a CLI, and an MCP server on stdio. Every interface shares provider selection, routing, validation, timeouts, and error handling.
+`voie` is a free, OpenAI-compatible API relay. One Go executable relays requests to public model providers and exposes the same provider registry through an HTTP API, a CLI, and an MCP server over stdio. Those interfaces share provider selection, routing, validation, timeouts, and error handling.
 
-**voie does not run models.** Inference happens on third-party consumer services. The binary is an adapter, not a runtime: nothing is downloaded, loaded, or executed on the host except the binary itself and an optional SQLite conversation database.
+voie does not run models. Inference stays on the public services it forwards to. The executable downloads and runs nothing else, apart from an optional SQLite conversation database.
 
-Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID that `voie models` returns. No account and no API key. The catalogue is runtime data and is deliberately not listed here: read it with `voie models --json` or `GET /v1/models` against a running server.
+Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID returned by `voie models`. No account and no API key. Model IDs are runtime data; read them with `voie models --json` or `GET /v1/models` against a running server.
 
-Of the thirteen registered providers, seven are reverse-engineered public endpoints, four are keyless OpenAI-compatible APIs, and two relay through an optional local gateway: `oc2a-*` for a free catalogue and `oc2ago-*` for a subscription-backed catalogue. Their availability can change without notice, and they may rate-limit or block automated access. Some providers may log prompts upstream; others state that data is not used for training. Browser-backed chat requires Chrome or Chromium on the host; the other providers and modes do not require a browser.
+The registry has thirteen providers: seven reverse-engineered public endpoints, four keyless OpenAI-compatible APIs, and two relays through an optional local gateway (`oc2a-*` for a free catalogue and `oc2ago-*` for a subscription-backed catalogue). Availability can change without notice, and providers may rate-limit or block automated access. Some log prompts upstream; others state that they do not use data for training. Browser-backed chat needs Chrome or Chromium on the host; nothing else does.
 
-The two gateway-backed providers need a local OpenAI-compatible gateway on `http://127.0.0.1:8090`. Its loopback key is configured in the gateway (default `voie-local`) and mirrored in `voie`'s runtime configuration; callers of `voie` still provide no key. Free Zen IDs are capped by the upstream daily quota. **Go IDs (`oc2ago-*`) require a Go API key or a Go OAuth connection configured in the gateway** — see [Local gateway setup](docs/local-gateway.md). Go models are included in a subscription, not free upstream.
+The two gateway-backed providers need a local OpenAI-compatible gateway at `http://127.0.0.1:8090`. Its loopback key is set in the gateway (default `voie-local`) and mirrored in voie's runtime configuration; callers still supply no key. Free IDs are capped by the upstream daily quota. Go IDs (`oc2ago-*`) need a Go API key or a Go OAuth connection in the gateway; see [Local gateway setup](docs/local-gateway.md). Those models are included in a subscription.
 
-Public provider services receive the prompts sent to them; avoid sending secrets or confidential data unless you have reviewed that service's data practices. Some providers return complete responses rather than streaming tokens, so `voie` emits one final content chunk for those requests.
+Public services receive the prompts you send, so keep secrets out of requests unless you have checked the service's data practices. Some providers return a complete answer instead of streaming tokens; voie emits one final content chunk for those requests.
 
 ## Install and run
 
@@ -154,9 +154,9 @@ Automatic routing and ensembles are optional request strategies; requests that o
 
 ## Fallback and retries
 
-Provider failures are classified as transient, unavailable, or permanent. Network errors and HTTP `408`, `429`, or `5xx` responses are transient and eligible for retries and fallback; a missing model is treated as unavailable and moves straight to fallback; other `4xx` errors are permanent and never retried. Retries and fallback happen only before the first streamed content chunk — once a stream has delivered content, a failure ends it.
+Provider failures are classified as transient, unavailable, or permanent. Network errors and HTTP `408`, `429`, or `5xx` responses are transient and eligible for retries and fallback; a missing model is treated as unavailable and moves straight to fallback; other `4xx` errors are permanent and never retried. Retries and fallback happen only before the first streamed content chunk. Once a stream has delivered content, a failure ends it.
 
-A retry repeats the same model; fallback then tries other models. `FALLBACK_MAX_RETRIES` bounds same-model retries and `FALLBACK_MAX_MODELS` bounds how many other models are attempted (both default to `1`, with `0`–`3` valid). `0` disables that behavior and `FALLBACK_ENABLED=false` disables both. Per-model candidate lists live in `routing.json` under `fallback.models` and override the environment values:
+A retry repeats the same model; fallback then tries other models. `FALLBACK_MAX_RETRIES` bounds same-model retries and `FALLBACK_MAX_MODELS` bounds how many other models are attempted (both default to `1`, with values from 0 to 3). `0` disables that behavior and `FALLBACK_ENABLED=false` disables both. Per-model candidate lists live in `routing.json` under `fallback.models` and override the environment values:
 
 ```json
 {
@@ -173,7 +173,7 @@ A retry repeats the same model; fallback then tries other models. `FALLBACK_MAX_
 
 Fallback candidates are chosen in this order: the request's explicit `fallback.models`, then the configured per-model list, then, for automatic and ensemble strategies, the other eligible models (limited by `max_fallback_models`). An explicit `provider` constraint is honored when candidates resolve. Ensemble candidates each get one attempt, exclude the synthesizer and router, and the synthesis step reuses any remaining fallback budget. An explicitly empty `fallback.models` list clears every candidate.
 
-Each request can override the policy with a `fallback` object — HTTP and MCP accept `{"enabled": false, "max_retries": 0, "max_fallback_models": 0, "models": ["model-b"]}`, and the CLI exposes the same controls as `--fallback`, `--no-fallback`, `--fallback-retries N`, `--fallback-limit N`, and repeatable `--fallback-model ID`. Bound and ID validation happens before any provider is called, so an invalid override fails fast with an input error.
+Each request can override the policy with a `fallback` object. HTTP and MCP accept `{"enabled": false, "max_retries": 0, "max_fallback_models": 0, "models": ["model-b"]}`, and the CLI exposes the same controls as `--fallback`, `--no-fallback`, `--fallback-retries N`, `--fallback-limit N`, and repeatable `--fallback-model ID`. Bound and ID validation happens before any provider is called, so an invalid override fails fast with an input error.
 
 Responses include `routing.attempts`: one entry per provider call with the model, provider, attempt index, outcome, and duration in milliseconds. Outcomes are `succeeded`, `retryable_failure`, `unavailable`, and `failed`. Interface examples are in [api-reference.md](api-reference.md), [docs/cli.md](docs/cli.md), and [docs/mcp.md](docs/mcp.md).
 
