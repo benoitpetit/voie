@@ -31,7 +31,7 @@ func TestOpenCodeGoMetadataAndModelSupport(t *testing.T) {
 }
 
 func TestOpenCodeGoMapsFriendlyIDToGatewayAndKeepsResponseID(t *testing.T) {
-	t.Setenv("OPENCODE2API_KEY", "test-gateway-key")
+	t.Setenv("OPENCODE_ZEN_KEY", "test-gateway-key")
 	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "http://127.0.0.1:8090/v1/chat/completions" {
 			t.Errorf("request = %s %s", r.Method, r.URL.String())

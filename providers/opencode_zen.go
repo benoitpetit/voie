@@ -8,35 +8,35 @@ import (
 	"github.com/benoitpetit/voie/internal/app"
 )
 
-// OpenCode2API relays to a local opencode2api gateway, which drives the free
+// OpenCodeZen relays to a local opencode-zen gateway, which drives the free
 // models of OpenCode Zen. The gateway exposes an OpenAI-compatible endpoint on
 // loopback and requires only a local API key.
-type OpenCode2API struct {
+type OpenCodeZen struct {
 	*openAIKeylessProvider
 }
 
 const (
-	opencode2apiBaseURL  = "http://127.0.0.1:8090"
-	opencode2apiLocalKey = "voie-local"
+	opencodeZenBaseURL  = "http://127.0.0.1:8090"
+	opencodeZenLocalKey = "voie-local"
 )
 
 // opencodeGatewayKey is the local gateway's own key, never an OpenCode credential.
 func opencodeGatewayKey() string {
-	key := strings.TrimSpace(os.Getenv("OPENCODE2API_KEY"))
+	key := strings.TrimSpace(os.Getenv("OPENCODE_ZEN_KEY"))
 	if key == "" {
-		return opencode2apiLocalKey
+		return opencodeZenLocalKey
 	}
 	return key
 }
 
-func opencode2apiConfig() openAIKeylessConfig {
+func opencodeZenConfig() openAIKeylessConfig {
 	return openAIKeylessConfig{
-		Name:           "opencode2api",
+		Name:           "opencode-zen",
 		Label:          "OpenCode Zen",
-		URL:            opencode2apiBaseURL + "/healthz",
-		CompletionsURL: opencode2apiBaseURL + "/v1/chat/completions",
+		URL:            opencodeZenBaseURL + "/healthz",
+		CompletionsURL: opencodeZenBaseURL + "/v1/chat/completions",
 		DefaultModel:   "oc2a-hy4-flash-free",
-		Description:    "Free OpenCode Zen models through a local opencode2api gateway",
+		Description:    "Free OpenCode Zen models through a local opencode-zen gateway",
 		SupportsStream: true,
 		Headers:        map[string]string{"Authorization": "Bearer " + opencodeGatewayKey()},
 		ModelIDs: map[string]string{
@@ -55,8 +55,8 @@ func opencode2apiConfig() openAIKeylessConfig {
 	}
 }
 
-var _ app.Provider = (*OpenCode2API)(nil)
+var _ app.Provider = (*OpenCodeZen)(nil)
 
-func NewOpenCode2API() *OpenCode2API {
-	return &OpenCode2API{newOpenAIKeylessProvider(opencode2apiConfig(), &http.Client{Timeout: openAIKeylessTimeout})}
+func NewOpenCodeZen() *OpenCodeZen {
+	return &OpenCodeZen{newOpenAIKeylessProvider(opencodeZenConfig(), &http.Client{Timeout: openAIKeylessTimeout})}
 }

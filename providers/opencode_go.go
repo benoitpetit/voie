@@ -17,8 +17,8 @@ func opencodeGoConfig() openAIKeylessConfig {
 	return openAIKeylessConfig{
 		Name:           "opencode-go",
 		Label:          "OpenCode Go",
-		URL:            opencode2apiBaseURL + "/healthz",
-		CompletionsURL: opencode2apiBaseURL + "/v1/chat/completions",
+		URL:            opencodeZenBaseURL + "/healthz",
+		CompletionsURL: opencodeZenBaseURL + "/v1/chat/completions",
 		DefaultModel:   "oc2ago-gpt-6-luna",
 		Description:    "OpenCode Go models via a local gateway; requires a Go API key or OAuth connection in the gateway",
 		SupportsStream: true,

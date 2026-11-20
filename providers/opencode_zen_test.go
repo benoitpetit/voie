@@ -9,9 +9,9 @@ import (
 	"github.com/benoitpetit/voie/internal/app"
 )
 
-func TestOpenCode2APIMetadataAndModelSupport(t *testing.T) {
-	info := NewOpenCode2API().GetInfo()
-	if info.Name != "opencode2api" || info.DefaultModel != "oc2a-hy4-flash-free" {
+func TestOpenCodeZenMetadataAndModelSupport(t *testing.T) {
+	info := NewOpenCodeZen().GetInfo()
+	if info.Name != "opencode-zen" || info.DefaultModel != "oc2a-hy4-flash-free" {
 		t.Fatalf("GetInfo() = %#v", info)
 	}
 	if info.Label != "OpenCode Zen" {
@@ -21,9 +21,9 @@ func TestOpenCode2APIMetadataAndModelSupport(t *testing.T) {
 		t.Errorf("SupportedModels = %d, want 11: %v", len(info.SupportedModels), info.SupportedModels)
 	}
 	if !info.Working || info.NeedsAuth || info.ReverseEngineering || !info.SupportsStream {
-		t.Errorf("unexpected OpenCode2API capabilities in GetInfo(): %#v", info)
+		t.Errorf("unexpected OpenCodeZen capabilities in GetInfo(): %#v", info)
 	}
-	provider := NewOpenCode2API()
+	provider := NewOpenCodeZen()
 	if !provider.SupportsModel("OC2A-HY4-FLASH-FREE") {
 		t.Error("SupportsModel rejected oc2a-hy4-flash-free")
 	}
@@ -32,8 +32,8 @@ func TestOpenCode2APIMetadataAndModelSupport(t *testing.T) {
 	}
 }
 
-func TestOpenCode2APIMapsFriendlyIDToGatewayAndKeepsResponseID(t *testing.T) {
-	t.Setenv("OPENCODE2API_KEY", "test-gateway-key")
+func TestOpenCodeZenMapsFriendlyIDToGatewayAndKeepsResponseID(t *testing.T) {
+	t.Setenv("OPENCODE_ZEN_KEY", "test-gateway-key")
 	useKeylessProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.String() != "http://127.0.0.1:8090/v1/chat/completions" {
 			t.Errorf("request = %s %s", r.Method, r.URL.String())
@@ -54,7 +54,7 @@ func TestOpenCode2APIMapsFriendlyIDToGatewayAndKeepsResponseID(t *testing.T) {
 		_, _ = io.WriteString(w, `{"model":"hy4-flash-free","choices":[{"message":{"role":"assistant","content":"OK"}}]}`)
 	}))
 
-	response, err := NewOpenCode2API().ChatCompletion(testProviderContext(),
+	response, err := NewOpenCodeZen().ChatCompletion(testProviderContext(),
 		[]Message{{Role: "user", Content: "Hello"}}, "oc2a-hy4-flash-free")
 	if err != nil {
 		t.Fatal(err)
@@ -64,22 +64,22 @@ func TestOpenCode2APIMapsFriendlyIDToGatewayAndKeepsResponseID(t *testing.T) {
 	}
 }
 
-func TestOpenCode2APIClassifiesUpstreamFailures(t *testing.T) {
+func TestOpenCodeZenClassifiesUpstreamFailures(t *testing.T) {
 	for _, tc := range statusTable() {
 		t.Run(tc.name, func(t *testing.T) {
 			const secret = "gateway-internal-body"
 			useKeylessProviderResponse(t, tc.status, secret)
-			_, err := NewOpenCode2API().ChatCompletion(testProviderContext(),
+			_, err := NewOpenCodeZen().ChatCompletion(testProviderContext(),
 				[]Message{{Role: "user", Content: "hello"}}, "oc2a-hy4-flash-free")
 			classifyFailure(t, err, tc.category, tc.status, secret)
 		})
 	}
 }
 
-func TestOpenCode2APINetworkFailureIsTransient(t *testing.T) {
+func TestOpenCodeZenNetworkFailureIsTransient(t *testing.T) {
 	useKeylessProviderNetworkFailure(t)
 
-	_, err := NewOpenCode2API().ChatCompletion(testProviderContext(),
+	_, err := NewOpenCodeZen().ChatCompletion(testProviderContext(),
 		[]Message{{Role: "user", Content: "hello"}}, "oc2a-hy4-flash-free")
 	classifyFailure(t, err, app.FailureTransient, 0, "")
 }
