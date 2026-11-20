@@ -18,7 +18,7 @@ Public services receive the prompts you send, so keep secrets out of requests un
 
 ### Install a release
 
-The installer scripts download the latest public release and verify its SHA-256 checksum before installing. They do not change your `PATH` or shell configuration. With Node.js installed, `npm install -g voie-ai` fetches the same binary, and `npx voie-ai ...` runs it without a global install. See [all releases](https://github.com/benoitpetit/voie/releases) for manual archive downloads.
+The installer scripts download the latest public release and verify its SHA-256 checksum before installing. They do not change your `PATH` or shell configuration. With Node.js installed, the [voie-ai package](https://www.npmjs.com/package/voie-ai) fetches the same binary with `npm install -g voie-ai`; `npx voie-ai ...` runs it without a global install. See [all releases](https://github.com/benoitpetit/voie/releases) for manual archive downloads.
 
 **Linux** (amd64 or arm64):
 
