@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.2 - 2026-11-20
+
+### Changed
+
+- README and website now describe voie as an API relay with HTTP, CLI and MCP surfaces, without centering the presentation on agents.
+- Provider and model names stay out of READMEs, release notes and the website.
+
 ## v0.1.1 - 2026-11-20
 
 ### Added
