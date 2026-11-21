@@ -46,7 +46,7 @@ func TestLoadRoutingPolicyRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-func TestValidateRoutingPolicyRejectsUnknownReferences(t *testing.T) {
+func TestValidateRoutingPolicyRejectsUnknownModelAndTaskReferences(t *testing.T) {
 	known := map[string]struct{}{"provider/model": {}}
 	cases := []struct {
 		name   string
@@ -54,8 +54,6 @@ func TestValidateRoutingPolicyRejectsUnknownReferences(t *testing.T) {
 	}{
 		{name: "model reference", policy: RoutingPolicy{Tasks: map[string]TaskRule{"coding": {PreferredModels: []string{"missing/model"}}}}},
 		{name: "task name", policy: RoutingPolicy{Tasks: map[string]TaskRule{"unsupported": {}}}},
-		{name: "model capability", policy: RoutingPolicy{Models: map[string]ModelDescriptor{"provider/model": {Capabilities: []string{"unknown"}}}}},
-		{name: "task capability", policy: RoutingPolicy{Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"unknown"}}}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -63,6 +61,28 @@ func TestValidateRoutingPolicyRejectsUnknownReferences(t *testing.T) {
 				t.Fatal("ValidateRoutingPolicy accepted an unknown reference")
 			}
 		})
+	}
+}
+
+func TestValidateRoutingPolicyAllowsCustomCapabilities(t *testing.T) {
+	policy := RoutingPolicy{
+		Models:   map[string]ModelDescriptor{"provider/model": {Capabilities: []string{"vision", "long-context"}}},
+		Profiles: map[string]TaskRule{"image-review": {RequiredCapabilities: []string{"vision"}}},
+	}
+	if err := ValidateRoutingPolicy(policy, map[string]struct{}{"provider/model": {}}); err != nil {
+		t.Fatalf("custom capability names should be accepted: %v", err)
+	}
+}
+
+func TestValidateRoutingPolicyRejectsEmptyCapabilities(t *testing.T) {
+	cases := []RoutingPolicy{
+		{Models: map[string]ModelDescriptor{"provider/model": {Capabilities: []string{"  "}}}},
+		{Profiles: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"\t"}}}},
+	}
+	for _, policy := range cases {
+		if err := ValidateRoutingPolicy(policy, map[string]struct{}{"provider/model": {}}); err == nil {
+			t.Fatal("ValidateRoutingPolicy accepted an empty capability name")
+		}
 	}
 }
 

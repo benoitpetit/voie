@@ -106,7 +106,7 @@ func TestMCPChatCompletionAcceptsAutomaticStrategies(t *testing.T) {
 	service, _ := mcpTestService(t, nil, time.Second)
 	session, closeSessions := connectTestClient(t, NewServer(service))
 	defer closeSessions()
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{"strategy": "auto", "task": "coding", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}})
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{"strategy": "auto", "task": "general", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}})
 	if err != nil || result.IsError || result.StructuredContent == nil {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}

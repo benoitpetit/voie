@@ -57,16 +57,16 @@ func TestServiceAutoUsesRouterAmongEligibleModels(t *testing.T) {
 	registry.Register("b", b)
 	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
 		Models: map[string]ModelDescriptor{
-			"model-a": {Description: "coding model", Capabilities: []string{"coding"}},
+			"model-a": {Description: "writing model", Capabilities: []string{"writing"}},
 			"model-b": {Description: "writing model", Capabilities: []string{"writing"}},
 		},
-		Tasks: map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}}},
+		Tasks: map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}, Selection: SelectionRouter}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var events []ProgressEvent
-	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "write a short note"}}, OnProgress: func(event ProgressEvent) { events = append(events, event) }})
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "write a short note"}}, OnProgress: func(event ProgressEvent) { events = append(events, event) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,24 +81,26 @@ func TestServiceAutoUsesRouterAmongEligibleModels(t *testing.T) {
 	}
 }
 
-func TestServiceAutoRechecksCandidatesAfterRouterClassifiesTask(t *testing.T) {
+func TestServiceAutoRejectsRouterChoiceOutsideProfileCandidates(t *testing.T) {
 	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"writing","model":"model-a","reason":"incorrect capability choice"}`}}
 	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
 	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	c := &routingStub{info: ProviderInfo{Name: "c", Working: true, SupportedModels: []string{"model-c"}}}
 	registry := NewRegistry()
 	registry.Register("router", router)
 	registry.Register("a", a)
 	registry.Register("b", b)
-	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"writing"}}}, Tasks: map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}}}}})
+	registry.Register("c", c)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"writing"}}, "model-c": {Capabilities: []string{"writing"}}}, Tasks: map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}, Selection: SelectionRouter}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "draft"}}})
-	if err != nil {
-		t.Fatal(err)
+	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "draft"}}})
+	if !errors.Is(err, ErrRouting) {
+		t.Fatalf("Complete() error = %v, want ErrRouting for an ineligible router choice", err)
 	}
-	if response.Model != "model-b" || b.callCount() != 1 || a.callCount() != 0 {
-		t.Fatalf("response=%+v calls a/b=%d/%d", response, a.callCount(), b.callCount())
+	if a.callCount() != 0 || b.callCount() != 0 || c.callCount() != 0 || router.callCount() != 1 {
+		t.Fatalf("calls router/a/b/c=%d/%d/%d/%d, want only the router call", router.callCount(), a.callCount(), b.callCount(), c.callCount())
 	}
 }
 
@@ -117,20 +119,22 @@ func TestServiceAutoRejectsUnknownOrDisabledRouterChoice(t *testing.T) {
 				"router-model": fmt.Sprintf(`{"task":"coding","model":%q,"reason":"bad selection"}`, tc.selected),
 			}}
 			answer := &routingStub{info: ProviderInfo{Name: "answer", Working: true, SupportedModels: []string{"model-a"}}}
+			backup := &routingStub{info: ProviderInfo{Name: "backup", Working: true, SupportedModels: []string{"model-b"}}}
 			registry := NewRegistry()
 			registry.Register("router", router)
 			registry.Register("answer", answer)
+			registry.Register("backup", backup)
 			if tc.register {
 				registry.Register("disabled", &routingStub{info: ProviderInfo{Name: "disabled", Working: tc.working, SupportedModels: []string{tc.selected}}})
 			}
 			service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
-				Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, tc.selected: {Capabilities: []string{"coding"}}},
-				Tasks:  map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}}},
+				Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}}, tc.selected: {Capabilities: []string{"coding"}}},
+				Tasks:  map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
 			}})
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}}})
+			_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}}})
 			if !errors.Is(err, ErrRouting) {
 				t.Fatalf("Complete() error = %v, want ErrRouting", err)
 			}
@@ -144,14 +148,19 @@ func TestServiceAutoRejectsUnknownOrDisabledRouterChoice(t *testing.T) {
 func TestServiceAutoRejectsMalformedRouterJSON(t *testing.T) {
 	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": "not json"}}
 	answer := &routingStub{info: ProviderInfo{Name: "answer", Working: true, SupportedModels: []string{"model-a"}}}
+	backup := &routingStub{info: ProviderInfo{Name: "backup", Working: true, SupportedModels: []string{"model-b"}}}
 	registry := NewRegistry()
 	registry.Register("router", router)
 	registry.Register("answer", answer)
-	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model"})
+	registry.Register("backup", backup)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}}},
+		Tasks:  map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "hello"}}})
+	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "hello"}}})
 	if !errors.Is(err, ErrRouting) {
 		t.Fatalf("Complete() error = %v, want ErrRouting", err)
 	}
@@ -160,17 +169,17 @@ func TestServiceAutoRejectsMalformedRouterJSON(t *testing.T) {
 	}
 }
 
-func TestServiceAutoRequiresRouterWhenSelectionIsAmbiguous(t *testing.T) {
+func TestServiceAutoRequiresConfiguredRouterForRouterProfile(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register("a", &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}})
 	registry.Register("b", &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}})
 	service, err := NewService(registry, ServiceOptions{RoutingPolicy: RoutingPolicy{Models: map[string]ModelDescriptor{
 		"model-a": {Capabilities: []string{"writing"}}, "model-b": {Capabilities: []string{"writing"}},
-	}}})
+	}, Tasks: map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}, Selection: SelectionRouter}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "hello"}}})
+	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "hello"}}})
 	if !errors.Is(err, ErrRouting) {
 		t.Fatalf("Complete() error = %v, want ErrRouting", err)
 	}
@@ -202,12 +211,12 @@ func TestServiceAutoFallbackSucceedsOnEligibleCandidate(t *testing.T) {
 			"model-a": {Description: "coding model", Capabilities: []string{"coding"}},
 			"model-b": {Description: "coding model", Capabilities: []string{"coding"}},
 		},
-		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model-a"}}},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model-a"}, Selection: SelectionRouter}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "write a function"}}})
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "write a function"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +224,7 @@ func TestServiceAutoFallbackSucceedsOnEligibleCandidate(t *testing.T) {
 		t.Fatalf("response = %+v", response)
 	}
 	attempts := response.Routing.Attempts
-	if len(attempts) != 3 || attempts[0].Outcome != OutcomeRetryableFailure || attempts[1].Outcome != OutcomeRetryableFailure || attempts[2].Outcome != OutcomeSucceeded {
+	if len(attempts) != 4 || attempts[0].Model != "router-model" || attempts[0].Outcome != OutcomeSucceeded || attempts[1].Outcome != OutcomeRetryableFailure || attempts[2].Outcome != OutcomeRetryableFailure || attempts[3].Outcome != OutcomeSucceeded {
 		t.Fatalf("attempts = %+v", attempts)
 	}
 	if response.Routing.Strategy != StrategyAuto || response.Routing.Task != "coding" {
@@ -242,13 +251,13 @@ func TestServiceAutoFallbackRequestListPrecedence(t *testing.T) {
 		Models: map[string]ModelDescriptor{
 			"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}}, "model-c": {Capabilities: []string{"coding"}},
 		},
-		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model-a", "model-b"}}},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"model-a", "model-b"}, Selection: SelectionRouter}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	response, err := service.Complete(context.Background(), CompletionRequest{
-		Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}},
+		Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}},
 		Fallback: &FallbackOverride{Models: []string{"model-c", "model-b"}},
 	})
 	if err != nil {
@@ -281,13 +290,13 @@ func TestServiceAutoFallbackDiscardsIneligibleExplicitCandidate(t *testing.T) {
 		Models: map[string]ModelDescriptor{
 			"model-a": {Capabilities: []string{"coding"}}, "model-wrong": {Capabilities: []string{"writing"}}, "model-b": {Capabilities: []string{"coding"}},
 		},
-		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}}},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	response, err := service.Complete(context.Background(), CompletionRequest{
-		Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}},
+		Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}},
 		Fallback: &FallbackOverride{Models: []string{"model-wrong", "model-b"}},
 	})
 	if err != nil {
@@ -320,12 +329,12 @@ func TestServiceAutoFallbackReturnsFinalErrorWhenExhausted(t *testing.T) {
 	registry.Register("b", pb)
 	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
 		Models: map[string]ModelDescriptor{"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}}},
-		Tasks:  map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}}},
+		Tasks:  map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Messages: []Message{{Role: "user", Content: "code"}}})
+	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}}})
 	if !errors.Is(err, ErrUpstream) {
 		t.Fatalf("error = %v, want ErrUpstream", err)
 	}

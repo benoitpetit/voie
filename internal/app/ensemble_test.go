@@ -40,9 +40,11 @@ func TestEnsembleUsesExplicitModelsAndReturnsRoutingMetadata(t *testing.T) {
 	}
 }
 
-func TestEnsembleRejectsMoreThanThreeModels(t *testing.T) {
-	service, _ := NewService(NewRegistry(), ServiceOptions{})
-	_, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyEnsemble, Models: []string{"a", "b", "c", "d"}, Messages: []Message{{Role: "user", Content: "hello"}}})
+func TestEnsembleRejectsMoreThanFiveModels(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("synth", &testProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}})
+	service, _ := NewService(registry, ServiceOptions{SynthesisModel: "synth"})
+	_, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyEnsemble, Models: []string{"a", "b", "c", "d", "e", "f"}, Messages: []Message{{Role: "user", Content: "hello"}}})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("error = %v", err)
 	}

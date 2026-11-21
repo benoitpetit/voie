@@ -156,7 +156,7 @@ func TestCLIRejectsInvalidArgumentsAndReturnsProviderErrors(t *testing.T) {
 func TestChatAllowsAutomaticStrategiesWithoutModel(t *testing.T) {
 	rt, provider := newCLITestRuntime(t)
 	var out, stderr bytes.Buffer
-	err := executeForTest(context.Background(), []string{"chat", "--strategy", "auto", "--task", "coding", "hello"}, nil, &out, &stderr, rt)
+	err := executeForTest(context.Background(), []string{"chat", "--strategy", "auto", "--task", "general", "hello"}, nil, &out, &stderr, rt)
 	if err != nil {
 		t.Fatal(err)
 	}
