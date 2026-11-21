@@ -15,20 +15,20 @@ import (
 func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	var model, provider, task, conversation, ensembleMode string
 	var strategy string
-	var models []string
-	var chainAgents, debateTurns int
+	var models, ensembleModels []string
+	var candidateCount, chainAgents, debateTurns int
 	var fallbackEnabled, fallbackDisabled bool
 	var fallbackRetries, fallbackLimit int
 	var fallbackModels []string
 	command := &cobra.Command{
 		Use:   "chat [prompt...]",
 		Short: "Generate a completion from a prompt",
-		Long:  "Send a prompt using classic model selection or automatic/ensemble routing. Classic requests require --model; auto and ensemble select models from a configured routing profile. --task names that profile. Ensemble algorithms are independent, chain, or debate; chain agents and debate turns can be tuned per request. Use --provider to constrain candidates and --conversation to resume local history. Fallback behavior can be tuned with --fallback, --no-fallback, --fallback-retries, --fallback-limit, and repeatable --fallback-model. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.",
+		Long:  "Send a prompt using classic model selection or automatic/ensemble routing. Classic requests require --model; auto and ensemble select models from a configured routing profile. --task names that profile. Ensemble algorithms are independent, chain, or debate; --candidate-count selects 2-5 agents, repeatable --ensemble-model selects exact agent models, and --debate-turns sets 0-5 debate review rounds. Use --provider to constrain candidates and --conversation to resume local history. Fallback behavior can be tuned with --fallback, --no-fallback, --fallback-retries, --fallback-limit, and repeatable --fallback-model. If no prompt argument is provided, chat reads it from stdin. Runtime configuration is loaded when chat runs; successful output contains only answer text on stdout.",
 		Example: `  voie chat --model MODEL_ID "Summarize this text"
   cat prompt.txt | voie chat --model MODEL_ID
   voie chat --model MODEL_ID --provider PROVIDER "Hello"
   voie chat --strategy auto --task coding "Review this code"
-  voie chat --strategy ensemble --models MODEL_A,MODEL_B "Compare these approaches"`,
+  voie chat --strategy ensemble --candidate-count 3 --ensemble-model MODEL_A --ensemble-model MODEL_B --ensemble-model MODEL_C "Compare these approaches"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(command *cobra.Command, args []string) error {
 			effectiveStrategy := strategy
@@ -41,21 +41,30 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 			if strategy != "" && strategy != "classic" && strategy != "auto" && strategy != "ensemble" {
 				return fmt.Errorf("strategy must be classic, auto, or ensemble")
 			}
-			if effectiveStrategy != "ensemble" && len(models) > 0 {
-				return fmt.Errorf("--models requires --strategy ensemble")
+			if effectiveStrategy != "ensemble" && (len(models) > 0 || len(ensembleModels) > 0) {
+				return fmt.Errorf("--models and --ensemble-model require --strategy ensemble")
+			}
+			if len(models) > 0 && len(ensembleModels) > 0 {
+				return fmt.Errorf("use either legacy --models or repeatable --ensemble-model, not both")
 			}
 			if effectiveStrategy == "classic" && task != "" {
 				return fmt.Errorf("--task requires auto or ensemble")
 			}
-			ensembleFlagsSet := command.Flags().Changed("ensemble-mode") || command.Flags().Changed("chain-agents") || command.Flags().Changed("debate-turns")
+			ensembleFlagsSet := command.Flags().Changed("ensemble-mode") || command.Flags().Changed("candidate-count") || command.Flags().Changed("ensemble-model") || command.Flags().Changed("chain-agents") || command.Flags().Changed("debate-turns")
 			if effectiveStrategy != "ensemble" && ensembleFlagsSet {
-				return fmt.Errorf("--ensemble-mode, --chain-agents, and --debate-turns require --strategy ensemble")
+				return fmt.Errorf("--ensemble-mode, --candidate-count, --ensemble-model, --chain-agents, and --debate-turns require --strategy ensemble")
 			}
 			var ensemble *app.EnsembleRequestOptions
 			if ensembleFlagsSet {
 				ensemble = &app.EnsembleRequestOptions{}
 				if command.Flags().Changed("ensemble-mode") {
 					ensemble.Mode = app.EnsembleMode(ensembleMode)
+				}
+				if command.Flags().Changed("candidate-count") {
+					ensemble.CandidateCount = &candidateCount
+				}
+				if command.Flags().Changed("ensemble-model") {
+					ensemble.Models = ensembleModels
 				}
 				if command.Flags().Changed("chain-agents") {
 					ensemble.ChainAgents = &chainAgents
@@ -88,7 +97,9 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	}); err != nil {
 		panic(err)
 	}
-	command.Flags().StringSliceVar(&models, "models", nil, "models to include in an ensemble")
+	command.Flags().StringSliceVar(&models, "models", nil, "legacy exact ensemble model list; prefer repeatable --ensemble-model")
+	command.Flags().StringSliceVar(&ensembleModels, "ensemble-model", nil, "exact agent model ID for an ensemble (repeatable)")
+	command.Flags().IntVar(&candidateCount, "candidate-count", 0, "number of ensemble agents to select automatically (2-5)")
 	command.Flags().StringVar(&ensembleMode, "ensemble-mode", "", "ensemble algorithm: independent, chain, or debate")
 	if err := command.RegisterFlagCompletionFunc("ensemble-mode", cobra.FixedCompletions([]string{"independent", "chain", "debate"}, cobra.ShellCompDirectiveNoFileComp)); err != nil {
 		panic(err)

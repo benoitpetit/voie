@@ -40,6 +40,16 @@ type ensembleState struct {
 
 func (s *Service) resolveEnsembleOptions(request CompletionRequest) (ensembleOptions, error) {
 	policy := s.options.RoutingPolicy.Ensemble
+	models := request.Models
+	if request.Ensemble != nil && request.Ensemble.Models != nil {
+		if request.Models != nil {
+			return ensembleOptions{}, appError(ErrInvalidInput, "provide ensemble models inside ensemble.models or at the request root, not both", nil)
+		}
+		models = request.Ensemble.Models
+		if len(models) < 2 || len(models) > maxEnsembleAgents {
+			return ensembleOptions{}, appError(ErrInvalidInput, fmt.Sprintf("ensemble.models must contain between 2 and %d model IDs", maxEnsembleAgents), nil)
+		}
+	}
 	options := ensembleOptions{
 		mode:           policy.Mode,
 		candidateCount: policy.CandidateCount,
@@ -53,9 +63,9 @@ func (s *Service) resolveEnsembleOptions(request CompletionRequest) (ensembleOpt
 		options.candidateCount = 3
 	}
 	if options.chainAgents == 0 {
-		options.chainAgents = 3
+		options.chainAgents = options.candidateCount
 	}
-	if options.debateTurns == 0 {
+	if options.debateTurns == 0 && !policy.DebateTurnsConfigured {
 		options.debateTurns = 2
 	}
 	if request.Ensemble != nil {
@@ -67,6 +77,9 @@ func (s *Service) resolveEnsembleOptions(request CompletionRequest) (ensembleOpt
 		}
 		if request.Ensemble.DebateTurns != nil {
 			options.debateTurns = *request.Ensemble.DebateTurns
+		}
+		if request.Ensemble.CandidateCount != nil {
+			options.candidateCount = *request.Ensemble.CandidateCount
 		}
 	}
 	switch options.mode {
@@ -84,20 +97,31 @@ func (s *Service) resolveEnsembleOptions(request CompletionRequest) (ensembleOpt
 		return ensembleOptions{}, appError(ErrInvalidInput, fmt.Sprintf("ensemble debate_turns must be between 0 and %d", maxDebateTurns), nil)
 	}
 	if request.Ensemble != nil {
+		if request.Ensemble.CandidateCount != nil && (options.candidateCount < 2 || options.candidateCount > maxEnsembleAgents) {
+			return ensembleOptions{}, appError(ErrInvalidInput, fmt.Sprintf("ensemble candidate_count must be between 2 and %d", maxEnsembleAgents), nil)
+		}
 		if request.Ensemble.ChainAgents != nil && options.mode != EnsembleChain {
 			return ensembleOptions{}, appError(ErrInvalidInput, "chain_agents is only valid with ensemble mode chain", nil)
 		}
 		if request.Ensemble.DebateTurns != nil && options.mode != EnsembleDebate {
 			return ensembleOptions{}, appError(ErrInvalidInput, "debate_turns is only valid with ensemble mode debate", nil)
 		}
+		if request.Ensemble.CandidateCount != nil && len(models) > 0 && options.candidateCount != len(models) {
+			return ensembleOptions{}, appError(ErrInvalidInput, "candidate_count must match the number of explicit ensemble models", nil)
+		}
+		if options.mode == EnsembleChain && request.Ensemble.CandidateCount != nil && request.Ensemble.ChainAgents != nil && options.candidateCount != options.chainAgents {
+			return ensembleOptions{}, appError(ErrInvalidInput, "candidate_count and chain_agents must match when both are set", nil)
+		}
 	}
-	if options.mode == EnsembleChain && len(request.Models) > 0 {
-		if request.Ensemble != nil && request.Ensemble.ChainAgents != nil && options.chainAgents != len(request.Models) {
+	if options.mode == EnsembleChain && len(models) > 0 {
+		if request.Ensemble != nil && request.Ensemble.ChainAgents != nil && options.chainAgents != len(models) {
 			return ensembleOptions{}, appError(ErrInvalidInput, "chain_agents must match the number of explicit ensemble models", nil)
 		}
 		if request.Ensemble == nil || request.Ensemble.ChainAgents == nil {
-			options.chainAgents = len(request.Models)
+			options.chainAgents = len(models)
 		}
+	} else if options.mode == EnsembleChain && request.Ensemble != nil && request.Ensemble.CandidateCount != nil && request.Ensemble.ChainAgents == nil {
+		options.chainAgents = options.candidateCount
 	}
 	return options, nil
 }
@@ -107,17 +131,21 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 	if options.mode == EnsembleChain {
 		limit = options.chainAgents
 	}
-	if len(request.Models) > maxEnsembleAgents {
+	models := request.Models
+	if request.Ensemble != nil && request.Ensemble.Models != nil {
+		models = request.Ensemble.Models
+	}
+	if len(models) > maxEnsembleAgents {
 		return nil, "", nil, appError(ErrInvalidInput, fmt.Sprintf("ensemble supports at most %d models", maxEnsembleAgents), nil)
 	}
-	if len(request.Models) > 0 {
+	if len(models) > 0 {
 		synthesisModel := strings.TrimSpace(s.options.SynthesisModel)
 		if synthesisModel == "" {
 			synthesisModel = strings.TrimSpace(s.options.RouterModel)
 		}
 		seen := map[string]bool{}
-		candidates := make([]ModelCandidate, 0, len(request.Models))
-		for _, model := range request.Models {
+		candidates := make([]ModelCandidate, 0, len(models))
+		for _, model := range models {
 			model = strings.TrimSpace(model)
 			if model == "" || seen[strings.ToLower(model)] {
 				return nil, "", nil, appError(ErrInvalidInput, "ensemble models must be non-empty and distinct", nil)

@@ -54,8 +54,8 @@ type chatCompletionInput struct {
 	Provider       string                      `json:"provider,omitempty" jsonschema:"optional provider name"`
 	Strategy       app.Strategy                `json:"strategy,omitempty" jsonschema:"classic, auto, or ensemble"`
 	Task           string                      `json:"task,omitempty" jsonschema:"optional routing profile name for automatic model selection; explicit ensemble models take precedence"`
-	Models         []string                    `json:"models,omitempty" jsonschema:"optional explicit ensemble model IDs"`
-	Ensemble       *app.EnsembleRequestOptions `json:"ensemble,omitempty" jsonschema:"ensemble algorithm options: independent, chain, or debate; debate_turns applies to debate and chain_agents applies to chain"`
+	Models         []string                    `json:"models,omitempty" jsonschema:"legacy optional explicit ensemble model IDs; prefer ensemble.models"`
+	Ensemble       *app.EnsembleRequestOptions `json:"ensemble,omitempty" jsonschema:"ensemble options: mode, candidate_count from 2 to 5, exact models list, chain_agents for chain compatibility, and debate_turns from 0 to 5 for debate"`
 	Fallback       *app.FallbackOverride       `json:"fallback,omitempty" jsonschema:"override the global fallback policy for this request: enabled, max_retries, max_fallback_models, or an explicit models list that replaces configured candidates"`
 	ConversationID string                      `json:"conversation_id,omitempty" jsonschema:"optional local conversation ID"`
 }

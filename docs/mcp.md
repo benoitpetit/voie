@@ -35,7 +35,7 @@ Takes an empty object. Returns provider names, labels, `alive`, default model ID
 
 ### `chat_completion`
 
-Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, `ensemble`, `fallback`, and `conversation_id`. `task` names a routing profile from `routing.json`; omitted values use `default_profile`. Profile selection is local and deterministic unless the profile sets `selection: "router"`.
+Requires `messages`; classic requests require `model`, while automatic and ensemble requests can omit it. Accepts optional `provider`, `strategy`, `task`, `models`, `ensemble`, `fallback`, and `conversation_id`. For ensembles, prefer `ensemble.candidate_count` and `ensemble.models`; root-level `models` remains supported for compatibility. `task` names a routing profile from `routing.json`; omitted values use `default_profile`. Profile selection is local and deterministic unless the profile sets `selection: "router"`.
 
 ```json
 {
@@ -71,23 +71,29 @@ Automatic routing example:
 {"strategy":"auto","task":"coding","messages":[{"role":"user","content":"Review this function"}]}
 ```
 
-Ensemble example with automatic candidate selection and a task hint:
+Ensemble example with four automatically selected candidates and a task hint:
 
 ```json
-{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent"},"messages":[{"role":"user","content":"Compare these designs"}]}
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent","candidate_count":4},"messages":[{"role":"user","content":"Compare these designs"}]}
+```
+
+Ensemble example with an exact list of three agent models:
+
+```json
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent","candidate_count":3,"models":["MODEL_A","MODEL_B","MODEL_C"]},"messages":[{"role":"user","content":"Compare these designs"}]}
 ```
 
 Chain and debate requests can set their agent count or turn count:
 
 ```json
-{"strategy":"ensemble","ensemble":{"mode":"chain","chain_agents":3},"messages":[{"role":"user","content":"Review this proposal"}]}
+{"strategy":"ensemble","ensemble":{"mode":"chain","candidate_count":3},"messages":[{"role":"user","content":"Review this proposal"}]}
 ```
 
 ```json
 {"strategy":"ensemble","ensemble":{"mode":"debate","debate_turns":2},"messages":[{"role":"user","content":"Compare these designs"}]}
 ```
 
-When `models` contains explicit ensemble candidates, voie uses that exact list and `task` does not change it.
+When `ensemble.models` contains explicit candidates, voie uses that exact list and `task` does not change it. If `candidate_count` is included, it must match the list length. `debate_turns` accepts 0–5; zero skips review rounds and goes from initial drafts to synthesis.
 
 The result includes assistant text and structured `text`, `model`, and `provider` fields, plus optional `routing` and `conversation_id`. Ensemble routing reports its algorithm, agent count, debate turns, synthesis model, and each provider call in `attempts`. Ensemble calls use `SYNTHESIS_MODEL`, falling back to `ROUTER_MODEL`; the synthesizer receives successful agent drafts.
 

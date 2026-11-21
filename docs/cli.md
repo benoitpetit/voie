@@ -16,7 +16,7 @@ The monochrome ASCII wordmark appears in `voie --help`. Command output stays fre
 voie serve [--host HOST] [--port PORT]
 voie chat --model MODEL [--provider PROVIDER] [--fallback-model ID]... [PROMPT...]
 voie chat --strategy auto [--task TASK] [--conversation ID] [--fallback-model ID]... [PROMPT...]
-voie chat --strategy ensemble [--models ID,ID] [--task PROFILE] [--ensemble-mode MODE] [--chain-agents N] [--debate-turns N] [--conversation ID] [PROMPT...]
+voie chat --strategy ensemble [--candidate-count N] [--ensemble-model ID]... [--task PROFILE] [--ensemble-mode MODE] [--chain-agents N] [--debate-turns N] [--conversation ID] [PROMPT...]
 voie conversations create|list|show|delete
 voie models [--json]
 voie providers [--json]
@@ -58,7 +58,7 @@ voie mcp
 
 `serve` starts the HTTP API using configured `HOST` and `PORT`; flags override them for that run. A non-loopback host still requires `API_TOKEN`. Runtime configuration loads when a command runs, not when help is requested.
 
-`chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` names a routing profile from `routing.json`; shell completion reads configured profile names. Local selection is deterministic by default, and a profile can opt into `ROUTER_MODEL`. `--models` sets exact ensemble candidates. `--ensemble-mode` selects `independent`, `chain`, or `debate`; `--chain-agents` sets the number of sequential reviewers (2–5), and `--debate-turns` sets the number of review rounds per request (0–5). `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
+`chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` names a routing profile from `routing.json`; shell completion reads configured profile names. Local selection is deterministic by default, and a profile can opt into `ROUTER_MODEL`. `--candidate-count` selects 2–5 ensemble agents automatically. Repeat `--ensemble-model ID` to supply an exact list; when both flags are present, the count must match the number of IDs. The old `--models ID,ID` form remains supported. `--ensemble-mode` selects `independent`, `chain`, or `debate`; `--chain-agents` remains available for chain requests, and `--debate-turns` sets 0–5 review rounds (zero means no review rounds). `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
 
 Fallback can be tuned per request. `--fallback` enables retries and fallback, `--no-fallback` disables both, `--fallback-retries N` sets same-model retries and `--fallback-limit N` sets the maximum extra models tried after the primary (each `N` in `0`–`3`), and repeatable `--fallback-model ID` replaces the configured candidate list in order. When no fallback flag is present the request inherits the global policy. `--fallback` and `--no-fallback` conflict, and bounds are validated before the runtime loads; `--no-fallback` performs a single attempt.
 
@@ -67,7 +67,8 @@ voie chat --model MODEL_ID --no-fallback "Do not retry this"
 voie chat --model MODEL_ID --fallback-retries 0 "Skip the retry, go straight to fallback"
 voie chat --model MODEL_ID --fallback-model MODEL_B --fallback-model MODEL_C "Try these models in order"
 voie chat --strategy auto --task coding "Review this patch"
-voie chat --strategy ensemble --ensemble-mode chain --chain-agents 3 "Review this proposal"
+voie chat --strategy ensemble --ensemble-mode chain --candidate-count 3 "Review this proposal"
+voie chat --strategy ensemble --ensemble-mode independent --candidate-count 3 --ensemble-model MODEL_A --ensemble-model MODEL_B --ensemble-model MODEL_C "Compare these designs"
 voie chat --strategy ensemble --ensemble-mode debate --debate-turns 2 "Compare these designs"
 ID=$(voie conversations create)
 voie chat --strategy auto --conversation "$ID" "Continue the discussion"
@@ -78,7 +79,7 @@ voie conversations delete "$ID"
 
 `conversations list` prints summaries without transcripts. `show` prints the stored transcript as JSON. Sessions are stored locally, expire after `CONVERSATION_TTL` of inactivity (default `720h`), and successful turns refresh expiry.
 
-Explicit `--models` are the ensemble candidates; do not include the configured synthesis model in that list.
+Explicit `--ensemble-model` values (or legacy `--models`) are the ensemble candidates; do not include the configured synthesis model in that list.
 
 `models` lists the runtime catalogue in a table with model, owner, and provider columns, or as JSON with `--json`. `providers` lists provider metadata and performs HTTP URL reachability checks in a table with provider, label, status, and model-count columns; its JSON mode returns an object with `data`, `count`, and `timestamp`. A provider marked `alive` has responded to an HTTP GET; this does not guarantee inference works.
 

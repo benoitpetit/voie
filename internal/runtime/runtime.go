@@ -86,6 +86,7 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 		}
 		if policyConfig.Ensemble.DebateTurns != nil {
 			policy.Ensemble.DebateTurns = *policyConfig.Ensemble.DebateTurns
+			policy.Ensemble.DebateTurnsConfigured = true
 		}
 	}
 	fallback := app.FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1}

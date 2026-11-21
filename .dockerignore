@@ -1,0 +1,12 @@
+.git
+.codegraph
+.agents
+.codex
+.superpowers
+.env
+.env.*
+voie
+*.db
+*.sqlite
+*.sqlite3
+*.log

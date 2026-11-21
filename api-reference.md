@@ -41,13 +41,13 @@ Creates a completion. Classic requests use a supported `model` ID or alias; `aut
 }
 ```
 
-`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `ensemble`, `conversation_id`, and `stream` are optional, subject to the selected strategy. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
+`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `ensemble`, `conversation_id`, and `stream` are optional, subject to the selected strategy. For ensembles, prefer `ensemble.models`; root-level `models` remains supported for existing clients. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
 
 `strategy` defaults to `classic`, preserving model/provider selection. `auto` selects one eligible model from a routing profile. The optional `task` field names that profile; when omitted, `default_profile` from `routing.json` applies. Local selection is deterministic by default: preferred models are considered first, followed by model ID. A profile can set `selection` to `router` to use `ROUTER_MODEL` for a semantic choice within its eligible candidates.
 
-`ensemble` runs two to five agents and synthesizes their work. `models` may explicitly supply the exact agent list; otherwise the selected profile and its selection mode choose the agents. `ensemble.mode` is `independent`, `chain`, or `debate`; it defaults to the configured value (initially `independent`). Independent agents answer in parallel. In chain mode, each later agent reviews the previous draft; `chain_agents` sets the chain length in configuration or per request. Debate starts with parallel drafts, then each agent reviews the others' latest drafts; `debate_turns` sets the review rounds per request (0–5). `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`. The `provider` constraint applies to automatic candidates and is validated against every explicit ensemble model.
+`ensemble` runs two to five agents and synthesizes their work. `ensemble.candidate_count` chooses how many candidates to select automatically for this request. `ensemble.models` supplies an exact list of agent model IDs instead; if both fields are present, the count must match the list length. If neither is supplied, `candidate_count` from `routing.json` applies (default 3). Root-level `models` remains a legacy way to provide that exact list and cannot be combined with `ensemble.models`. `ensemble.mode` is `independent`, `chain`, or `debate`; it defaults to the configured value (initially `independent`). Independent agents answer in parallel. In chain mode, each later agent reviews the previous draft; `candidate_count` sets its length, while `chain_agents` remains supported for compatibility. Debate starts with parallel drafts, then each agent reviews the others' latest drafts; `debate_turns` sets the review rounds (0–5), and zero skips review rounds before synthesis. `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`. The `provider` constraint applies to automatic candidates and is validated against every explicit ensemble model.
 
-When supplying `models` explicitly, list 2–5 ensemble candidates; the synthesis model must be separate. `model` is not used by `auto` or `ensemble`, and strategy-specific fields are rejected when they do not apply.
+When supplying `ensemble.models` explicitly, list 2–5 distinct candidates; the synthesis model must be separate. `model` is not used by `auto` or `ensemble`, and strategy-specific fields are rejected when they do not apply.
 
 `fallback` is an optional per-request override of the global fallback policy. Omitted fields inherit the policy; `enabled` (boolean), `max_retries`, and `max_fallback_models` (each `0`–`3`) override the configured bounds, and `models` supplies candidate model IDs in fallback order, replacing the configured per-model list. An empty `models` list clears every candidate. `max_retries: 0` skips same-model retries, `max_fallback_models: 0` skips fallback, and `enabled: false` disables both. Bounds and model IDs are validated before any provider is called, so an invalid override returns `400`. Retries and fallback only happen before the first streamed content chunk.
 
@@ -70,13 +70,19 @@ Automatic routing:
 Ensemble with automatic candidate selection and a task hint:
 
 ```json
-{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent"},"messages":[{"role":"user","content":"Compare these approaches"}]}
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent","candidate_count":4},"messages":[{"role":"user","content":"Compare these approaches"}]}
+```
+
+Ensemble with an exact list of three agent models:
+
+```json
+{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent","candidate_count":3,"models":["MODEL_A","MODEL_B","MODEL_C"]},"messages":[{"role":"user","content":"Compare these approaches"}]}
 ```
 
 Sequential review chain with a request-level agent count:
 
 ```json
-{"strategy":"ensemble","task":"code-review","ensemble":{"mode":"chain","chain_agents":4},"messages":[{"role":"user","content":"Review this proposal"}]}
+{"strategy":"ensemble","task":"code-review","ensemble":{"mode":"chain","candidate_count":4},"messages":[{"role":"user","content":"Review this proposal"}]}
 ```
 
 Mutual debate with request-level review rounds:
@@ -85,7 +91,7 @@ Mutual debate with request-level review rounds:
 {"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"debate","debate_turns":2},"messages":[{"role":"user","content":"Compare these approaches"}]}
 ```
 
-To select exact ensemble candidates, provide them in `models`; in that case, `task` does not change the explicit list.
+To select exact ensemble candidates, provide them in `ensemble.models`; in that case, `task` does not change the explicit list.
 
 Use `GET /v1/models` to discover current IDs. Some providers return complete responses rather than streaming tokens, so a request with `stream: true` may receive the completed answer as one content chunk.
 

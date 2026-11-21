@@ -157,19 +157,23 @@ const (
 )
 
 // EnsembleRequestOptions overrides the configured ensemble defaults for one
-// request. ChainAgents is useful for chain mode; DebateTurns is useful for
-// debate mode.
+// request. Models supplies an exact candidate list; CandidateCount controls
+// automatic candidate selection when Models is omitted. ChainAgents is kept
+// for compatibility with existing chain requests.
 type EnsembleRequestOptions struct {
-	Mode        EnsembleMode `json:"mode,omitempty"`
-	ChainAgents *int         `json:"chain_agents,omitempty"`
-	DebateTurns *int         `json:"debate_turns,omitempty"`
+	Mode           EnsembleMode `json:"mode,omitempty" jsonschema:"optional ensemble algorithm: independent, chain, or debate"`
+	CandidateCount *int         `json:"candidate_count,omitempty" jsonschema:"optional number of agents to select automatically, from 2 to 5; when models is provided it must match the list length"`
+	Models         []string     `json:"models,omitempty" jsonschema:"optional exact list of 2 to 5 distinct agent model IDs; omit to select from the routing profile"`
+	ChainAgents    *int         `json:"chain_agents,omitempty" jsonschema:"optional legacy chain length for chain mode, from 2 to 5"`
+	DebateTurns    *int         `json:"debate_turns,omitempty" jsonschema:"optional debate review rounds for debate mode, from 0 to 5"`
 }
 
 type EnsemblePolicy struct {
-	Mode           EnsembleMode
-	CandidateCount int
-	ChainAgents    int
-	DebateTurns    int
+	Mode                  EnsembleMode
+	CandidateCount        int
+	ChainAgents           int
+	DebateTurns           int
+	DebateTurnsConfigured bool
 }
 
 // FallbackPolicy is the validated runtime fallback policy. Models maps a

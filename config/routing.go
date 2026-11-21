@@ -132,7 +132,7 @@ func ValidateRoutingPolicy(policy RoutingPolicy, registeredModels map[string]str
 		if err := validateEnsembleCount("chain_agents", policy.Ensemble.ChainAgents, 2, 5); err != nil {
 			return err
 		}
-		if err := validateEnsembleCount("debate_turns", policy.Ensemble.DebateTurns, 1, 5); err != nil {
+		if err := validateEnsembleCount("debate_turns", policy.Ensemble.DebateTurns, 0, 5); err != nil {
 			return err
 		}
 	}

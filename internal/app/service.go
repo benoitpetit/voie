@@ -129,10 +129,7 @@ func NewService(registry *Registry, options ServiceOptions) (*Service, error) {
 	if options.RoutingPolicy.Ensemble.CandidateCount == 0 {
 		options.RoutingPolicy.Ensemble.CandidateCount = 3
 	}
-	if options.RoutingPolicy.Ensemble.ChainAgents == 0 {
-		options.RoutingPolicy.Ensemble.ChainAgents = 3
-	}
-	if options.RoutingPolicy.Ensemble.DebateTurns == 0 {
+	if options.RoutingPolicy.Ensemble.DebateTurns == 0 && !options.RoutingPolicy.Ensemble.DebateTurnsConfigured {
 		options.RoutingPolicy.Ensemble.DebateTurns = 2
 	}
 	if options.Timeout < 0 {
