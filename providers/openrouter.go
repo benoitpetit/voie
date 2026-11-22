@@ -22,7 +22,7 @@ func NewOpenRouter() *OpenRouter {
 		URL:            "https://openrouter.ai/api/v1/models",
 		CompletionsURL: "https://openrouter.ai/api/v1/chat/completions",
 		DefaultModel:   "orfree",
-		ModelIDs:       map[string]string{"orfree": "openrouter/free"},
+		ModelIDs:       mergeModels(map[string]string{"orfree": "openrouter/free"}, "openrouter"),
 		Description:    "Free OpenRouter models through a configured API token",
 		SupportsStream: true,
 		TokenSupplier: func() string {

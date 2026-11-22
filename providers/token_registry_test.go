@@ -41,6 +41,44 @@ func TestTokenProviderBearerAndAlias(t *testing.T) {
 	}
 }
 
+func TestRegistryCatalogueExpandsTokenProviders(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, tc := range []struct {
+		provider string
+		wantMin  int
+	}{
+		{"openrouter", 15},
+		{"orcarouter", 3},
+		{"groq", 3},
+		{"google-ai-studio", 11},
+		{"nvidia-nim", 17},
+		{"aihubmix", 36},
+	} {
+		models := RegistryModels[tc.provider]
+		if len(models) < tc.wantMin {
+			t.Errorf("%s registry models = %d, want at least %d", tc.provider, len(models), tc.wantMin)
+		}
+	}
+}
+
+func TestOpenRouterExposesRegistryModels(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("VOIE_OPENROUTER_KEY", "test-token")
+	provider := NewOpenRouter()
+	info := provider.GetInfo()
+	if len(info.SupportedModels) < 10 {
+		t.Fatalf("OpenRouter models = %d, want the full free catalogue", len(info.SupportedModels))
+	}
+	for alias, upstream := range RegistryModels["openrouter"] {
+		if !provider.SupportsModel(alias) {
+			t.Errorf("SupportsModel(%q) = false", alias)
+		}
+		if got := provider.cfg.ModelIDs[alias]; got != upstream {
+			t.Errorf("%s maps to %q, want %q", alias, got, upstream)
+		}
+	}
+}
+
 func TestTokenProviderHiddenWithoutToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, spec := range TokenProviders {

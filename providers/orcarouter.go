@@ -21,7 +21,7 @@ func NewOrcaRouter() *OrcaRouter {
 		URL:            "https://api.orcarouter.ai/v1/models",
 		CompletionsURL: "https://api.orcarouter.ai/v1/chat/completions",
 		DefaultModel:   "orcafree",
-		ModelIDs:       map[string]string{"orcafree": "orcarouter/free"},
+		ModelIDs:       mergeModels(map[string]string{"orcafree": "orcarouter/free"}, "orcarouter"),
 		Description:    "Free OrcaRouter models through a configured API token",
 		SupportsStream: true,
 		TokenSupplier: func() string {
