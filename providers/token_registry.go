@@ -34,12 +34,64 @@ var TokenProviders = []TokenProviderSpec{
 	{Name: "aihubmix", Label: "AIHubMix", CompletionsURL: "https://aihubmix.com/v1/chat/completions", ModelsURL: "https://aihubmix.com/v1/models", Alias: "ahfree", UpstreamModel: "coding-glm-5.3-flash-free", EnvVar: "VOIE_AIHUBMIX_KEY"},
 }
 
+const cloudflareAccountKey = "cloudflare-ai-account"
+
+func cloudflareAccount() string {
+	if account := strings.TrimSpace(os.Getenv("VOIE_CLOUDFLARE_ACCOUNT_ID")); account != "" {
+		return account
+	}
+	store, err := config.LoadCredentials()
+	if err == nil {
+		if account := store.Raw(cloudflareAccountKey); account != "" {
+			return account
+		}
+	}
+	return ""
+}
+
 func cloudflareURL(path string) string {
-	account := strings.TrimSpace(os.Getenv("VOIE_CLOUDFLARE_ACCOUNT_ID"))
+	account := cloudflareAccount()
 	if account == "" {
 		account = "ACCOUNT_ID"
 	}
 	return "https://api.cloudflare.com/client/v4/accounts/" + account + "/ai/v1/" + path
+}
+
+// CloudflareAccountKey exposes the credentials key used by `voie connect`.
+func CloudflareAccountKey() string { return cloudflareAccountKey }
+
+// ConnectField is one value `voie connect` must collect for a provider.
+type ConnectField struct {
+	Key     string // credentials key
+	Label   string
+	Secret  bool
+	Default string
+}
+
+// ConnectFields returns the credentials a provider needs. Most need only a
+// token; Cloudflare Workers AI also needs an account id embedded in its URL.
+func ConnectFields(provider string) []ConnectField {
+	if provider == "cloudflare-ai" {
+		return []ConnectField{
+			{Key: provider, Label: "API token", Secret: true},
+			{Key: cloudflareAccountKey, Label: "Cloudflare account ID", Secret: false},
+		}
+	}
+	return []ConnectField{{Key: provider, Label: "API token", Secret: true, Default: localKeyDefault(provider)}}
+}
+
+func localKeyDefault(provider string) string {
+	switch provider {
+	case "opencode-zen", "opencode-go", "antigravity", "kiro", "cline":
+		return "voie-local"
+	}
+	if _, ok := ACPProviderSpecByName(provider); ok {
+		return "voie-local"
+	}
+	if _, ok := ExternalGatewayByName(provider); ok {
+		return "voie-local"
+	}
+	return ""
 }
 
 // TokenProvider is one instance of the declarative catalogue.
@@ -62,6 +114,10 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 			store, _ := config.LoadCredentials()
 			return store.Token(spec.Name)
 		},
+	}
+	if spec.Name == "cloudflare-ai" {
+		cfg.URLSupplier = func() string { return cloudflareURL("models") }
+		cfg.CompletionsURLSupplier = func() string { return cloudflareURL("chat/completions") }
 	}
 	return &TokenProvider{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec}
 }

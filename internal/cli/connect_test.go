@@ -5,6 +5,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/providers"
 )
 
 func runConnect(t *testing.T, args []string, stdin string, check func(string, string) error) (string, string, error) {
@@ -100,6 +103,35 @@ func TestDisconnectRemovesToken(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "not connected") {
 		t.Errorf("token was not removed:\n%s", stdout)
+	}
+}
+
+func TestConnectCollectsAllProviderFields(t *testing.T) {
+	fields := providers.ConnectFields("cloudflare-ai")
+	if len(fields) != 2 || fields[0].Key != "cloudflare-ai" || fields[1].Key != providers.CloudflareAccountKey() {
+		t.Fatalf("Cloudflare fields = %+v", fields)
+	}
+	for _, provider := range []string{"groq", "openrouter", "codebuddy"} {
+		if got := providers.ConnectFields(provider); len(got) != 1 {
+			t.Errorf("%s fields = %+v, want one token field", provider, got)
+		}
+	}
+}
+
+func TestConnectAcceptsExtraField(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_, _, err := runConnect(t, []string{
+		"cloudflare-ai", "--token", "cf-token", "--field", providers.CloudflareAccountKey() + "=account-123",
+	}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Raw(providers.CloudflareAccountKey()); got != "account-123" {
+		t.Errorf("saved account = %q", got)
 	}
 }
 

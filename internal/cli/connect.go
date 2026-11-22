@@ -45,6 +45,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 		check = validateToken
 	}
 	var token string
+	var fields []string
 	var list bool
 	command := &cobra.Command{
 		Use:   "connect [provider]",
@@ -93,19 +94,40 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			value := strings.TrimSpace(token)
-			if value == "" {
-				value, err = readToken(command)
-				if err != nil {
-					return err
+			required := providers.ConnectFields(provider)
+			supplied := make(map[string]string)
+			for _, item := range fields {
+				key, value, ok := strings.Cut(item, "=")
+				if !ok {
+					return fmt.Errorf("--field must be key=value, got %q", item)
 				}
+				supplied[strings.TrimSpace(key)] = strings.TrimSpace(value)
 			}
-			if value == "" {
-				if provider == "opencode-zen" || provider == "opencode-go" {
-					value = "voie-local"
-				} else {
-					return fmt.Errorf("a token is required for %s", provider)
+			if first := strings.TrimSpace(token); first != "" && len(required) > 0 {
+				supplied[required[0].Key] = first
+			}
+			for _, field := range required {
+				value := supplied[field.Key]
+				if value == "" {
+					if field.Secret {
+						value, err = readTokenWithLabel(command, field.Label)
+					} else {
+						value, err = readValueWithLabel(command, field.Label)
+					}
+					if err != nil {
+						return err
+					}
 				}
+				if value == "" {
+					value = field.Default
+				}
+				if value == "" {
+					return fmt.Errorf("%s is required for %s", field.Label, provider)
+				}
+				if err := store.Set(field.Key, value); err != nil {
+					return fmt.Errorf("save %s credential: %w", provider, err)
+				}
+				supplied[field.Key] = value
 			}
 			if isGatewayProvider(provider) {
 				if _, err := connectInstaller(command.Context(), provider); err != nil {
@@ -113,23 +135,27 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				}
 			}
 			if check != nil {
-				if err := check(provider, value); err != nil {
+				if err := check(provider, supplied[provider]); err != nil {
 					return fmt.Errorf("validate %s token: %w", provider, err)
 				}
-			}
-			if err := store.Set(provider, value); err != nil {
-				return fmt.Errorf("save %s token: %w", provider, err)
 			}
 			fmt.Fprintf(command.OutOrStdout(), "%s connected\n", provider)
 			return nil
 		},
 	}
 	command.Flags().StringVar(&token, "token", "", "provider token (non-interactive)")
+	command.Flags().StringArrayVar(&fields, "field", nil, "additional credential as key=value (repeatable)")
 	command.Flags().BoolVar(&list, "list", false, "list connectable providers and their state")
 	return command
 }
 
 func validateToken(provider, token string) error {
+	// Cloudflare Workers AI has no documented GET /ai/v1/models endpoint;
+	// validating there returns 405 even with valid credentials. The first real
+	// completion reports authentication problems clearly instead.
+	if provider == "cloudflare-ai" {
+		return nil
+	}
 	url := ""
 	switch provider {
 	case "openrouter":
@@ -196,6 +222,26 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 		return "", fmt.Errorf("invalid provider selection %q", answer)
 	}
 	return names[index-1], nil
+}
+
+func readValueWithLabel(command *cobra.Command, label string) (string, error) {
+	fmt.Fprintf(command.ErrOrStderr(), "%s: ", label)
+	line, err := bufio.NewReader(command.InOrStdin()).ReadString('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+func readTokenWithLabel(command *cobra.Command, label string) (string, error) {
+	input := command.InOrStdin()
+	if file, ok := input.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+		fmt.Fprintf(command.ErrOrStderr(), "%s: ", label)
+		value, err := term.ReadPassword(int(file.Fd()))
+		fmt.Fprintln(command.ErrOrStderr())
+		return strings.TrimSpace(string(value)), err
+	}
+	return readValueWithLabel(command, label)
 }
 
 func readToken(command *cobra.Command) (string, error) {

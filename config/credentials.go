@@ -58,6 +58,11 @@ func LoadCredentials() (*Credentials, error) {
 	return store, nil
 }
 
+// Raw returns only the saved value, without environment override.
+func (c *Credentials) Raw(provider string) string {
+	return strings.TrimSpace(c.Tokens[provider])
+}
+
 // Token returns the environment override when set, otherwise the saved token.
 func (c *Credentials) Token(provider string) string {
 	if value := strings.TrimSpace(os.Getenv(ProviderKeyEnv(provider))); value != "" {
