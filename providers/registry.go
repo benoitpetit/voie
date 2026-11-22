@@ -18,5 +18,6 @@ func NewRegistry() *app.Registry {
 	registry.Register("opencode-go", NewOpenCodeGo())
 	registry.Register("openrouter", NewOpenRouter())
 	registry.Register("orcarouter", NewOrcaRouter())
+	registry.Register("antigravity", NewAntigravity())
 	return registry
 }
