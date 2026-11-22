@@ -7,6 +7,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/catalog"
 )
 
 // OrcaRouter relays free OrcaRouter models through its OpenAI-compatible API.
@@ -21,7 +22,8 @@ func NewOrcaRouter() *OrcaRouter {
 		URL:            "https://api.orcarouter.ai/v1/models",
 		CompletionsURL: "https://api.orcarouter.ai/v1/chat/completions",
 		DefaultModel:   "orcafree",
-		ModelIDs:       mergeModels(map[string]string{"orcafree": "orcarouter/free"}, "orcarouter"),
+		ModelIDs:       map[string]string{"orcafree": "orcarouter/free"},
+		ModelsSupplier: func() map[string]string { return catalog.Models("orcarouter") },
 		Description:    "Free OrcaRouter models through a configured API token",
 		SupportsStream: true,
 		TokenSupplier: func() string {

@@ -27,8 +27,9 @@ type openAIKeylessConfig struct {
 	Label                  string
 	URL                    string
 	CompletionsURL         string
-	URLSupplier            func() string // dynamic models/health URL
-	CompletionsURLSupplier func() string // dynamic chat URL
+	URLSupplier            func() string            // dynamic models/health URL
+	CompletionsURLSupplier func() string            // dynamic chat URL
+	ModelsSupplier         func() map[string]string // dynamically refreshed model map
 	DefaultModel           string
 	ModelIDs               map[string]string // voie ID -> upstream model ID
 	Description            string
@@ -78,9 +79,23 @@ func (p *openAIKeylessProvider) resolveURL() string {
 	return p.cfg.URL
 }
 
+func (p *openAIKeylessProvider) modelIDs() map[string]string {
+	ids := make(map[string]string, len(p.cfg.ModelIDs))
+	for id, upstream := range p.cfg.ModelIDs {
+		ids[id] = upstream
+	}
+	if p.cfg.ModelsSupplier != nil {
+		for id, upstream := range p.cfg.ModelsSupplier() {
+			ids[id] = upstream
+		}
+	}
+	return ids
+}
+
 func (p *openAIKeylessProvider) GetInfo() ProviderInfo {
-	models := make([]string, 0, len(p.cfg.ModelIDs))
-	for id := range p.cfg.ModelIDs {
+	all := p.modelIDs()
+	models := make([]string, 0, len(all))
+	for id := range all {
 		models = append(models, id)
 	}
 	sort.Strings(models)
@@ -99,12 +114,12 @@ func (p *openAIKeylessProvider) GetInfo() ProviderInfo {
 }
 
 func (p *openAIKeylessProvider) SupportsModel(model string) bool {
-	_, ok := p.cfg.ModelIDs[strings.ToLower(strings.TrimSpace(model))]
+	_, ok := p.modelIDs()[strings.ToLower(strings.TrimSpace(model))]
 	return ok
 }
 
 func (p *openAIKeylessProvider) resolve(model string) (string, error) {
-	upstream, ok := p.cfg.ModelIDs[strings.ToLower(strings.TrimSpace(model))]
+	upstream, ok := p.modelIDs()[strings.ToLower(strings.TrimSpace(model))]
 	if !ok {
 		return "", fmt.Errorf("%s: unsupported model %q", p.cfg.Name, model)
 	}

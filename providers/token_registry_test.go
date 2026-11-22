@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"testing"
+
+	"github.com/benoitpetit/voie/internal/catalog"
 )
 
 func TestTokenProvidersAreRegistered(t *testing.T) {
@@ -54,7 +56,8 @@ func TestRegistryCatalogueExpandsTokenProviders(t *testing.T) {
 		{"nvidia-nim", 17},
 		{"aihubmix", 36},
 	} {
-		models := RegistryModels[tc.provider]
+		catalog.SetSource("")
+		models := catalog.Models(tc.provider)
 		if len(models) < tc.wantMin {
 			t.Errorf("%s registry models = %d, want at least %d", tc.provider, len(models), tc.wantMin)
 		}
@@ -63,17 +66,18 @@ func TestRegistryCatalogueExpandsTokenProviders(t *testing.T) {
 
 func TestOpenRouterExposesRegistryModels(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	catalog.SetSource("")
 	t.Setenv("VOIE_OPENROUTER_KEY", "test-token")
 	provider := NewOpenRouter()
 	info := provider.GetInfo()
 	if len(info.SupportedModels) < 10 {
 		t.Fatalf("OpenRouter models = %d, want the full free catalogue", len(info.SupportedModels))
 	}
-	for alias, upstream := range RegistryModels["openrouter"] {
+	for alias, upstream := range catalog.Models("openrouter") {
 		if !provider.SupportsModel(alias) {
 			t.Errorf("SupportsModel(%q) = false", alias)
 		}
-		if got := provider.cfg.ModelIDs[alias]; got != upstream {
+		if got := provider.cfg.ModelsSupplier()[alias]; got != upstream {
 			t.Errorf("%s maps to %q, want %q", alias, got, upstream)
 		}
 	}

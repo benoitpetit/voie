@@ -7,6 +7,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/catalog"
 )
 
 // OpenRouter relays free OpenRouter models through its OpenAI-compatible API.
@@ -22,7 +23,8 @@ func NewOpenRouter() *OpenRouter {
 		URL:            "https://openrouter.ai/api/v1/models",
 		CompletionsURL: "https://openrouter.ai/api/v1/chat/completions",
 		DefaultModel:   "orfree",
-		ModelIDs:       mergeModels(map[string]string{"orfree": "openrouter/free"}, "openrouter"),
+		ModelIDs:       map[string]string{"orfree": "openrouter/free"},
+		ModelsSupplier: func() map[string]string { return catalog.Models("openrouter") },
 		Description:    "Free OpenRouter models through a configured API token",
 		SupportsStream: true,
 		TokenSupplier: func() string {

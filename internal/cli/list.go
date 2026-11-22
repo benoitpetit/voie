@@ -39,12 +39,12 @@ func runModels(stdout io.Writer, service *app.Service, jsonOutput bool) error {
 		return json.NewEncoder(stdout).Encode(map[string]interface{}{"object": "list", "data": models})
 	}
 	table := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(table, "MODEL\tOWNER\tPROVIDER"); err != nil {
+	if _, err := fmt.Fprintln(table, "MODEL\tPROVIDER"); err != nil {
 		return err
 	}
 	for _, model := range models {
 		provider, _ := model.Meta["provider"].(string)
-		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", model.ID, model.OwnedBy, provider); err != nil {
+		if _, err := fmt.Fprintf(table, "%s\t%s\n", model.ID, provider); err != nil {
 			return err
 		}
 	}

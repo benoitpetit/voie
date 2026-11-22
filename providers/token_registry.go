@@ -7,6 +7,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/catalog"
 )
 
 // TokenProviderSpec describes an OpenAI-compatible API that needs a user token.
@@ -94,19 +95,6 @@ func localKeyDefault(provider string) string {
 	return ""
 }
 
-// mergeRegistryModels augments a provider's alias map with the free model IDs
-// derived from the maintained registry (see scripts/update-models.py).
-func mergeModels(models map[string]string, provider string) map[string]string {
-	mergeRegistryModels(models, provider)
-	return models
-}
-
-func mergeRegistryModels(models map[string]string, provider string) {
-	for alias, upstream := range RegistryModels[provider] {
-		models[alias] = upstream
-	}
-}
-
 // TokenProvider is one instance of the declarative catalogue.
 type TokenProvider struct {
 	*openAIKeylessProvider
@@ -128,7 +116,7 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 			return store.Token(spec.Name)
 		},
 	}
-	mergeRegistryModels(cfg.ModelIDs, spec.Name)
+	cfg.ModelsSupplier = func() map[string]string { return catalog.Models(spec.Name) }
 	if spec.Name == "cloudflare-ai" {
 		cfg.URLSupplier = func() string { return cloudflareURL("models") }
 		cfg.CompletionsURLSupplier = func() string { return cloudflareURL("chat/completions") }
