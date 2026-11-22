@@ -2,6 +2,8 @@ package providers
 
 import (
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
@@ -14,10 +16,14 @@ type OpenCodeZen struct {
 	*openAIKeylessProvider
 }
 
-const (
-	opencodeZenBaseURL  = "http://127.0.0.1:8090"
-	opencodeZenLocalKey = "voie-local"
-)
+const opencodeZenLocalKey = "voie-local"
+
+func opencodeGatewayURL() string {
+	if value := strings.TrimSpace(os.Getenv("VOIE_OPENCODE_GATEWAY_URL")); value != "" {
+		return strings.TrimRight(value, "/")
+	}
+	return "http://127.0.0.1:8090"
+}
 
 // opencodeGatewayKey is the local gateway's own key, never an OpenCode credential.
 func opencodeGatewayKey() string {
@@ -35,8 +41,8 @@ func opencodeZenConfig() openAIKeylessConfig {
 	return openAIKeylessConfig{
 		Name:           "opencode-zen",
 		Label:          "OpenCode Zen",
-		URL:            opencodeZenBaseURL + "/healthz",
-		CompletionsURL: opencodeZenBaseURL + "/v1/chat/completions",
+		URL:            opencodeGatewayURL() + "/healthz",
+		CompletionsURL: opencodeGatewayURL() + "/v1/chat/completions",
 		DefaultModel:   "oc2a-hy4-flash-free",
 		Description:    "Free OpenCode Zen models through a local opencode-zen gateway",
 		SupportsStream: true,

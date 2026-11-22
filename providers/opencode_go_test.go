@@ -4,13 +4,28 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/benoitpetit/voie/internal/app"
 )
 
+func useGoGateway(t *testing.T) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = io.WriteString(w, `{"status":"ok","models":{"go":5},"keys":{"go":1}}`)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("VOIE_OPENCODE_GATEWAY_URL", server.URL)
+}
+
 func TestOpenCodeGoMetadataAndModelSupport(t *testing.T) {
+	useGoGateway(t)
 	provider := NewOpenCodeGo()
 	info := provider.GetInfo()
 	if info.Name != "opencode-go" || info.Label != "OpenCode Go" || info.DefaultModel != "oc2ago-gpt-6-luna" {
@@ -27,6 +42,21 @@ func TestOpenCodeGoMetadataAndModelSupport(t *testing.T) {
 	}
 	if !provider.SupportsModel("OC2AGO-GPT-6-LUNA") || provider.SupportsModel("gpt-6-luna") {
 		t.Error("SupportsModel must accept prefixed voie IDs and reject bare upstream IDs")
+	}
+}
+
+func TestOpenCodeGoHiddenWhenGatewayHasNoGoModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"status":"ok","models":{"go":0},"keys":{"go":0}}`)
+	}))
+	defer server.Close()
+	t.Setenv("VOIE_OPENCODE_GATEWAY_URL", server.URL)
+	provider := NewOpenCodeGo()
+	if provider.GetInfo().Working {
+		t.Error("Working = true although the gateway has no Go credentials or models")
+	}
+	if provider.SupportsModel("oc2ago-gpt-6-luna") {
+		t.Error("SupportsModel = true although the provider is unavailable")
 	}
 }
 

@@ -145,6 +145,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				if _, err := connectInstaller(command.Context(), provider); err != nil {
 					return fmt.Errorf("install %s toolchain: %w", provider, err)
 				}
+				if _, ok := providers.ACPProviderSpecByName(provider); ok {
+					if err := providers.StartACPBridge(provider); err != nil {
+						return fmt.Errorf("start %s ACP bridge: %w", provider, err)
+					}
+				}
 			}
 			if check != nil {
 				if err := check(provider, supplied[provider]); err != nil {

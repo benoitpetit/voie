@@ -1,7 +1,9 @@
 package providers
 
 import (
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/benoitpetit/voie/internal/app"
 )
@@ -17,8 +19,8 @@ func opencodeGoConfig() openAIKeylessConfig {
 	return openAIKeylessConfig{
 		Name:           "opencode-go",
 		Label:          "OpenCode Go",
-		URL:            opencodeZenBaseURL + "/healthz",
-		CompletionsURL: opencodeZenBaseURL + "/v1/chat/completions",
+		URL:            opencodeGatewayURL() + "/healthz",
+		CompletionsURL: opencodeGatewayURL() + "/v1/chat/completions",
 		DefaultModel:   "oc2ago-gpt-6-luna",
 		Description:    "OpenCode Go models via a local gateway; requires a Go API key or OAuth connection in the gateway",
 		SupportsStream: true,
@@ -52,4 +54,36 @@ var _ app.Provider = (*OpenCodeGo)(nil)
 
 func NewOpenCodeGo() *OpenCodeGo {
 	return &OpenCodeGo{newOpenAIKeylessProvider(opencodeGoConfig(), &http.Client{Timeout: openAIKeylessTimeout})}
+}
+
+// GetInfo hides OpenCode Go when the local gateway has no Go credentials or
+// models. The gateway reports `models.go` and `keys.go` on /healthz; without
+// them none of the declared IDs can produce a completion.
+func (p *OpenCodeGo) GetInfo() app.ProviderInfo {
+	info := p.openAIKeylessProvider.GetInfo()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(opencodeGatewayURL() + "/healthz")
+	if err != nil {
+		info.Working = false
+		return info
+	}
+	defer resp.Body.Close()
+	var health struct {
+		Models struct {
+			Go int `json:"go"`
+		} `json:"models"`
+		Keys struct {
+			Go int `json:"go"`
+		} `json:"keys"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&health) != nil {
+		info.Working = false
+		return info
+	}
+	info.Working = health.Models.Go > 0 && health.Keys.Go > 0
+	return info
+}
+
+func (p *OpenCodeGo) SupportsModel(model string) bool {
+	return p.GetInfo().Working && p.openAIKeylessProvider.SupportsModel(model)
 }

@@ -3,6 +3,7 @@ package providers
 import "testing"
 
 func TestNewKeylessModelsRouteToTheirProviders(t *testing.T) {
+	useGoGateway(t)
 	registry := NewRegistry()
 	for _, tc := range []struct{ model, provider string }{
 		{"kilo-auto", "kilo"},

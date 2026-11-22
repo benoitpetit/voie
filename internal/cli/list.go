@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -39,38 +38,17 @@ func runModels(stdout io.Writer, service *app.Service, jsonOutput bool) error {
 	if jsonOutput {
 		return json.NewEncoder(stdout).Encode(map[string]interface{}{"object": "list", "data": models})
 	}
-	groups := make(map[string][]app.ModelInfo)
+	table := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(table, "MODEL\tOWNER\tPROVIDER"); err != nil {
+		return err
+	}
 	for _, model := range models {
-		group := model.Group
-		if group == "" {
-			group = model.OwnedBy
-		}
-		groups[group] = append(groups[group], model)
-	}
-	names := make([]string, 0, len(groups))
-	for name := range groups {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		if _, err := fmt.Fprintf(stdout, "\n%s (%d)\n", name, len(groups[name])); err != nil {
-			return err
-		}
-		table := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-		if _, err := fmt.Fprintln(table, "  MODEL\tOWNER\tPROVIDER"); err != nil {
-			return err
-		}
-		for _, model := range groups[name] {
-			provider, _ := model.Meta["provider"].(string)
-			if _, err := fmt.Fprintf(table, "  %s\t%s\t%s\n", model.ID, model.OwnedBy, provider); err != nil {
-				return err
-			}
-		}
-		if err := table.Flush(); err != nil {
+		provider, _ := model.Meta["provider"].(string)
+		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", model.ID, model.OwnedBy, provider); err != nil {
 			return err
 		}
 	}
-	return nil
+	return table.Flush()
 }
 
 func newProvidersCommand(getService func() (*app.Service, error)) *cobra.Command {
