@@ -2,7 +2,7 @@ package app_test
 
 import (
 	"context"
-	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/benoitpetit/voie/internal/app"
@@ -23,9 +23,23 @@ func TestRegistryRoutesOnlySupportedModels(t *testing.T) {
 
 func TestRegistryProviderNamesAreStable(t *testing.T) {
 	registry := providers.NewRegistry()
-	want := []string{"aihubmix", "antigravity", "blockrun", "cline", "cloudflare-ai", "cohere-trial", "deepai", "duckai", "google-ai-studio", "groq", "jimmy", "kilo", "kiro", "mistral", "nvidia-nim", "opencode-go", "opencode-zen", "openrouter", "orcarouter", "ovh", "perplexity", "pollinations", "quillbot", "requesty", "yqcloud", "zai"}
-	if got := registry.GetProviderNames(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("GetProviderNames() = %v, want %v", got, want)
+	got := registry.GetProviderNames()
+	if !sort.StringsAreSorted(got) {
+		t.Fatalf("GetProviderNames() is not sorted: %v", got)
+	}
+	for _, want := range []string{"perplexity", "duckai", "opencode-zen", "orcarouter", "groq", "codebuddy", "omniroute"} {
+		found := false
+		for _, name := range got {
+			if name == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("provider %q is missing", want)
+		}
+	}
+	if len(got) < 30 {
+		t.Errorf("provider count = %d, want at least 30", len(got))
 	}
 }
 

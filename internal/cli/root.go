@@ -90,6 +90,7 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 	root.AddCommand(newConnectCommand(nil))
 	root.AddCommand(newClineBridgeCommand())
 	root.AddCommand(newInstallCommand())
+	root.AddCommand(newACPBridgeCommand())
 	return root
 }
 

@@ -24,5 +24,11 @@ func NewRegistry() *app.Registry {
 	for _, spec := range TokenProviders {
 		registry.Register(spec.Name, NewTokenProvider(spec))
 	}
+	for _, spec := range ACPProviders {
+		registry.Register(spec.Name, NewACPProvider(spec))
+	}
+	for _, spec := range ExternalGateways {
+		registry.Register(spec.Name, NewExternalGateway(spec))
+	}
 	return registry
 }

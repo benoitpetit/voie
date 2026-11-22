@@ -109,12 +109,26 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `VOIE_ANTIGRAVITY_KEY` | `voie-local` | Local CLIProxyAPI gateway key |
 | `VOIE_KIRO_KEY` | `voie-local` | Local Kiro ACP gateway key |
 | `VOIE_CLINE_KEY` | `voie-local` | Local Cline ACP bridge key |
+| `VOIE_GROQ_KEY` | saved token | Groq API token |
+| `VOIE_GOOGLE_AI_STUDIO_KEY` | saved token | Google AI Studio token |
+| `VOIE_NVIDIA_NIM_KEY` | saved token | NVIDIA NIM token |
+| `VOIE_ZAI_KEY` | saved token | Z.ai GLM token |
+| `VOIE_MISTRAL_KEY` | saved token | Mistral token |
+| `VOIE_CLOUDFLARE_AI_KEY` | saved token | Cloudflare Workers AI token |
+| `VOIE_CLOUDFLARE_ACCOUNT_ID` | `ACCOUNT_ID` | Cloudflare account used in the Workers AI URL |
+| `VOIE_COHERE_TRIAL_KEY` | saved token | Cohere trial API key |
+| `VOIE_REQUESTY_KEY` | saved token | Requesty token |
+| `VOIE_AIHUBMIX_KEY` | saved token | AIHubMix token |
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
 
 The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`. Hosted deployments should set `REQUIRE_CONVERSATION_SCOPE=true`; this makes `/v1/*` reject requests without the opaque conversation scope supplied by the trusted Worker. The setting is off by default, so the local binary does not need a hosted API key or scope.
 
 ### Connect a provider
+
+Nine hosted APIs are available by token: Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI (10,000 neurons/day free), Cohere trial, Requesty and AIHubMix. Six coding agents are available through their official ACP interface: CodeBuddy, MiniMax Code, Devin, Qoder, GitHub Copilot CLI and Cursor. Eight third-party reverse-engineered gateways (OmniRoute, Qoder2API, WindsurfAPI, Copilot API, Cursor ACP Proxy, CodeArts2API, CLI2API, WorkBuddy2API) are declared as opt-in providers: they are hidden until you install them yourself and carry ToS/account risk. `voie install <provider>` prints the exact install command for those gateways.
+
+`voie models`, `GET /v1/models` and the MCP `list_models` tool group models by provider label, so the catalogue stays readable as it grows.
 
 `voie connect` is the single entry point for providers that accept a token. Run it with no argument for an interactive menu, or `voie connect <provider> --token <value>` for scripts. Tokens are stored in `<user-config-dir>/voie/credentials.json` with `0600` permissions; the environment variables above override the saved value. `voie connect --list` shows which providers are connected, and `voie connect disconnect <provider>` removes one. A provider that needs a token and has none is absent from `voie models` and from automatic routing.
 

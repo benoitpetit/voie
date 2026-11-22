@@ -28,6 +28,7 @@ var denyHook = []byte(`export default {
 
 // Run starts the ACP child and the OpenAI-compatible HTTP endpoint.
 func Run(ctx context.Context, cfg Config) error {
+	currentFreeFeedURL = cfg.FreeFeedURL
 	if err := os.MkdirAll(cfg.ScratchDir, 0o700); err != nil {
 		return err
 	}
@@ -36,7 +37,11 @@ func Run(ctx context.Context, cfg Config) error {
 			return err
 		}
 	}
-	command := exec.CommandContext(ctx, cfg.ClinePath, "--acp", "--auto-approve", "false", "--cwd", cfg.ScratchDir, "--hooks-dir", cfg.ScratchDir)
+	args := cfg.AgentArgs
+	if len(args) == 0 {
+		args = []string{"--acp", "--auto-approve", "false", "--cwd", cfg.ScratchDir, "--hooks-dir", cfg.ScratchDir}
+	}
+	command := exec.CommandContext(ctx, cfg.ClinePath, args...)
 	command.Env = append(os.Environ(), "CLINE_PROVIDER=cline", "CLINE_MODEL="+cfg.Model)
 	stdin, err := command.StdinPipe()
 	if err != nil {

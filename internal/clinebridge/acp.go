@@ -141,12 +141,14 @@ func (c *Client) Handshake(ctx context.Context, cwd, model string) (string, erro
 	if sessionID == "" {
 		return "", fmt.Errorf("ACP session/new returned no sessionId")
 	}
-	if _, err := c.call(ctx, "session/setConfigOption", map[string]any{
-		"sessionId": sessionID,
-		"configId":  "model",
-		"value":     model,
-	}); err != nil {
-		return "", err
+	if model != "" && model != "auto" {
+		if _, err := c.call(ctx, "session/setConfigOption", map[string]any{
+			"sessionId": sessionID,
+			"configId":  "model",
+			"value":     model,
+		}); err != nil {
+			return "", err
+		}
 	}
 	return sessionID, nil
 }

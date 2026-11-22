@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/benoitpetit/voie/internal/install"
+	"github.com/benoitpetit/voie/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -15,6 +16,10 @@ func newInstallCommand() *cobra.Command {
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
+			if spec, ok := providers.ExternalGatewayByName(args[0]); ok {
+				gateway := providers.NewExternalGateway(spec)
+				return fmt.Errorf("third-party gateway must be installed manually: %s", gateway.InstallCommand())
+			}
 			if !isGatewayProvider(args[0]) {
 				return fmt.Errorf("provider %q has no installable toolchain", args[0])
 			}

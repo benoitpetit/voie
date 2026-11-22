@@ -85,6 +85,18 @@ func binaryName(provider string) string {
 		return "cline"
 	case "kiro":
 		return "kiro-cli"
+	case "codebuddy":
+		return "codebuddy"
+	case "minimax-code":
+		return "mcode"
+	case "devin":
+		return "devin"
+	case "qoder":
+		return "qoder"
+	case "copilot-cli":
+		return "copilot"
+	case "cursor":
+		return "agent"
 	default:
 		return ""
 	}
@@ -116,6 +128,36 @@ func Install(ctx context.Context, provider string, runner Runner) (string, error
 			return "", fmt.Errorf("install cline via npm: %w", err)
 		}
 		return filepath.Join(dir, "node_modules", ".bin", "cline"), nil
+	case "codebuddy":
+		if err := runner("npm", "install", "--prefix", dir, "@tencent-ai/codebuddy-code"); err != nil {
+			return "", fmt.Errorf("install codebuddy CLI: %w", err)
+		}
+		return filepath.Join(dir, "node_modules", ".bin", "codebuddy"), nil
+	case "minimax-code":
+		if err := runner("npm", "install", "--prefix", dir, "@minimax-ai/code"); err != nil {
+			return "", fmt.Errorf("install minimax code CLI: %w", err)
+		}
+		return filepath.Join(dir, "node_modules", ".bin", "mcode"), nil
+	case "devin":
+		if err := runner("npm", "install", "--prefix", dir, "@cognition-ai/devin"); err != nil {
+			return "", fmt.Errorf("install devin CLI: %w", err)
+		}
+		return filepath.Join(dir, "node_modules", ".bin", "devin"), nil
+	case "qoder":
+		if err := runner("npm", "install", "--prefix", dir, "@qoder/cli"); err != nil {
+			return "", fmt.Errorf("install qoder CLI: %w", err)
+		}
+		return filepath.Join(dir, "node_modules", ".bin", "qoder"), nil
+	case "copilot-cli":
+		if err := runner("npm", "install", "--prefix", dir, "@github/copilot-cli"); err != nil {
+			return "", fmt.Errorf("install copilot CLI: %w", err)
+		}
+		return filepath.Join(dir, "node_modules", ".bin", "copilot"), nil
+	case "cursor":
+		if err := runner("npm", "install", "--prefix", dir, "@cursor/agent"); err != nil {
+			return "", fmt.Errorf("install cursor agent CLI: %w", err)
+		}
+		return filepath.Join(dir, "node_modules", ".bin", "agent"), nil
 	case "kiro":
 		if err := runner("npm", "install", "--prefix", dir, "kiro-cli"); err != nil {
 			return "", fmt.Errorf("install kiro-cli via npm: %w", err)

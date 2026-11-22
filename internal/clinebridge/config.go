@@ -13,12 +13,14 @@ const defaultFreeFeed = "https://api.cline.bot/api/v1/ai/cline/recommended-model
 
 // Config is the local bridge configuration.
 type Config struct {
-	Listen     string
-	ClinePath  string
-	ScratchDir string
-	HookPath   string
-	LocalKey   string
-	Model      string
+	Listen      string
+	ClinePath   string
+	AgentArgs   []string
+	ScratchDir  string
+	HookPath    string
+	LocalKey    string
+	Model       string
+	FreeFeedURL string
 }
 
 type freeFeed struct {
@@ -28,9 +30,10 @@ type freeFeed struct {
 }
 
 var (
-	freeMu    sync.Mutex
-	freeIDs   []string
-	freeUntil time.Time
+	freeMu             sync.Mutex
+	freeIDs            []string
+	freeUntil          time.Time
+	currentFreeFeedURL string
 )
 
 // freeModels returns the live Cline free-model feed, cached for ten minutes.
@@ -41,6 +44,9 @@ func freeModels(ctx context.Context) ([]string, error) {
 		return append([]string(nil), freeIDs...), nil
 	}
 	url := os.Getenv("VOIE_CLINE_FREE_FEED_URL")
+	if url == "" {
+		url = currentFreeFeedURL
+	}
 	if url == "" {
 		url = defaultFreeFeed
 	}

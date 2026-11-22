@@ -17,15 +17,25 @@ import (
 	"golang.org/x/term"
 )
 
-var connectableProviders = append(
-	[]string{"opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline"},
-	providers.TokenProviderNames()...,
-)
+var connectableProviders = buildConnectableProviders()
+
+func buildConnectableProviders() []string {
+	names := []string{"opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline"}
+	names = append(names, providers.TokenProviderNames()...)
+	for _, spec := range providers.ACPProviders {
+		names = append(names, spec.Name)
+	}
+	return names
+}
 
 var connectInstaller = install.Ensure
 
 func isGatewayProvider(provider string) bool {
-	return provider == "antigravity" || provider == "kiro" || provider == "cline"
+	if provider == "antigravity" || provider == "kiro" || provider == "cline" {
+		return true
+	}
+	_, ok := providers.ACPProviderSpecByName(provider)
+	return ok
 }
 
 type tokenChecker func(provider, token string) error
