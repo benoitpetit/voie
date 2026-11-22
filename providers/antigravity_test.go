@@ -32,6 +32,17 @@ func TestAntigravityGeneratesConfig(t *testing.T) {
 	}
 }
 
+func TestAntigravityTOSViolationExposesAppealURL(t *testing.T) {
+	body := []byte(`{"error":{"details":[{"metadata":{"appeal_url":"https://example.test/appeal"}}],"reason":"TOS_VIOLATION"}}`)
+	hint := antigravityBodyHint(403, body)
+	if !strings.Contains(hint, "https://example.test/appeal") || !strings.Contains(hint, "terminal") {
+		t.Errorf("hint = %q", hint)
+	}
+	if got := antigravityBodyHint(403, []byte(`{"error":"other"}`)); got != "" {
+		t.Errorf("unrelated 403 must not get a TOS hint: %q", got)
+	}
+}
+
 func TestAntigravityWorkingRequiresBinary(t *testing.T) {
 	t.Setenv("VOIE_ANTIGRAVITY_KEY", "voie-local")
 	if NewAntigravity().GetInfo().Working {

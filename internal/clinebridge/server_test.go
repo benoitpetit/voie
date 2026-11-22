@@ -61,6 +61,19 @@ func TestClineBridgeWorkspaceUntouched(t *testing.T) {
 	}
 }
 
+func TestFinishReasonMapsUpstreamStopReason(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"end_turn", "stop"},
+		{"max_tokens", "length"},
+		{"refusal", "content_filter"},
+		{"cancelled", "stop"},
+	} {
+		if got := finishReason(tc.in); got != tc.want {
+			t.Errorf("finishReason(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestClineBridgeHealth(t *testing.T) {
 	// A local-key check is enforced; this exercises the handler shape without
 	// spawning the ACP child process.

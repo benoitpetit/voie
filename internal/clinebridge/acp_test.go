@@ -93,8 +93,12 @@ func TestCollectsAgentMessageChunks(t *testing.T) {
 	agent.push(`{"jsonrpc":"2.0","id":4,"result":{"stopReason":"end_turn"}}`)
 
 	var answer strings.Builder
-	if err := client.Prompt(context.Background(), "s1", "hi", func(token string) { answer.WriteString(token) }); err != nil {
+	reason, err := client.Prompt(context.Background(), "s1", "hi", func(token string) { answer.WriteString(token) })
+	if err != nil {
 		t.Fatal(err)
+	}
+	if reason != "end_turn" {
+		t.Errorf("stopReason = %q, want end_turn", reason)
 	}
 	if got, want := answer.String(), "Hello"; got != want {
 		t.Errorf("answer = %q, want %q", got, want)

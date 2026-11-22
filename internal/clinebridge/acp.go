@@ -152,7 +152,7 @@ func (c *Client) Handshake(ctx context.Context, cwd, model string) (string, erro
 }
 
 // Prompt sends one turn and collects agent message chunks until the turn ends.
-func (c *Client) Prompt(ctx context.Context, sessionID, text string, onChunk func(string)) error {
+func (c *Client) Prompt(ctx context.Context, sessionID, text string, onChunk func(string)) (string, error) {
 	handle := func(params map[string]any) {
 		update, _ := params["update"].(map[string]any)
 		if update == nil || update["sessionUpdate"] != "agent_message_chunk" {
@@ -164,28 +164,34 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, onChunk fun
 			onChunk(token)
 		}
 	}
-	result := make(chan error, 1)
+	type promptResult struct {
+		reason string
+		err    error
+	}
+	result := make(chan promptResult, 1)
 	go func() {
-		_, err := c.call(ctx, "session/prompt", map[string]any{
+		response, err := c.call(ctx, "session/prompt", map[string]any{
 			"sessionId": sessionID,
 			"prompt":    []any{map[string]any{"type": "text", "text": text}},
 		})
-		result <- err
+		reason, _ := response["stopReason"].(string)
+		result <- promptResult{reason: reason, err: err}
 	}()
 	for {
 		select {
-		case err := <-result:
+		case res := <-result:
 			for {
 				select {
 				case params := <-c.updates:
 					handle(params)
 				default:
-					return err
+					return res.reason, res.err
 				}
 			}
 		case params, ok := <-c.updates:
 			if !ok {
-				return <-result
+				res := <-result
+				return res.reason, res.err
 			}
 			handle(params)
 		}

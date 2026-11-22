@@ -109,7 +109,7 @@ func Run(ctx context.Context, cfg Config) error {
 			flusher, _ := w.(http.Flusher)
 			promptMu.Lock()
 			defer promptMu.Unlock()
-			_ = client.Prompt(r.Context(), sessionID, prompt, func(token string) {
+			_, promptErr := client.Prompt(r.Context(), sessionID, prompt, func(token string) {
 				payload, _ := json.Marshal(map[string]any{
 					"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": token}}},
 				})
@@ -118,13 +118,18 @@ func Run(ctx context.Context, cfg Config) error {
 					flusher.Flush()
 				}
 			})
+			if promptErr != nil {
+				payload, _ := json.Marshal(map[string]any{"error": map[string]any{"message": promptErr.Error()}})
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
+			}
 			_, _ = io.WriteString(w, "data: [DONE]\n\n")
 			return
 		}
 		var answer bytes.Buffer
 		promptMu.Lock()
 		defer promptMu.Unlock()
-		if err := client.Prompt(r.Context(), sessionID, prompt, func(token string) { answer.WriteString(token) }); err != nil {
+		reason, err := client.Prompt(r.Context(), sessionID, prompt, func(token string) { answer.WriteString(token) })
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -133,12 +138,25 @@ func Run(ctx context.Context, cfg Config) error {
 			"choices": []any{map[string]any{
 				"index":         0,
 				"message":       map[string]any{"role": "assistant", "content": answer.String()},
-				"finish_reason": "stop",
+				"finish_reason": finishReason(reason),
 			}},
 		})
 	})
 	server := &http.Server{Addr: cfg.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	return server.ListenAndServe()
+}
+
+func finishReason(reason string) string {
+	switch reason {
+	case "max_tokens":
+		return "length"
+	case "refusal":
+		return "content_filter"
+	case "cancelled":
+		return "stop"
+	default:
+		return "stop"
+	}
 }
 
 func writeDenyHook(path string) error {

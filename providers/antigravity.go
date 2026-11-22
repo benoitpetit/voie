@@ -2,10 +2,11 @@ package providers
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
@@ -80,9 +81,33 @@ func NewAntigravity() *Antigravity {
 		Description:    "Free Antigravity models through a local CLIProxyAPI gateway",
 		SupportsStream: true,
 		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		BodyHint:       antigravityBodyHint,
 		Ensure:         gateway.Ensure,
 	}
 	return &Antigravity{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), gateway: gateway}
+}
+
+func antigravityBodyHint(status int, body []byte) string {
+	if status != http.StatusForbidden || !strings.Contains(string(body), "TOS_VIOLATION") {
+		return ""
+	}
+	appeal := ""
+	var parsed map[string]any
+	if json.Unmarshal(body, &parsed) == nil {
+		if root, ok := parsed["error"].(map[string]any); ok {
+			if details, ok := root["details"].([]any); ok && len(details) > 0 {
+				if detail, ok := details[0].(map[string]any); ok {
+					if metadata, ok := detail["metadata"].(map[string]any); ok {
+						appeal, _ = metadata["appeal_url"].(string)
+					}
+				}
+			}
+		}
+	}
+	if appeal != "" {
+		return "Antigravity account TOS_VIOLATION is terminal; appeal at " + appeal
+	}
+	return "Antigravity account TOS_VIOLATION is terminal; do not retry or rotate this account"
 }
 
 func (p *Antigravity) SupportsModel(model string) bool {
@@ -96,9 +121,5 @@ func (p *Antigravity) GetInfo() app.ProviderInfo {
 }
 
 func (p *Antigravity) ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
-	response, err := p.openAIKeylessProvider.ChatCompletion(ctx, messages, model)
-	if err != nil {
-		return nil, fmt.Errorf("%w (Antigravity TOS_VIOLATION is terminal; see the appeal URL in the upstream error)", err)
-	}
-	return response, nil
+	return p.openAIKeylessProvider.ChatCompletion(ctx, messages, model)
 }

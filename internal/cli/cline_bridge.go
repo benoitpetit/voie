@@ -17,6 +17,7 @@ func newClineBridgeCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use:          "cline-bridge",
 		Short:        "Run the local Cline ACP to OpenAI bridge",
+		Hidden:       true,
 		Long:         "Starts a loopback OpenAI-compatible endpoint that drives `cline --acp`. Tool calls are denied so completions cannot modify the workspace. Normally started automatically by the Cline provider.",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,

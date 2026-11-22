@@ -51,6 +51,8 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					state := "not connected"
 					if store.Token(name) != "" {
 						state = "connected"
+					} else if name == "opencode-zen" || name == "opencode-go" {
+						state = "connected (default key)"
 					}
 					fmt.Fprintf(command.OutOrStdout(), "%-14s %s\n", name, state)
 				}

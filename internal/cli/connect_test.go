@@ -22,6 +22,13 @@ func runConnect(t *testing.T, args []string, stdin string, check func(string, st
 	return stdout.String(), stderr.String(), err
 }
 
+func TestInternalBridgeIsHiddenFromHelp(t *testing.T) {
+	command := newClineBridgeCommand()
+	if !command.Hidden {
+		t.Fatal("cline-bridge must be hidden from top-level help")
+	}
+}
+
 func TestConnectSavesTokenFromFlag(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	stdout, _, err := runConnect(t, []string{"openrouter", "--token", "sk-or-v1-test"}, "", nil)
@@ -57,6 +64,17 @@ func TestConnectListShowsState(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("--list output missing %q:\n%s", want, stdout)
 		}
+	}
+}
+
+func TestConnectListShowsDefaultKeyForOpencode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stdout, _, err := runConnect(t, []string{"--list"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "opencode-zen   connected (default key)") {
+		t.Errorf("--list does not show the default local key:\n%s", stdout)
 	}
 }
 

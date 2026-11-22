@@ -33,6 +33,7 @@ type openAIKeylessConfig struct {
 	SupportsStream bool
 	Headers        map[string]string           // optional extra headers (e.g. a loopback gateway key)
 	TokenSupplier  func() string               // resolves the bearer token per request
+	BodyHint       func(int, []byte) string    // optional upstream-specific error detail
 	Ensure         func(context.Context) error // optional lazy gateway startup
 }
 
@@ -144,7 +145,13 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 		utils.Debug("%s: status %d: %s", p.cfg.Name, resp.StatusCode, strings.TrimSpace(string(body)))
 		_ = resp.Body.Close()
-		return nil, app.NewProviderFailure(classifyStatus(resp.StatusCode), p.cfg.Name, model, resp.StatusCode, nil)
+		failure := app.NewProviderFailure(classifyStatus(resp.StatusCode), p.cfg.Name, model, resp.StatusCode, nil)
+		if p.cfg.BodyHint != nil {
+			if hint := p.cfg.BodyHint(resp.StatusCode, body); hint != "" {
+				return nil, fmt.Errorf("%w: %s", failure, hint)
+			}
+		}
+		return nil, failure
 	}
 	return resp, nil
 }
