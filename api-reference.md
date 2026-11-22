@@ -199,7 +199,7 @@ Lists registered providers and checks reachability with HTTP GET. Checks run con
 
 Returns local registry health without probing provider websites. The response includes `status`, `timestamp`, `version`, `providers_total`, `providers_working`, `working_providers`, and `total_models`.
 
-## Local conversations
+## Conversations
 
 Conversation storage is SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days. Local binary use keeps the default single-user namespace. In a hosted deployment, the Worker supplies an opaque scope for the active API key, and every conversation operation is isolated to that key, including when multiple keys belong to the same repository. Existing project-scoped hosted rows are not reassigned to keys; they become inaccessible through the hosted API and expire through normal cleanup.
 
@@ -235,7 +235,7 @@ Errors use this JSON envelope:
 | HTTP status | Meaning |
 | --- | --- |
 | `400` | Invalid input, unknown model, provider/model mismatch, or invalid fallback bounds/IDs |
-| `401` | Missing or invalid bearer token |
+| `401` | Missing or invalid bearer token, or missing required hosted conversation scope |
 | `413` | Chat request body exceeds 2 MiB |
 | `404` | Unknown provider, unknown conversation, or unmatched route |
 | `408` | Request canceled |
