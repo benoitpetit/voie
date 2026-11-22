@@ -30,6 +30,11 @@ func NewOpenRouter() *OpenRouter {
 	}, &http.Client{Timeout: openAIKeylessTimeout})}
 }
 
+func (p *OpenRouter) SupportsModel(model string) bool {
+	store, _ := config.LoadCredentials()
+	return store.Token("openrouter") != "" && p.openAIKeylessProvider.SupportsModel(model)
+}
+
 func (p *OpenRouter) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
 	store, _ := config.LoadCredentials()

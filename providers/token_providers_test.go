@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/benoitpetit/voie/config"
 )
 
 func TestOpenRouterUsesBearerToken(t *testing.T) {
@@ -90,6 +92,25 @@ func extractModel(body string) string {
 		return ""
 	}
 	return rest[:end]
+}
+
+func TestOpencodeUsesLocalKeyFromCredentials(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("OPENCODE_ZEN_KEY", "")
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("opencode-zen", "from-file-key"); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := opencodeGatewayKey(), "from-file-key"; got != want {
+		t.Errorf("opencodeGatewayKey() = %q, want %q", got, want)
+	}
+	t.Setenv("OPENCODE_ZEN_KEY", "from-env-key")
+	if got, want := opencodeGatewayKey(), "from-env-key"; got != want {
+		t.Errorf("opencodeGatewayKey() with env = %q, want %q", got, want)
+	}
 }
 
 func TestOpenRouterInvalidTokenErrorIsActionable(t *testing.T) {

@@ -29,6 +29,11 @@ func NewOrcaRouter() *OrcaRouter {
 	}, &http.Client{Timeout: openAIKeylessTimeout})}
 }
 
+func (p *OrcaRouter) SupportsModel(model string) bool {
+	store, _ := config.LoadCredentials()
+	return store.Token("orcarouter") != "" && p.openAIKeylessProvider.SupportsModel(model)
+}
+
 func (p *OrcaRouter) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
 	store, _ := config.LoadCredentials()
