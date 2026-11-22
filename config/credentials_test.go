@@ -1,0 +1,88 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+)
+
+func TestCredentialStoreFileMode(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("openrouter", "sk-or-v1-x"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(CredentialsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("file mode = %o, want 600", got)
+	}
+	dirInfo, err := os.Stat(filepath.Dir(CredentialsPath()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o700 {
+		t.Errorf("dir mode = %o, want 700", got)
+	}
+}
+
+func TestCredentialStoreEnvOverridesFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("openrouter", "from-file"); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Token("openrouter"); got != "from-file" {
+		t.Fatalf("token before env = %q", got)
+	}
+	t.Setenv("VOIE_OPENROUTER_KEY", "from-env")
+	if got, want := store.Token("openrouter"), "from-env"; got != want {
+		t.Errorf("Token = %q, want %q", got, want)
+	}
+}
+
+func TestCredentialStoreRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("openrouter", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("orcarouter", "b"); err != nil {
+		t.Fatal(err)
+	}
+	names := store.Providers()
+	sort.Strings(names)
+	if len(names) != 2 || names[0] != "openrouter" || names[1] != "orcarouter" {
+		t.Errorf("Providers = %v", names)
+	}
+	if err := store.Delete("openrouter"); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.Token("openrouter"); got != "" {
+		t.Errorf("token after Delete = %q, want empty", got)
+	}
+	if got := store.Token("orcarouter"); got != "b" {
+		t.Errorf("other token = %q", got)
+	}
+}
+
+func TestCredentialStoreOpencodeSharesEnv(t *testing.T) {
+	if got, want := ProviderKeyEnv("opencode-go"), "OPENCODE_ZEN_KEY"; got != want {
+		t.Errorf("ProviderKeyEnv(opencode-go) = %q, want %q", got, want)
+	}
+	if got, want := ProviderKeyEnv("openrouter"), "VOIE_OPENROUTER_KEY"; got != want {
+		t.Errorf("ProviderKeyEnv(openrouter) = %q, want %q", got, want)
+	}
+}
