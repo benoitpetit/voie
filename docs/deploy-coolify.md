@@ -27,13 +27,14 @@ generated for this origin. Do not commit or print the value. The Go service
 binds to `0.0.0.0:8080` in the container and refuses to start on a non-loopback
 host when `API_TOKEN` is empty.
 
-Set `REQUIRE_CONVERSATION_SCOPE=true` in the Coolify environment as well. Deploy
-the Worker first: it sends a per-key `X-Voie-Conversation-Scope` and also
-sends the legacy `X-Voie-Project-ID` for compatibility with the currently
-deployed Core. Then deploy the Core image that requires the new conversation-
-scope header; it ignores the legacy header. Afterward, each active API key gets its own history,
-while rate limiting remains per repository. `/health` remains available to the
-authenticated container health check.
+Set `REQUIRE_CONVERSATION_SCOPE=true` in the Coolify environment as well. When
+upgrading from a project-scoped Core, deploy the Worker first: it sends a
+per-key `X-Voie-Conversation-Scope` and keeps sending the legacy
+`X-Voie-Project-ID` while that older Core is running. Then deploy a Core image
+that requires the conversation-scope header and ignores the legacy header.
+After the upgrade, each active API key has its own history, while rate limiting
+remains per repository. `/health` remains available to the authenticated
+container health check.
 
 Existing hosted conversations were stored under a shared project scope, so
 their creating key cannot be determined. Do not migrate or reassign those rows:

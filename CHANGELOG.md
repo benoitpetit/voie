@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.4 - 2026-11-22
+
+### Changed
+
+- Hosted conversation history is isolated by the individual API key that created it. Keys for the same repository do not share transcripts; edge rate limiting remains repository-scoped.
+- Hosted `/v1/*` requests require the trusted conversation scope supplied by the Worker. Local binary conversations keep their single-user namespace and do not require a hosted key.
+- Conversations created under the former shared project scope are not reassigned to API keys. They are inaccessible through the hosted API and expire through normal cleanup.
+
+## v0.1.3 - 2026-11-21
+
+### Added
+
+- Configurable ensemble strategies, including independent answers, review chains and multi-round debates.
+- Optional Coolify deployment and the `voie-ai` npm installer for the CLI binary.
+
 ## v0.1.2 - 2026-11-20
 
 ### Changed
