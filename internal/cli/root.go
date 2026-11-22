@@ -86,6 +86,7 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 	root.AddCommand(newHealthcheckCommand(nil))
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newUpdateCommand())
+	root.AddCommand(newConnectCommand(nil))
 	return root
 }
 
