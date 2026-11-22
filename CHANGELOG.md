@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing.
+- OpenRouter and OrcaRouter providers with stable free-model aliases (`orfree`, `orcafree`).
+- Local gateway providers for Antigravity (CLIProxyAPI), Kiro (official-CLI ACP bridge), and Cline (built-in ACP bridge that denies agent tools). Gateways start automatically and stop with the runtime.
+
 ### Changed
 
 - Removed the Cohere provider: its HuggingFace Space now requires sign-in, so the keyless endpoint can no longer serve requests.

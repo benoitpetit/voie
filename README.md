@@ -103,10 +103,24 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `FALLBACK_ENABLED` | `true` | Enable retries and fallback on provider failures |
 | `FALLBACK_MAX_RETRIES` | `1` | Same-model retries for transient failures (0-3) |
 | `FALLBACK_MAX_MODELS` | `1` | Extra models tried after the primary (0-3) |
+| `OPENCODE_ZEN_KEY` | `voie-local` | Local opencode gateway key, shared by `opencode-zen` and `opencode-go` |
+| `VOIE_OPENROUTER_KEY` | saved token | OpenRouter API key (`sk-or-v1-...`) |
+| `VOIE_ORCAROUTER_KEY` | saved token | OrcaRouter API key (`sk-orca-...`) |
+| `VOIE_ANTIGRAVITY_KEY` | `voie-local` | Local CLIProxyAPI gateway key |
+| `VOIE_KIRO_KEY` | `voie-local` | Local Kiro ACP gateway key |
+| `VOIE_CLINE_KEY` | `voie-local` | Local Cline ACP bridge key |
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
 
 The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`. Hosted deployments should set `REQUIRE_CONVERSATION_SCOPE=true`; this makes `/v1/*` reject requests without the opaque conversation scope supplied by the trusted Worker. The setting is off by default, so the local binary does not need a hosted API key or scope.
+
+### Connect a provider
+
+`voie connect` is the single entry point for providers that accept a token. Run it with no argument for an interactive menu, or `voie connect <provider> --token <value>` for scripts. Tokens are stored in `<user-config-dir>/voie/credentials.json` with `0600` permissions; the environment variables above override the saved value. `voie connect --list` shows which providers are connected, and `voie connect disconnect <provider>` removes one. A provider that needs a token and has none is absent from `voie models` and from automatic routing.
+
+OpenRouter (`orfree`) and OrcaRouter (`orcafree`) use their hosted OpenAI-compatible APIs with a token. The other local providers start their gateway automatically on first use: `opencode-zen`/`opencode-go` on `127.0.0.1:8090`, Antigravity through a user-installed `CLIProxyAPI` on `:8317`, Kiro through the official `kiro-cli` ACP bridge on `:8091`, and Cline through voie's built-in `cline-bridge` on `:8092`. The Antigravity and Kiro gateways require their respective binaries and a one-time upstream login (`CLIProxyAPI -antigravity-login` / `kiro-cli login`); Cline requires `cline auth`. Their free-model lists rotate, so prefer the stable aliases and check the upstream catalog before relying on a specific ID.
+
+Routing personal Antigravity or Kiro accounts through a third-party gateway may violate those products' terms and has led to account suspensions. Use accounts you can afford to lose and read the provider terms before connecting them.
 
 ### Releases
 
@@ -134,7 +148,7 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
-The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `healthcheck`, `mcp`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts; `--task` completion uses configured routing profile names. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
+The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `healthcheck`, `mcp`, `connect`, `cline-bridge`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts; `--task` completion uses configured routing profile names. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
 
 `chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
 
