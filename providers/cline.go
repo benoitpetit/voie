@@ -9,6 +9,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/install"
 )
 
 // Cline relays Cline's rotating free models through a local ACP bridge that
@@ -58,8 +59,10 @@ func NewCline() *Cline {
 }
 
 func (p *Cline) working() bool {
-	if _, err := exec.LookPath("cline"); err != nil {
-		return false
+	if install.BinaryPath("cline") == "" {
+		if _, err := exec.LookPath("cline"); err != nil {
+			return false
+		}
 	}
 	return p.gateway.Available()
 }

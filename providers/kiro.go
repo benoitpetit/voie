@@ -10,6 +10,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/install"
 )
 
 // Kiro relays free models through the official kiro-cli ACP bridge. The bridge
@@ -78,6 +79,13 @@ func NewKiro() *Kiro {
 
 func (p *Kiro) working() bool {
 	if _, err := exec.LookPath("kiro-cli"); err != nil {
+		return false
+	}
+	bridge := install.KiroBridgeDir()
+	if bridge == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(bridge, "main.py")); err != nil {
 		return false
 	}
 	return p.gateway.Available()

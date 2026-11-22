@@ -13,7 +13,7 @@ Every interface forwards the request to a third-party provider; there is no loca
 | `providers` | Concrete upstream implementations and the default provider registry |
 | `internal/runtime` | Configuration validation and construction of the registry, service, HTTP server, and MCP server |
 | `internal/transport/httpapi` | OpenAI-compatible JSON/SSE routes, response mapping, CORS, and bearer authentication |
-| `internal/cli` | `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `connect`, `cline-bridge`, `completion`, `version`, and `update` command dispatch and formatting |
+| `internal/cli` | `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `connect`, `install`, `cline-bridge`, `completion`, `version`, and `update` command dispatch and formatting |
 | `internal/transport/mcp` | MCP tools and stdio transport using the official Go SDK |
 | `config` | Environment parsing, defaults, and bind validation |
 

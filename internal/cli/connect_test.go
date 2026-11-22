@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -81,6 +82,23 @@ func TestDisconnectRemovesToken(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "not connected") {
 		t.Errorf("token was not removed:\n%s", stdout)
+	}
+}
+
+func TestConnectInstallsGatewayToolchain(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	previous := connectInstaller
+	defer func() { connectInstaller = previous }()
+	var installed string
+	connectInstaller = func(_ context.Context, provider string) (string, error) {
+		installed = provider
+		return "/tmp/tool", nil
+	}
+	if _, _, err := runConnect(t, []string{"cline", "--token", "voie-local"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if installed != "cline" {
+		t.Errorf("installer called with %q, want cline", installed)
 	}
 }
 

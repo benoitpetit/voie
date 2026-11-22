@@ -11,11 +11,18 @@ import (
 	"time"
 
 	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/install"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
-var connectableProviders = []string{"opencode-zen", "opencode-go", "openrouter", "orcarouter"}
+var connectableProviders = []string{"opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline"}
+
+var connectInstaller = install.Ensure
+
+func isGatewayProvider(provider string) bool {
+	return provider == "antigravity" || provider == "kiro" || provider == "cline"
+}
 
 type tokenChecker func(provider, token string) error
 
@@ -82,6 +89,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					value = "voie-local"
 				} else {
 					return fmt.Errorf("a token is required for %s", provider)
+				}
+			}
+			if isGatewayProvider(provider) {
+				if _, err := connectInstaller(command.Context(), provider); err != nil {
+					return fmt.Errorf("install %s toolchain: %w", provider, err)
 				}
 			}
 			if check != nil {

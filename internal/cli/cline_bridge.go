@@ -8,6 +8,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/clinebridge"
+	"github.com/benoitpetit/voie/internal/install"
 	"github.com/spf13/cobra"
 )
 
@@ -20,9 +21,13 @@ func newClineBridgeCommand() *cobra.Command {
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, _ []string) error {
-			clinePath, err := exec.LookPath("cline")
-			if err != nil {
-				return fmt.Errorf("cline executable not found: %w", err)
+			clinePath := install.BinaryPath("cline")
+			if clinePath == "" {
+				var err error
+				clinePath, err = exec.LookPath("cline")
+				if err != nil {
+					return fmt.Errorf("cline executable not found; run `voie install cline`: %w", err)
+				}
 			}
 			dir, err := os.UserConfigDir()
 			if err != nil {

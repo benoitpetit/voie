@@ -9,6 +9,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/install"
 )
 
 // Antigravity relays free models from a local CLIProxyAPI gateway. The gateway
@@ -24,6 +25,10 @@ func antigravityGatewaySpec() LocalGatewaySpec {
 		dir = os.TempDir()
 	}
 	configDir := filepath.Join(dir, "voie", "gateways", "antigravity")
+	binary := install.BinaryPath("antigravity")
+	if binary == "" {
+		binary = "CLIProxyAPI"
+	}
 	body := `config-version: 8
 server:
   host: "127.0.0.1"
@@ -43,7 +48,7 @@ oauth:
 `
 	return LocalGatewaySpec{
 		Name:       "antigravity",
-		Binary:     "CLIProxyAPI",
+		Binary:     binary,
 		Args:       []string{"-config", filepath.Join(configDir, "config.yaml")},
 		Dir:        configDir,
 		ConfigPath: filepath.Join(configDir, "config.yaml"),
