@@ -17,11 +17,11 @@ var pollinationsConfig = openAIKeylessConfig{
 	Label:          "Pollinations.AI",
 	URL:            "https://text.pollinations.ai/models",
 	CompletionsURL: "https://text.pollinations.ai/openai",
-	DefaultModel:   "pollinations-openai-fast",
+	DefaultModel:   "pll-openai-fast",
 	Description:    "Pollinations.AI legacy keyless text API",
 	SupportsStream: true,
 	ModelIDs: map[string]string{
-		"pollinations-openai-fast": "openai-fast",
+		"pll-openai-fast": "openai-fast",
 	},
 }
 

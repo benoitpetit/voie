@@ -22,9 +22,9 @@ var embeddedModels = map[string]map[string]string{
 		"or-inclusionai-ling-3-2-flash-free":                    "inclusionai/ling-3.2-flash:free",
 	},
 	"orcarouter": {
-		"ocr-deepseek-deepseek-v4-flash-free":   "deepseek/deepseek-v4-flash-free",
-		"ocr-deepseek-deepseek-v4-1-flash-free": "deepseek/deepseek-v4.1-flash-free",
-		"ocr-z-ai-glm-5-3-flash-free":           "z-ai/glm-5.3-flash-free",
+		"orc-deepseek-deepseek-v4-flash-free":   "deepseek/deepseek-v4-flash-free",
+		"orc-deepseek-deepseek-v4-1-flash-free": "deepseek/deepseek-v4.1-flash-free",
+		"orc-z-ai-glm-5-3-flash-free":           "z-ai/glm-5.3-flash-free",
 	},
 	"groq": {
 		"gq-openai-gpt-oss-120b": "openai/gpt-oss-120b",

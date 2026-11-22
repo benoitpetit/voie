@@ -6,7 +6,7 @@ import "strings"
 // Prefixes already present in upstream IDs (or-, oc2a-, blockrun-, ...) are
 // reused so the public catalogue does not change for those providers.
 var modelPrefixes = map[string]string{
-	"perplexity":       "pp",
+	"perplexity":       "pplx",
 	"duckai":           "dk",
 	"deepai":           "dp",
 	"quillbot":         "qb",
@@ -15,7 +15,7 @@ var modelPrefixes = map[string]string{
 	"opencode-zen":     "oc2a",
 	"opencode-go":      "oc2ago",
 	"openrouter":       "or",
-	"orcarouter":       "ocr",
+	"orcarouter":       "orc",
 	"groq":             "gq",
 	"google-ai-studio": "gs",
 	"nvidia-nim":       "nv",
@@ -28,7 +28,7 @@ var modelPrefixes = map[string]string{
 	"kilo":             "kilo",
 	"ovh":              "ovh",
 	"blockrun":         "blockrun",
-	"pollinations":     "pollinations",
+	"pollinations":     "pll",
 	"antigravity":      "ag",
 	"kiro":             "ki",
 	"cline":            "cl",

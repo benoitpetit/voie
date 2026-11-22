@@ -49,7 +49,7 @@ const refreshInterval = 6 * time.Hour
 // registry id -> (voie provider name, alias prefix)
 var providerAliases = map[string][2]string{
 	"openrouter-free":       {"openrouter", "or"},
-	"orcarouter":            {"orcarouter", "ocr"},
+	"orcarouter":            {"orcarouter", "orc"},
 	"groq-free":             {"groq", "gq"},
 	"google-ai-studio":      {"google-ai-studio", "gs"},
 	"nvidia-nim":            {"nvidia-nim", "nv"},

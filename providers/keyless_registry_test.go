@@ -9,7 +9,7 @@ func TestNewKeylessModelsRouteToTheirProviders(t *testing.T) {
 		{"kilo-auto", "kilo"},
 		{"ovh-qwen3.8-27b", "ovh"},
 		{"blockrun-nemotron-3.5-bolt", "blockrun"},
-		{"pollinations-openai-fast", "pollinations"},
+		{"pll-openai-fast", "pollinations"},
 		{"oc2a-hy4-flash-free", "opencode-zen"},
 		{"oc2ago-gpt-6-luna", "opencode-go"},
 	} {

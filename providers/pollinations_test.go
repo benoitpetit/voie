@@ -12,10 +12,10 @@ import (
 
 func TestPollinationsMetadataAndModelSupport(t *testing.T) {
 	info := NewPollinations().GetInfo()
-	if info.Name != "pollinations" || info.DefaultModel != "pollinations-openai-fast" {
+	if info.Name != "pollinations" || info.DefaultModel != "pll-openai-fast" {
 		t.Fatalf("GetInfo() = %#v", info)
 	}
-	if want := []string{"pollinations-openai-fast"}; !reflect.DeepEqual(info.SupportedModels, want) {
+	if want := []string{"pll-openai-fast"}; !reflect.DeepEqual(info.SupportedModels, want) {
 		t.Errorf("SupportedModels = %v, want %v", info.SupportedModels, want)
 	}
 	if !info.Working || info.NeedsAuth || info.ReverseEngineering || !info.SupportsStream {
@@ -45,12 +45,12 @@ func TestPollinationsMapsFriendlyIDToUpstreamAndKeepsResponseID(t *testing.T) {
 	}))
 
 	response, err := NewPollinations().ChatCompletion(testProviderContext(),
-		[]Message{{Role: "user", Content: "Hello"}}, "pollinations-openai-fast")
+		[]Message{{Role: "user", Content: "Hello"}}, "pll-openai-fast")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Model != "pollinations-openai-fast" || response.Choices[0].Message.Content != "OK" {
-		t.Fatalf("response model/content = %q/%q, want pollinations-openai-fast/OK", response.Model, response.Choices[0].Message.Content)
+	if response.Model != "pll-openai-fast" || response.Choices[0].Message.Content != "OK" {
+		t.Fatalf("response model/content = %q/%q, want pll-openai-fast/OK", response.Model, response.Choices[0].Message.Content)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestPollinationsClassifiesUpstreamFailures(t *testing.T) {
 			const secret = "pollinations-internal-body"
 			useKeylessProviderResponse(t, tc.status, secret)
 			_, err := NewPollinations().ChatCompletion(testProviderContext(),
-				[]Message{{Role: "user", Content: "hello"}}, "pollinations-openai-fast")
+				[]Message{{Role: "user", Content: "hello"}}, "pll-openai-fast")
 			classifyFailure(t, err, tc.category, tc.status, secret)
 		})
 	}
@@ -70,6 +70,6 @@ func TestPollinationsNetworkFailureIsTransient(t *testing.T) {
 	useKeylessProviderNetworkFailure(t)
 
 	_, err := NewPollinations().ChatCompletion(testProviderContext(),
-		[]Message{{Role: "user", Content: "hello"}}, "pollinations-openai-fast")
+		[]Message{{Role: "user", Content: "hello"}}, "pll-openai-fast")
 	classifyFailure(t, err, app.FailureTransient, 0, "")
 }
