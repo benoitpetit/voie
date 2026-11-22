@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"time"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
@@ -93,20 +92,9 @@ func (p *ACPProvider) working() bool {
 			return false
 		}
 	}
-	// The CLI being installed is not enough: the ACP handshake must succeed
-	// and the bridge must actually answer on loopback before we advertise it.
-	client := &http.Client{Timeout: 2 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, p.gateway.spec.BaseURL+p.gateway.spec.HealthPath, nil)
-	if err != nil {
-		return false
-	}
-	req.Header.Set("Authorization", "Bearer "+p.gateway.localKey())
-	resp, err := client.Do(req)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode >= 200 && resp.StatusCode < 400
+	// The bridge is started lazily on the first request; requiring a live
+	// loopback listener here would hide the model before that call can start it.
+	return true
 }
 
 // StartACPBridge starts (or reuses) the bridge and reports whether it became

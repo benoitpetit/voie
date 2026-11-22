@@ -142,13 +142,14 @@ func (c *Client) Handshake(ctx context.Context, cwd, model string) (string, erro
 		return "", fmt.Errorf("ACP session/new returned no sessionId")
 	}
 	if model != "" && model != "auto" {
-		if _, err := c.call(ctx, "session/setConfigOption", map[string]any{
+		// Not every ACP agent implements session/setConfigOption (Cline 3.0.x
+		// returns -32601). The model is also passed as a CLI flag; a missing
+		// optional method must not break the handshake.
+		_, _ = c.call(ctx, "session/setConfigOption", map[string]any{
 			"sessionId": sessionID,
 			"configId":  "model",
 			"value":     model,
-		}); err != nil {
-			return "", err
-		}
+		})
 	}
 	return sessionID, nil
 }

@@ -78,6 +78,21 @@ func TestHandshakeSequence(t *testing.T) {
 	}
 }
 
+func TestHandshakeToleratesMissingSetConfigOption(t *testing.T) {
+	agent := newFakeAgent()
+	client := NewClient(agent, agent)
+	agent.push(`{"jsonrpc":"2.0","id":1,"result":{}}`)
+	agent.push(`{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s1"}}`)
+	agent.push(`{"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"Method not found"}}`)
+	sessionID, err := client.Handshake(context.Background(), "/tmp/scratch", "cline-free/model-a")
+	if err != nil {
+		t.Fatalf("handshake failed on an unsupported optional method: %v", err)
+	}
+	if sessionID != "s1" {
+		t.Errorf("sessionID = %q", sessionID)
+	}
+}
+
 func TestCollectsAgentMessageChunks(t *testing.T) {
 	agent := newFakeAgent()
 	client := NewClient(agent, agent)

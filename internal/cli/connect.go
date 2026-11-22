@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -142,8 +144,14 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				supplied[field.Key] = value
 			}
 			if isGatewayProvider(provider) {
-				if _, err := connectInstaller(command.Context(), provider); err != nil {
+				binary, err := connectInstaller(command.Context(), provider)
+				if err != nil {
 					return fmt.Errorf("install %s toolchain: %w", provider, err)
+				}
+				if provider == "cline" && token == "" {
+					if err := ensureClineAuth(command, binary); err != nil {
+						return fmt.Errorf("cline auth: %w", err)
+					}
 				}
 				if _, ok := providers.ACPProviderSpecByName(provider); ok {
 					if err := providers.StartACPBridge(provider); err != nil {
@@ -205,6 +213,25 @@ func validateToken(provider, token string) error {
 		return fmt.Errorf("provider rejected the token (HTTP %d)", resp.StatusCode)
 	}
 	return nil
+}
+
+// ensureClineAuth launches the official interactive login once, attached to
+// the user's terminal. Auth stays inside the Cline CLI; voie never sees it.
+func ensureClineAuth(command *cobra.Command, clinePath string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	credentials := filepath.Join(home, ".cline", "data", "settings", "providers.json")
+	if _, err := os.Stat(credentials); err == nil {
+		return nil
+	}
+	fmt.Fprintln(command.ErrOrStderr(), "Cline is not authenticated; launching `cline auth` in your terminal.")
+	auth := exec.Command(clinePath, "auth")
+	auth.Stdin = command.InOrStdin()
+	auth.Stdout = command.OutOrStdout()
+	auth.Stderr = command.ErrOrStderr()
+	return auth.Run()
 }
 
 func isConnectable(name string) bool {

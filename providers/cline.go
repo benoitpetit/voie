@@ -59,12 +59,14 @@ func NewCline() *Cline {
 }
 
 func (p *Cline) working() bool {
-	if install.BinaryPath("cline") == "" {
-		if _, err := exec.LookPath("cline"); err != nil {
-			return false
-		}
+	// Visibility follows the installed CLI; the bridge itself is started
+	// lazily on the first request (Ensure). Requiring a live bridge here would
+	// hide the model before the first call can start it.
+	if install.BinaryPath("cline") != "" {
+		return true
 	}
-	return p.gateway.Available()
+	_, err := exec.LookPath("cline")
+	return err == nil
 }
 
 func (p *Cline) SupportsModel(model string) bool {

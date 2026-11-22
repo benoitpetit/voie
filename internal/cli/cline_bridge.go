@@ -47,9 +47,14 @@ func newClineBridgeCommand() *cobra.Command {
 			if model == "" {
 				model = "cline-free/nemotron-3.5-super-vl"
 			}
+			args := []string{"--acp", "--auto-approve", "false", "--cwd", scratch, "--hooks-dir", scratch}
+			if model != "" && model != "auto" {
+				args = append(args, "--model", model)
+			}
 			return clinebridge.Run(command.Context(), clinebridge.Config{
 				Listen:     listen,
 				ClinePath:  clinePath,
+				AgentArgs:  args,
 				ScratchDir: scratch,
 				HookPath:   filepath.Join(scratch, "hooks.mjs"),
 				LocalKey:   key,
