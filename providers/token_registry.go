@@ -78,7 +78,13 @@ func ConnectFields(provider string) []ConnectField {
 			{Key: cloudflareAccountKey, Label: "Cloudflare account ID", Secret: false},
 		}
 	}
-	return []ConnectField{{Key: provider, Label: "API token", Secret: true, Default: localKeyDefault(provider)}}
+	label := "API token"
+	secret := true
+	if localKeyDefault(provider) != "" {
+		label = "Local gateway key (Enter for voie-local)"
+		secret = false
+	}
+	return []ConnectField{{Key: provider, Label: label, Secret: secret, Default: localKeyDefault(provider)}}
 }
 
 func localKeyDefault(provider string) string {

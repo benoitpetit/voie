@@ -25,6 +25,9 @@ func newInstallCommand() *cobra.Command {
 			}
 			path, err := install.Install(command.Context(), args[0], nil)
 			if err != nil {
+				if args[0] == "cline" {
+					return fmt.Errorf("%w (Cline CLI requires Node.js 20-24; current Node is unsupported by the npm package. Install Node 22, then run `npm install -g cline` and `cline auth` manually)", err)
+				}
 				return err
 			}
 			fmt.Fprintf(command.OutOrStdout(), "%s toolchain installed at %s\n", args[0], path)
