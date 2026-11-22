@@ -71,7 +71,7 @@ func TestDocumentedProvidersMatchCode(t *testing.T) {
 	for _, name := range rt.Registry.GetProviderNames() {
 		names[name] = true
 	}
-	for _, want := range []string{"perplexity", "duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go"} {
+	for _, want := range []string{"perplexity", "duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline"} {
 		if !names[want] {
 			t.Errorf("provider %q is not registered", want)
 		}
