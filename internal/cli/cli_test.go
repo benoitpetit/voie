@@ -35,6 +35,17 @@ func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
 	}
 }
 
+func TestModelsOutputIsGrouped(t *testing.T) {
+	rt, _ := newCLITestRuntime(t)
+	var stdout bytes.Buffer
+	if err := runModels(&stdout, rt.Service(), false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "test provider") && !strings.Contains(stdout.String(), "MODEL") {
+		t.Fatalf("grouped output = %q", stdout.String())
+	}
+}
+
 func TestChatHelpListsEverySupportedTask(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := executeForTest(context.Background(), []string{"chat", "--help"}, nil, &stdout, &stderr, nil)

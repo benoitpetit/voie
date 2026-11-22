@@ -9,7 +9,6 @@ func NewRegistry() *app.Registry {
 	registry.Register("deepai", &DeepAI{})
 	registry.Register("quillbot", &Quillbot{})
 	registry.Register("yqcloud", &Yqcloud{})
-	registry.Register("cohere", &CohereCommand{})
 	registry.Register("jimmy", &Jimmy{})
 	registry.Register("kilo", NewKilo())
 	registry.Register("ovh", NewOVH())
@@ -17,5 +16,19 @@ func NewRegistry() *app.Registry {
 	registry.Register("pollinations", NewPollinations())
 	registry.Register("opencode-zen", NewOpenCodeZen())
 	registry.Register("opencode-go", NewOpenCodeGo())
+	registry.Register("openrouter", NewOpenRouter())
+	registry.Register("orcarouter", NewOrcaRouter())
+	registry.Register("antigravity", NewAntigravity())
+	registry.Register("kiro", NewKiro())
+	registry.Register("cline", NewCline())
+	for _, spec := range TokenProviders {
+		registry.Register(spec.Name, NewTokenProvider(spec))
+	}
+	for _, spec := range ACPProviders {
+		registry.Register(spec.Name, NewACPProvider(spec))
+	}
+	for _, spec := range ExternalGateways {
+		registry.Register(spec.Name, NewExternalGateway(spec))
+	}
 	return registry
 }

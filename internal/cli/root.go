@@ -7,6 +7,7 @@ import (
 
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
+	"github.com/benoitpetit/voie/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -86,11 +87,16 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 	root.AddCommand(newHealthcheckCommand(nil))
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newUpdateCommand())
+	root.AddCommand(newConnectCommand(nil))
+	root.AddCommand(newClineBridgeCommand())
+	root.AddCommand(newInstallCommand())
+	root.AddCommand(newACPBridgeCommand())
 	return root
 }
 
 // Execute runs voie with the supplied process arguments and streams.
 func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, factory RuntimeFactory) error {
+	defer providers.ShutdownGateways()
 	root := NewRootCommand(ctx, stdin, stdout, stderr, factory)
 	root.SetArgs(args)
 	return root.Execute()

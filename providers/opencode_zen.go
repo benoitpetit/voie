@@ -2,9 +2,8 @@ package providers
 
 import (
 	"net/http"
-	"os"
-	"strings"
 
+	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 )
 
@@ -22,11 +21,14 @@ const (
 
 // opencodeGatewayKey is the local gateway's own key, never an OpenCode credential.
 func opencodeGatewayKey() string {
-	key := strings.TrimSpace(os.Getenv("OPENCODE_ZEN_KEY"))
-	if key == "" {
+	store, err := config.LoadCredentials()
+	if err != nil {
 		return opencodeZenLocalKey
 	}
-	return key
+	if key := store.Token("opencode-zen"); key != "" {
+		return key
+	}
+	return opencodeZenLocalKey
 }
 
 func opencodeZenConfig() openAIKeylessConfig {

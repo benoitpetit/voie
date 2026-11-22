@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Nine token-based OpenAI-compatible providers (Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix) declared in one catalogue.
+- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for eight opt-in third-party gateways.
+- Models are grouped by provider in `voie models`, `GET /v1/models` and MCP `list_models`.
+
+- `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing. Connecting Antigravity, Kiro or Cline installs their missing toolchain automatically; `voie install <provider>` does the same explicitly.
+- OpenRouter and OrcaRouter providers with stable free-model aliases (`orfree`, `orcafree`).
+- Local gateway providers for Antigravity (CLIProxyAPI), Kiro (official-CLI ACP bridge), and Cline (built-in ACP bridge that denies agent tools). Gateways start automatically and stop with the runtime.
+
+### Changed
+
+- Removed the Cohere provider: its HuggingFace Space now requires sign-in, so the keyless endpoint can no longer serve requests.
+
 ## v0.1.4 - 2026-11-22
 
 ### Changed

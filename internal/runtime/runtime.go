@@ -194,6 +194,7 @@ func (r *Runtime) MCP(ctx context.Context) error {
 }
 
 func (r *Runtime) Close() error {
+	providers.ShutdownGateways()
 	if r.ConversationStore != nil {
 		return r.ConversationStore.Close()
 	}

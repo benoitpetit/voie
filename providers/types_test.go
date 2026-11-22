@@ -11,7 +11,7 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 	if provider.GetInfo().Name != "duckai" {
 		t.Fatalf("registered provider name = %q, want duckai", provider.GetInfo().Name)
 	}
-	for _, existing := range []string{"perplexity", "deepai", "quillbot", "yqcloud", "cohere"} {
+	for _, existing := range []string{"perplexity", "deepai", "quillbot", "yqcloud"} {
 		if registry.Get(existing) == nil {
 			t.Errorf("existing provider %q is missing after Duck.ai registration", existing)
 		}
@@ -61,23 +61,14 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 	}
 }
 
-func TestCohereExcludesUnresponsiveArabicModel(t *testing.T) {
+func TestRemovedCohereModelsAreNotRouted(t *testing.T) {
 	registry := NewProviderRegistry()
-	cohere := registry.Get("cohere")
-	if cohere == nil {
-		t.Fatal("registry.Get(cohere) = nil")
+	if registry.Get("cohere") != nil {
+		t.Fatal("cohere must not be registered")
 	}
-
-	const removedModel = "command-r7b-arabic-02-2025"
-	if cohere.SupportsModel(removedModel) {
-		t.Errorf("Cohere.SupportsModel(%q) = true, want false", removedModel)
-	}
-	for _, model := range cohere.GetInfo().SupportedModels {
-		if model == removedModel {
-			t.Errorf("Cohere SupportedModels still contains %q", removedModel)
+	for _, model := range []string{"command-a", "command-r", "command-r7b-arabic-02-2025"} {
+		if routed := registry.GetForModel(model); routed != nil && routed.GetInfo().Name == "cohere" {
+			t.Errorf("GetForModel(%q) routed to Cohere", model)
 		}
-	}
-	if routed := registry.GetForModel(removedModel); routed != nil && routed.GetInfo().Name == "cohere" {
-		t.Errorf("GetForModel(%q) routed to Cohere, want it excluded", removedModel)
 	}
 }

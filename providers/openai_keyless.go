@@ -23,15 +23,20 @@ const openAIKeylessTimeout = 120 * time.Second
 // openAIKeylessConfig describes an anonymous, OpenAI-compatible chat endpoint.
 // CompletionsURL is the full chat-completions URL; URL is the health-probe URL.
 type openAIKeylessConfig struct {
-	Name           string
-	Label          string
-	URL            string
-	CompletionsURL string
-	DefaultModel   string
-	ModelIDs       map[string]string // voie ID -> upstream model ID
-	Description    string
-	SupportsStream bool
-	Headers        map[string]string // optional extra headers (e.g. a loopback gateway key)
+	Name                   string
+	Label                  string
+	URL                    string
+	CompletionsURL         string
+	URLSupplier            func() string // dynamic models/health URL
+	CompletionsURLSupplier func() string // dynamic chat URL
+	DefaultModel           string
+	ModelIDs               map[string]string // voie ID -> upstream model ID
+	Description            string
+	SupportsStream         bool
+	Headers                map[string]string           // optional extra headers (e.g. a loopback gateway key)
+	TokenSupplier          func() string               // resolves the bearer token per request
+	BodyHint               func(int, []byte) string    // optional upstream-specific error detail
+	Ensure                 func(context.Context) error // optional lazy gateway startup
 }
 
 type openAIKeylessProvider struct {
@@ -66,6 +71,13 @@ type openAIKeylessCompletion struct {
 	} `json:"choices"`
 }
 
+func (p *openAIKeylessProvider) resolveURL() string {
+	if p.cfg.URLSupplier != nil {
+		return p.cfg.URLSupplier()
+	}
+	return p.cfg.URL
+}
+
 func (p *openAIKeylessProvider) GetInfo() ProviderInfo {
 	models := make([]string, 0, len(p.cfg.ModelIDs))
 	for id := range p.cfg.ModelIDs {
@@ -75,7 +87,7 @@ func (p *openAIKeylessProvider) GetInfo() ProviderInfo {
 	return ProviderInfo{
 		Name:               p.cfg.Name,
 		Label:              p.cfg.Label,
-		URL:                p.cfg.URL,
+		URL:                p.resolveURL(),
 		Working:            true,
 		SupportedModels:    models,
 		DefaultModel:       p.cfg.DefaultModel,
@@ -100,6 +112,11 @@ func (p *openAIKeylessProvider) resolve(model string) (string, error) {
 }
 
 func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message, model string, stream bool) (*http.Response, error) {
+	if p.cfg.Ensure != nil {
+		if err := p.cfg.Ensure(ctx); err != nil {
+			return nil, app.WrapNetworkFailure(err, p.cfg.Name, model)
+		}
+	}
 	payload, err := json.Marshal(openAIKeylessRequest{
 		Model:     model,
 		Messages:  messages,
@@ -109,7 +126,11 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 	if err != nil {
 		return nil, fmt.Errorf("%s: encode request: %w", p.cfg.Name, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.cfg.CompletionsURL, bytes.NewReader(payload))
+	completionsURL := p.cfg.CompletionsURL
+	if p.cfg.CompletionsURLSupplier != nil {
+		completionsURL = p.cfg.CompletionsURLSupplier()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, completionsURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("%s: build request: %w", p.cfg.Name, err)
 	}
@@ -125,6 +146,9 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 	for _, name := range names {
 		req.Header.Set(name, p.cfg.Headers[name])
 	}
+	if p.cfg.TokenSupplier != nil {
+		req.Header.Set("Authorization", "Bearer "+p.cfg.TokenSupplier())
+	}
 	// Anonymous lanes set no Authorization header; a local gateway may supply one.
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -134,7 +158,13 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 		utils.Debug("%s: status %d: %s", p.cfg.Name, resp.StatusCode, strings.TrimSpace(string(body)))
 		_ = resp.Body.Close()
-		return nil, app.NewProviderFailure(classifyStatus(resp.StatusCode), p.cfg.Name, model, resp.StatusCode, nil)
+		failure := app.NewProviderFailure(classifyStatus(resp.StatusCode), p.cfg.Name, model, resp.StatusCode, nil)
+		if p.cfg.BodyHint != nil {
+			if hint := p.cfg.BodyHint(resp.StatusCode, body); hint != "" {
+				return nil, fmt.Errorf("%w: %s", failure, hint)
+			}
+		}
+		return nil, failure
 	}
 	return resp, nil
 }
