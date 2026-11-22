@@ -12,11 +12,15 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/install"
+	"github.com/benoitpetit/voie/providers"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
-var connectableProviders = []string{"opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline"}
+var connectableProviders = append(
+	[]string{"opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline"},
+	providers.TokenProviderNames()...,
+)
 
 var connectInstaller = install.Ensure
 
@@ -125,7 +129,10 @@ func validateToken(provider, token string) error {
 	case "opencode-zen", "opencode-go":
 		url = "http://127.0.0.1:8090/healthz"
 	default:
-		return nil
+		url = providers.TokenProviderModelsURL(provider)
+		if url == "" {
+			return nil
+		}
 	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {

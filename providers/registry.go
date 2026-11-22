@@ -21,5 +21,8 @@ func NewRegistry() *app.Registry {
 	registry.Register("antigravity", NewAntigravity())
 	registry.Register("kiro", NewKiro())
 	registry.Register("cline", NewCline())
+	for _, spec := range TokenProviders {
+		registry.Register(spec.Name, NewTokenProvider(spec))
+	}
 	return registry
 }
