@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,6 +30,8 @@ func buildConnectableProviders() []string {
 }
 
 var connectInstaller = install.Ensure
+
+var errConnectCanceled = errors.New("connect canceled")
 
 func isGatewayProvider(provider string) bool {
 	if provider == "antigravity" || provider == "kiro" || provider == "cline" {
@@ -90,7 +93,12 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				return fmt.Errorf("usage: voie connect [provider]")
 			}
 
-			provider, err := selectProvider(command, args, store)
+			input := bufio.NewReader(command.InOrStdin())
+			provider, err := selectProvider(command, args, store, input)
+			if errors.Is(err, errConnectCanceled) {
+				fmt.Fprintln(command.OutOrStdout(), "Canceled.")
+				return nil
+			}
 			if err != nil {
 				return err
 			}
@@ -110,9 +118,13 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				value := supplied[field.Key]
 				if value == "" {
 					if field.Secret {
-						value, err = readTokenWithLabel(command, field.Label)
+						value, err = readTokenWithLabel(command, field.Label, input)
 					} else {
-						value, err = readValueWithLabel(command, field.Label)
+						value, err = readValueWithLabel(command, field.Label, input)
+					}
+					if errors.Is(err, errConnectCanceled) {
+						fmt.Fprintln(command.OutOrStdout(), "Canceled.")
+						return nil
 					}
 					if err != nil {
 						return err
@@ -195,7 +207,7 @@ func isConnectable(name string) bool {
 	return false
 }
 
-func selectProvider(command *cobra.Command, args []string, store *config.Credentials) (string, error) {
+func selectProvider(command *cobra.Command, args []string, store *config.Credentials, input *bufio.Reader) (string, error) {
 	if len(args) == 1 {
 		if !isConnectable(args[0]) {
 			return "", fmt.Errorf("unknown provider %q", args[0])
@@ -212,10 +224,14 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 		}
 		fmt.Fprintf(command.ErrOrStderr(), "  %d) %-14s %s\n", i+1, name, state)
 	}
-	fmt.Fprint(command.ErrOrStderr(), "Provider number: ")
-	var answer string
-	if _, err := fmt.Fscan(command.InOrStdin(), &answer); err != nil {
-		return "", fmt.Errorf("read provider selection: %w", err)
+	fmt.Fprintln(command.ErrOrStderr(), "  0) Cancel")
+	answer, err := readLine(command, input, "Provider number: ", false)
+	if err != nil {
+		return "", err
+	}
+	switch strings.ToLower(answer) {
+	case "", "0", "q", "quit", "exit":
+		return "", errConnectCanceled
 	}
 	var index int
 	if _, err := fmt.Sscanf(answer, "%d", &index); err != nil || index < 1 || index > len(names) {
@@ -224,37 +240,46 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 	return names[index-1], nil
 }
 
-func readValueWithLabel(command *cobra.Command, label string) (string, error) {
-	fmt.Fprintf(command.ErrOrStderr(), "%s: ", label)
-	line, err := bufio.NewReader(command.InOrStdin()).ReadString('\n')
-	if err != nil && err != io.EOF {
-		return "", err
-	}
-	return strings.TrimSpace(line), nil
+type lineResult struct {
+	text string
+	err  error
 }
 
-func readTokenWithLabel(command *cobra.Command, label string) (string, error) {
-	input := command.InOrStdin()
-	if file, ok := input.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
-		fmt.Fprintf(command.ErrOrStderr(), "%s: ", label)
-		value, err := term.ReadPassword(int(file.Fd()))
-		fmt.Fprintln(command.ErrOrStderr())
-		return strings.TrimSpace(string(value)), err
+// readLine is cancellable: Ctrl+C is intercepted by main.go as a context
+// cancellation, so a blocking stdin read must observe command.Context().
+func readLine(command *cobra.Command, input *bufio.Reader, prompt string, secret bool) (string, error) {
+	if prompt != "" {
+		fmt.Fprint(command.ErrOrStderr(), prompt)
 	}
-	return readValueWithLabel(command, label)
+	result := make(chan lineResult, 1)
+	go func() {
+		if secret {
+			if file, ok := command.InOrStdin().(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+				value, err := term.ReadPassword(int(file.Fd()))
+				fmt.Fprintln(command.ErrOrStderr())
+				result <- lineResult{text: string(value), err: err}
+				return
+			}
+		}
+		line, err := input.ReadString('\n')
+		result <- lineResult{text: line, err: err}
+	}()
+	select {
+	case <-command.Context().Done():
+		fmt.Fprintln(command.ErrOrStderr())
+		return "", errConnectCanceled
+	case res := <-result:
+		if res.err != nil && res.err != io.EOF {
+			return "", res.err
+		}
+		return strings.TrimSpace(res.text), nil
+	}
 }
 
-func readToken(command *cobra.Command) (string, error) {
-	input := command.InOrStdin()
-	if file, ok := input.(*os.File); ok && term.IsTerminal(int(file.Fd())) {
-		fmt.Fprint(command.ErrOrStderr(), "Token: ")
-		value, err := term.ReadPassword(int(file.Fd()))
-		fmt.Fprintln(command.ErrOrStderr())
-		return strings.TrimSpace(string(value)), err
-	}
-	line, err := bufio.NewReader(input).ReadString('\n')
-	if err != nil && err != io.EOF {
-		return "", err
-	}
-	return strings.TrimSpace(line), nil
+func readValueWithLabel(command *cobra.Command, label string, input *bufio.Reader) (string, error) {
+	return readLine(command, input, label+": ", false)
+}
+
+func readTokenWithLabel(command *cobra.Command, label string, input *bufio.Reader) (string, error) {
+	return readLine(command, input, label+": ", true)
 }

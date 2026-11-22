@@ -32,6 +32,17 @@ func TestInternalBridgeIsHiddenFromHelp(t *testing.T) {
 	}
 }
 
+func TestConnectCancelFromMenu(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stdout, stderr, err := runConnect(t, nil, "0\n", nil)
+	if err != nil {
+		t.Fatalf("cancel returned an error: %v (%s)", err, stderr)
+	}
+	if !strings.Contains(stdout, "Canceled.") {
+		t.Errorf("stdout = %q, want a cancel confirmation", stdout)
+	}
+}
+
 func TestConnectSavesTokenFromFlag(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	stdout, _, err := runConnect(t, []string{"openrouter", "--token", "sk-or-v1-test"}, "", nil)
