@@ -83,7 +83,7 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 			return nil, appError(app.ErrConversationStore, "configure conversation database", err)
 		}
 	}
-	if _, err = db.ExecContext(ctx, schema); err != nil {
+	if err = migrate(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, appError(app.ErrConversationStore, "migrate conversation database", err)
 	}
@@ -138,7 +138,7 @@ func (s *Store) Create(ctx context.Context) (app.Conversation, error) {
 	if err != nil {
 		return c, storeErr(err)
 	}
-	_, err = db.ExecContext(ctx, "INSERT INTO conversations(id,payload,version,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?)", c.ID, b, c.Version, c.ExpiresAt.UnixNano(), now.UnixNano(), now.UnixNano())
+	_, err = db.ExecContext(ctx, "INSERT INTO conversations(id,payload,version,expires_at,created_at,updated_at,tenant_id) VALUES(?,?,?,?,?,?,?)", c.ID, b, c.Version, c.ExpiresAt.UnixNano(), now.UnixNano(), now.UnixNano(), app.ConversationScope(ctx))
 	if err != nil {
 		return app.Conversation{}, storeErr(err)
 	}
@@ -152,7 +152,7 @@ func (s *Store) Get(ctx context.Context, id string) (app.Conversation, error) {
 	}
 	var payload []byte
 	var expiry int64
-	err = db.QueryRowContext(ctx, "SELECT payload,expires_at FROM conversations WHERE id=?", id).Scan(&payload, &expiry)
+	err = db.QueryRowContext(ctx, "SELECT payload,expires_at FROM conversations WHERE tenant_id=? AND id=?", app.ConversationScope(ctx), id).Scan(&payload, &expiry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return app.Conversation{}, s.missing(ctx, db, id)
 	}
@@ -170,7 +170,7 @@ func (s *Store) Get(ctx context.Context, id string) (app.Conversation, error) {
 }
 func (s *Store) missing(ctx context.Context, db *sql.DB, id string) error {
 	var expiry int64
-	err := db.QueryRowContext(ctx, "SELECT expires_at FROM conversation_tombstones WHERE id=?", id).Scan(&expiry)
+	err := db.QueryRowContext(ctx, "SELECT expires_at FROM conversation_tombstones WHERE tenant_id=? AND id=?", app.ConversationScope(ctx), id).Scan(&expiry)
 	if err == nil && time.Now().UnixNano() < expiry {
 		return app.ErrConversationExpired
 	}
@@ -185,7 +185,7 @@ func (s *Store) List(ctx context.Context) ([]app.ConversationSummary, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows, err := db.QueryContext(ctx, "SELECT payload FROM conversations WHERE expires_at>? ORDER BY updated_at DESC", time.Now().UnixNano())
+	rows, err := db.QueryContext(ctx, "SELECT payload FROM conversations WHERE tenant_id=? AND expires_at>? ORDER BY updated_at DESC", app.ConversationScope(ctx), time.Now().UnixNano())
 	if err != nil {
 		return nil, storeErr(err)
 	}
@@ -216,11 +216,11 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, "DELETE FROM conversations WHERE id=?", id)
+	_, err = db.ExecContext(ctx, "DELETE FROM conversations WHERE tenant_id=? AND id=?", app.ConversationScope(ctx), id)
 	if err != nil {
 		return storeErr(err)
 	}
-	_, err = db.ExecContext(ctx, "DELETE FROM conversation_tombstones WHERE id=?", id)
+	_, err = db.ExecContext(ctx, "DELETE FROM conversation_tombstones WHERE tenant_id=? AND id=?", app.ConversationScope(ctx), id)
 	return storeErr(err)
 }
 
@@ -236,7 +236,7 @@ func (s *Store) AppendTurn(ctx context.Context, id string, expected int64, user 
 	defer tx.Rollback()
 	var payload []byte
 	var expiry int64
-	err = tx.QueryRowContext(ctx, "SELECT payload,expires_at FROM conversations WHERE id=?", id).Scan(&payload, &expiry)
+	err = tx.QueryRowContext(ctx, "SELECT payload,expires_at FROM conversations WHERE tenant_id=? AND id=?", app.ConversationScope(ctx), id).Scan(&payload, &expiry)
 	if errors.Is(err, sql.ErrNoRows) {
 		_ = tx.Rollback()
 		return app.Conversation{}, s.missing(ctx, db, id)
@@ -273,7 +273,7 @@ func (s *Store) AppendTurn(ctx context.Context, id string, expected int64, user 
 	if len(payload) > maxBytes {
 		return app.Conversation{}, appError(app.ErrInvalidInput, "conversation exceeds storage limit", nil)
 	}
-	res, err := tx.ExecContext(ctx, "UPDATE conversations SET payload=?,version=?,expires_at=?,updated_at=? WHERE id=? AND version=?", payload, c.Version, c.ExpiresAt.UnixNano(), now.UnixNano(), id, expected)
+	res, err := tx.ExecContext(ctx, "UPDATE conversations SET payload=?,version=?,expires_at=?,updated_at=? WHERE tenant_id=? AND id=? AND version=?", payload, c.Version, c.ExpiresAt.UnixNano(), now.UnixNano(), app.ConversationScope(ctx), id, expected)
 	if err != nil {
 		return app.Conversation{}, storeErr(err)
 	}
@@ -300,18 +300,19 @@ func (s *Store) cleanup(ctx context.Context, db *sql.DB, now time.Time) (int, er
 		return 0, storeErr(err)
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, "SELECT id,expires_at FROM conversations WHERE expires_at<=?", now.UnixNano())
+	rows, err := tx.QueryContext(ctx, "SELECT id,tenant_id,expires_at FROM conversations WHERE expires_at<=?", now.UnixNano())
 	if err != nil {
 		return 0, storeErr(err)
 	}
 	type tomb struct {
-		id      string
-		expires int64
+		id       string
+		tenantID string
+		expires  int64
 	}
 	var expired []tomb
 	for rows.Next() {
 		var t tomb
-		if err = rows.Scan(&t.id, &t.expires); err != nil {
+		if err = rows.Scan(&t.id, &t.tenantID, &t.expires); err != nil {
 			rows.Close()
 			return 0, storeErr(err)
 		}
@@ -324,7 +325,7 @@ func (s *Store) cleanup(ctx context.Context, db *sql.DB, now time.Time) (int, er
 	}
 	rows.Close()
 	for _, t := range expired {
-		if _, err = tx.ExecContext(ctx, "INSERT OR REPLACE INTO conversation_tombstones(id,expires_at) VALUES(?,?)", t.id, t.expires); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT OR REPLACE INTO conversation_tombstones(id,expires_at,tenant_id) VALUES(?,?,?)", t.id, t.expires, t.tenantID); err != nil {
 			return 0, storeErr(err)
 		}
 	}

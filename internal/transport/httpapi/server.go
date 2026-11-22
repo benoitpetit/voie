@@ -14,5 +14,7 @@ func NewServer(service *app.Service, cfg *config.Config) *http.Server {
 		Addr:              net.JoinHostPort(cfg.Host, cfg.Port),
 		Handler:           NewHandler(service, cfg),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       time.Minute,
 	}
 }

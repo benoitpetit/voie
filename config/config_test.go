@@ -20,6 +20,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("ROUTING_CONFIG_PATH", "")
 	t.Setenv("CONVERSATION_DB_PATH", "")
 	t.Setenv("CONVERSATION_TTL", "")
+	t.Setenv("REQUIRE_CONVERSATION_SCOPE", "")
 	t.Setenv("FALLBACK_ENABLED", "")
 	t.Setenv("FALLBACK_MAX_RETRIES", "")
 	t.Setenv("FALLBACK_MAX_MODELS", "")
@@ -46,6 +47,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.FallbackEnabled != nil || cfg.FallbackMaxRetries != nil || cfg.FallbackMaxModels != nil {
 		t.Fatalf("fallback defaults must stay nil = %+v", cfg)
+	}
+	if cfg.RequireConversationScope {
+		t.Fatal("RequireConversationScope = true by default, want false")
 	}
 }
 
@@ -149,5 +153,34 @@ func TestLoadRejectsInvalidFallbackVariables(t *testing.T) {
 	t.Setenv("FALLBACK_MAX_MODELS", "-1")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FALLBACK_MAX_MODELS") {
 		t.Fatalf("Load() = %v, want FALLBACK_MAX_MODELS error", err)
+	}
+}
+
+func TestLoadParsesRequireConversationScope(t *testing.T) {
+	t.Setenv("REQUIRE_CONVERSATION_SCOPE", "true")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("API_TOKEN", "secret")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.RequireConversationScope {
+		t.Fatal("RequireConversationScope = false, want true")
+	}
+}
+
+func TestLoadRejectsConversationScopeWithoutToken(t *testing.T) {
+	t.Setenv("REQUIRE_CONVERSATION_SCOPE", "true")
+	t.Setenv("HOST", "127.0.0.1")
+	t.Setenv("API_TOKEN", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "API_TOKEN") {
+		t.Fatalf("Load() = %v, want API_TOKEN error", err)
+	}
+}
+
+func TestLoadRejectsInvalidRequireConversationScope(t *testing.T) {
+	t.Setenv("REQUIRE_CONVERSATION_SCOPE", "sometimes")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "REQUIRE_CONVERSATION_SCOPE") {
+		t.Fatalf("Load() = %v, want REQUIRE_CONVERSATION_SCOPE error", err)
 	}
 }

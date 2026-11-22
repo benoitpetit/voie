@@ -11,20 +11,21 @@ import (
 )
 
 type Config struct {
-	Host               string
-	Port               string
-	EnableDebug        bool
-	DefaultProvider    string
-	Timeout            time.Duration
-	APIToken           string
-	RouterModel        string
-	SynthesisModel     string
-	RoutingConfigPath  string
-	ConversationDBPath string
-	ConversationTTL    time.Duration
-	FallbackEnabled    *bool
-	FallbackMaxRetries *int
-	FallbackMaxModels  *int
+	Host                     string
+	Port                     string
+	EnableDebug              bool
+	DefaultProvider          string
+	Timeout                  time.Duration
+	APIToken                 string
+	RouterModel              string
+	SynthesisModel           string
+	RoutingConfigPath        string
+	ConversationDBPath       string
+	ConversationTTL          time.Duration
+	RequireConversationScope bool
+	FallbackEnabled          *bool
+	FallbackMaxRetries       *int
+	FallbackMaxModels        *int
 }
 
 func Load() (*Config, error) {
@@ -76,6 +77,10 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	requireConversationScope, err := parseOptionalBool("REQUIRE_CONVERSATION_SCOPE")
+	if err != nil {
+		return nil, err
+	}
 	fallbackMaxRetries, err := parseOptionalInt("FALLBACK_MAX_RETRIES")
 	if err != nil {
 		return nil, err
@@ -91,10 +96,11 @@ func Load() (*Config, error) {
 		RouterModel:       strings.TrimSpace(os.Getenv("ROUTER_MODEL")),
 		SynthesisModel:    strings.TrimSpace(os.Getenv("SYNTHESIS_MODEL")),
 		RoutingConfigPath: routingConfigPath, ConversationDBPath: conversationDBPath,
-		ConversationTTL:    conversationTTL,
-		FallbackEnabled:    fallbackEnabled,
-		FallbackMaxRetries: fallbackMaxRetries,
-		FallbackMaxModels:  fallbackMaxModels,
+		ConversationTTL:          conversationTTL,
+		RequireConversationScope: requireConversationScope != nil && *requireConversationScope,
+		FallbackEnabled:          fallbackEnabled,
+		FallbackMaxRetries:       fallbackMaxRetries,
+		FallbackMaxModels:        fallbackMaxModels,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -124,6 +130,9 @@ func (c *Config) Validate() error {
 	}
 	if !isLoopbackHost(c.Host) && strings.TrimSpace(c.APIToken) == "" {
 		return fmt.Errorf("API_TOKEN is required when HOST is not loopback")
+	}
+	if c.RequireConversationScope && strings.TrimSpace(c.APIToken) == "" {
+		return fmt.Errorf("API_TOKEN is required when REQUIRE_CONVERSATION_SCOPE is enabled")
 	}
 	for name, value := range map[string]*int{"FALLBACK_MAX_RETRIES": c.FallbackMaxRetries, "FALLBACK_MAX_MODELS": c.FallbackMaxModels} {
 		if value != nil && (*value < 0 || *value > 3) {

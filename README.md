@@ -94,6 +94,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `DEFAULT_PROVIDER` | empty | Provider used for the generic `openai` model in API requests |
 | `TIMEOUT` | `120` | End-to-end completion timeout in seconds |
 | `API_TOKEN` | empty | Bearer token required for non-loopback binds |
+| `REQUIRE_CONVERSATION_SCOPE` | `false` | Require the trusted project scope header on `/v1/*`; requires `API_TOKEN` |
 | `ROUTER_MODEL` | empty | Optional model used by profiles with `selection: "router"`; also the ensemble synthesizer fallback |
 | `SYNTHESIS_MODEL` | empty | Model that merges ensemble answers; falls back to `ROUTER_MODEL` |
 | `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local model descriptions, routing profiles, ensemble defaults, and fallback rules |
@@ -105,7 +106,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
 
-The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`.
+The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`. Hosted deployments should set `REQUIRE_CONVERSATION_SCOPE=true`; this makes `/v1/*` reject requests without the project scope supplied by the trusted Worker.
 
 ### Releases
 
@@ -128,11 +129,12 @@ The GitHub Actions workflow creates a GitHub Release with archives named `voie_V
 ./voie completion --help
 ./voie models --json
 ./voie providers
+./voie healthcheck
 ./voie chat --model MODEL_ID "Summarize this text"
 cat prompt.txt | ./voie chat --model MODEL_ID
 ```
 
-The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts; `--task` completion uses configured routing profile names. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
+The Cobra help shows every command and its available flags. Commands are `serve`, `chat`, `conversations`, `models`, `providers`, `healthcheck`, `mcp`, `completion`, `version`, and `update`; use `voie <command> --help` for command-specific options. `voie completion bash`, `zsh`, `fish`, or `powershell` generates shell completion scripts; `--task` completion uses configured routing profile names. `voie version` and the root aliases `voie --version` / `voie -v` print the build version. `voie update` checks the latest release and installs it when newer; it requires a tagged release build and permission to replace the current executable. Help works without loading provider configuration.
 
 `chat` prints only the completion text to stdout. Errors go to stderr and return a nonzero exit status. Choose an exact ID from `voie models`; unknown IDs are rejected.
 

@@ -27,6 +27,13 @@ generated for this origin. Do not commit or print the value. The Go service
 binds to `0.0.0.0:8080` in the container and refuses to start on a non-loopback
 host when `API_TOKEN` is empty.
 
+Set `REQUIRE_CONVERSATION_SCOPE=true` in the Coolify environment as well. Deploy
+the updated Core image with this setting before deploying the Worker that sends
+project scopes. During the interval, requests without a verified scope receive
+`401`; after the Worker update, active project keys receive their isolated
+conversation namespace. `/health` remains available to the authenticated
+container health check.
+
 Set the exact same secret as the Cloudflare Worker secret `VOIE_ORIGIN_TOKEN`.
 The Worker replaces each project's API key with this origin token before
 forwarding the request. Project keys are not valid against the Go application.
@@ -50,6 +57,10 @@ curl -sS -o /dev/null -w '%{http_code}\n' \
 
 Expected status codes are `401` and `200`. Keep the token in a secret manager or
 shell environment; do not paste it into the URL or command history.
+
+The Docker image has a built-in `HEALTHCHECK` that runs `voie healthcheck` every
+30 seconds. It calls the local `/health` route, uses `API_TOKEN` when configured,
+and reports the container unhealthy when the route does not return `200`.
 
 ## Browser-backed provider
 

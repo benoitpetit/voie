@@ -20,6 +20,7 @@ voie chat --strategy ensemble [--candidate-count N] [--ensemble-model ID]... [--
 voie conversations create|list|show|delete
 voie models [--json]
 voie providers [--json]
+voie healthcheck
 voie mcp
 voie completion SHELL
 voie version
@@ -44,6 +45,7 @@ voie models
 voie models --json
 voie providers
 voie providers --json
+voie healthcheck
 voie chat --model MODEL_ID "Summarize this text"
 cat prompt.txt | voie chat --model MODEL_ID
 voie serve --host 127.0.0.1 --port 8080
@@ -57,6 +59,8 @@ voie mcp
 `completion` generates shell completion scripts with Cobra's built-in command. Run `voie completion bash`, `voie completion zsh`, `voie completion fish`, or `voie completion powershell`; generated scripts invoke the CLI's hidden completion endpoint, so install or source the output using your shell's normal completion setup.
 
 `serve` starts the HTTP API using configured `HOST` and `PORT`; flags override them for that run. A non-loopback host still requires `API_TOKEN`. Runtime configuration loads when a command runs, not when help is requested.
+
+`healthcheck` probes the local `/health` endpoint on `127.0.0.1:$PORT`, includes `API_TOKEN` when configured, and exits nonzero unless the server returns `200`. The Docker image uses it for its container health check.
 
 `chat` invokes the shared service directly in the current process. Classic requests require a supported model ID with `--model`; auto and ensemble requests can omit it. `--task` names a routing profile from `routing.json`; shell completion reads configured profile names. Local selection is deterministic by default, and a profile can opt into `ROUTER_MODEL`. `--candidate-count` selects 2–5 ensemble agents automatically. Repeat `--ensemble-model ID` to supply an exact list; when both flags are present, the count must match the number of IDs. The old `--models ID,ID` form remains supported. `--ensemble-mode` selects `independent`, `chain`, or `debate`; `--chain-agents` remains available for chain requests, and `--debate-turns` sets 0–5 review rounds (zero means no review rounds). `--conversation` resumes local history. Prompt input can come from arguments or stdin. The command writes answer text only to stdout. Progress appears on stderr: interactive terminals show a monochrome spinner with routing/model stages, while redirected stderr receives plain progress lines. Progress never includes prompt or answer text. Errors are returned to stderr by the executable and use a nonzero exit code.
 
@@ -97,6 +101,7 @@ The commands use the same environment variables as the HTTP runtime:
 | `DEFAULT_PROVIDER` | empty | Provider used for the API's generic `openai` model |
 | `TIMEOUT` | `120` | End-to-end timeout in seconds |
 | `API_TOKEN` | empty | Required for non-loopback HTTP binds |
+| `REQUIRE_CONVERSATION_SCOPE` | `false` | Require a trusted project scope on `/v1/*`; requires `API_TOKEN` |
 | `ROUTER_MODEL` | empty | Model selected by profiles using router selection; fallback synthesizer |
 | `SYNTHESIS_MODEL` | empty | Ensemble synthesis model; defaults to `ROUTER_MODEL` |
 | `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local routing policy file |

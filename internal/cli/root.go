@@ -83,6 +83,7 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 	root.AddCommand(newModelsCommand(service))
 	root.AddCommand(newProvidersCommand(service))
 	root.AddCommand(newMCPCommand(getRuntime))
+	root.AddCommand(newHealthcheckCommand(nil))
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newUpdateCommand())
 	return root

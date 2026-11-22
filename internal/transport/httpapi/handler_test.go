@@ -292,6 +292,101 @@ func TestHTTPConversationLifecycle(t *testing.T) {
 	}
 }
 
+func TestHTTPConversationAccessIsScopedByProject(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &httpTestProvider{})
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	service, err := app.NewService(registry, app.ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{APIToken: "origin-secret"})
+	request := func(method, path, projectScope string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Authorization", "Bearer origin-secret")
+		if projectScope != "" {
+			req.Header.Set("X-Voie-Project-ID", projectScope)
+		}
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, req)
+		return recorder
+	}
+	create := func(scope string) app.Conversation {
+		recorder := request(http.MethodPost, "/v1/conversations", scope)
+		if recorder.Code != http.StatusCreated {
+			t.Fatalf("create for scope %q = %d %s", scope, recorder.Code, recorder.Body.String())
+		}
+		var conversation app.Conversation
+		if err := json.Unmarshal(recorder.Body.Bytes(), &conversation); err != nil {
+			t.Fatal(err)
+		}
+		return conversation
+	}
+
+	projectA := "5b2b5e15a8f4a24931a714aefcf0f5eabae0781d07e3e913bfc19434f9a0b1a2"
+	projectB := "8842a0cd2c9dcda39e5ef8c2d55bc73fc2585f2e890d66c265a8fe26f79ad630"
+	conversationA := create(projectA)
+	conversationB := create(projectB)
+
+	listB := request(http.MethodGet, "/v1/conversations", projectB)
+	if listB.Code != http.StatusOK || strings.Contains(listB.Body.String(), conversationA.ID) || !strings.Contains(listB.Body.String(), conversationB.ID) {
+		t.Fatalf("project B list = %d %s", listB.Code, listB.Body.String())
+	}
+	showAFromB := request(http.MethodGet, "/v1/conversations/"+conversationA.ID, projectB)
+	if showAFromB.Code != http.StatusNotFound {
+		t.Fatalf("project B read of project A conversation = %d %s, want 404", showAFromB.Code, showAFromB.Body.String())
+	}
+	deleteAFromB := request(http.MethodDelete, "/v1/conversations/"+conversationA.ID, projectB)
+	if deleteAFromB.Code != http.StatusNoContent {
+		t.Fatalf("project B delete of project A conversation = %d, want idempotent 204", deleteAFromB.Code)
+	}
+	showA := request(http.MethodGet, "/v1/conversations/"+conversationA.ID, projectA)
+	if showA.Code != http.StatusOK {
+		t.Fatalf("project A read = %d %s, want 200", showA.Code, showA.Body.String())
+	}
+}
+
+func TestHTTPChatRejectsOversizedRequestBody(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	content := strings.Repeat("x", (2<<20)+1)
+	body := `{"model":"model","messages":[{"role":"user","content":"` + content + `"}]}`
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized request = %d %s, want 413", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestHTTPChatRejectsOversizedTrailingWhitespace(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	body := `{"model":"model","messages":[{"role":"user","content":"hello"}]}` + strings.Repeat(" ", 2<<20)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversized trailing content = %d %s, want 413", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestNewServerBoundsRequestReadsAndIdleConnections(t *testing.T) {
+	service, _ := httpTestService(t)
+	server := NewServer(service, &config.Config{Host: "127.0.0.1", Port: "8080"})
+	if server.ReadHeaderTimeout != 5*time.Second {
+		t.Fatalf("ReadHeaderTimeout = %s, want 5s", server.ReadHeaderTimeout)
+	}
+	if server.ReadTimeout != 30*time.Second {
+		t.Fatalf("ReadTimeout = %s, want 30s", server.ReadTimeout)
+	}
+	if server.IdleTimeout != time.Minute {
+		t.Fatalf("IdleTimeout = %s, want 1m", server.IdleTimeout)
+	}
+}
+
 func TestHTTPConversationCompletionReturnsConversationID(t *testing.T) {
 	registry := app.NewRegistry()
 	provider := &httpTestProvider{}

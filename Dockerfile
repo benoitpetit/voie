@@ -27,4 +27,5 @@ EXPOSE 8080
 VOLUME ["/data"]
 
 USER voie
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["/usr/local/bin/voie", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/voie", "serve"]

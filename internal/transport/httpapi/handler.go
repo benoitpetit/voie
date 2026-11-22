@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"github.com/benoitpetit/voie/internal/brand"
 	"github.com/benoitpetit/voie/utils"
 )
+
+const maxChatRequestBytes = 2 << 20
 
 type chatRequest struct {
 	Model          string                      `json:"model"`
@@ -39,10 +42,12 @@ func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
 	mux.HandleFunc("/v1/conversations", handler.conversations)
 	mux.HandleFunc("/v1/conversations/", handler.conversation)
 	var token string
+	var requireProjectScope bool
 	if cfg != nil {
 		token = cfg.APIToken
+		requireProjectScope = cfg.RequireConversationScope
 	}
-	return requestLogging(cors(bearerAuth(token, mux)))
+	return requestLogging(cors(bearerAuth(token, requireProjectScope, mux)))
 }
 
 type apiHandler struct{ service *app.Service }
@@ -54,9 +59,17 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request chatRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		utils.Warn("chat failed category=invalid_json")
-		writeError(w, http.StatusBadRequest, "Bad request: invalid JSON — "+err.Error())
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxChatRequestBytes))
+	if err := decoder.Decode(&request); err != nil {
+		writeChatDecodeError(w, err)
+		return
+	}
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			err = errors.New("request body contains multiple JSON values")
+		}
+		writeChatDecodeError(w, err)
 		return
 	}
 	appRequest := app.CompletionRequest{Model: request.Model, Provider: request.Provider, Strategy: request.Strategy, Task: request.Task, Models: request.Models, Ensemble: request.Ensemble, Fallback: request.Fallback, ConversationID: request.ConversationID, Messages: request.Messages}
@@ -72,6 +85,17 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.streamCompletion(w, r, appRequest)
+}
+
+func writeChatDecodeError(w http.ResponseWriter, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		utils.Warn("chat failed category=request_too_large")
+		writeError(w, http.StatusRequestEntityTooLarge, "Bad request: request body is too large.")
+		return
+	}
+	utils.Warn("chat failed category=invalid_json")
+	writeError(w, http.StatusBadRequest, "Bad request: invalid JSON — "+err.Error())
 }
 
 func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, request app.CompletionRequest) {

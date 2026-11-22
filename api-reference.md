@@ -14,6 +14,8 @@ Loopback binds do not require a token. A non-loopback `HOST` requires `API_TOKEN
 Authorization: Bearer <API_TOKEN>
 ```
 
+Hosted deployments also set `REQUIRE_CONVERSATION_SCOPE=true`. In that mode every `/v1/*` route requires a valid 64-character lowercase hexadecimal `X-Voie-Project-ID` supplied by the trusted Worker. The Worker derives it after verifying the project key and replaces any client-supplied value; hosted API clients should not set this header themselves.
+
 Cross-origin browser requests are rejected. Requests without an `Origin` header (including CLI and MCP clients) are unaffected; browser clients should call the API from the same host origin.
 
 ## `POST /v1/chat/completions`
@@ -42,6 +44,8 @@ Creates a completion. Classic requests use a supported `model` ID or alias; `aut
 ```
 
 `messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `ensemble`, `conversation_id`, and `stream` are optional, subject to the selected strategy. For ensembles, prefer `ensemble.models`; root-level `models` remains supported for existing clients. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
+
+Chat request bodies are limited to 2 MiB. The server limits request read time and idle connections; response writes remain unbounded for SSE streams.
 
 `strategy` defaults to `classic`, preserving model/provider selection. `auto` selects one eligible model from a routing profile. The optional `task` field names that profile; when omitted, `default_profile` from `routing.json` applies. Local selection is deterministic by default: preferred models are considered first, followed by model ID. A profile can set `selection` to `router` to use `ROUTER_MODEL` for a semantic choice within its eligible candidates.
 
@@ -197,7 +201,7 @@ Returns local registry health without probing provider websites. The response in
 
 ## Local conversations
 
-Conversation storage is local SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days.
+Conversation storage is SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days. In a hosted deployment, the Worker supplies a verified project scope and all conversation operations are isolated to that scope; legacy unscoped rows are inaccessible to scoped requests and removed by expiry cleanup.
 
 - `POST /v1/conversations` creates a conversation and returns `201` with its ID and timestamps.
 - `GET /v1/conversations` returns summary rows without transcript contents.
@@ -232,6 +236,7 @@ Errors use this JSON envelope:
 | --- | --- |
 | `400` | Invalid input, unknown model, provider/model mismatch, or invalid fallback bounds/IDs |
 | `401` | Missing or invalid bearer token |
+| `413` | Chat request body exceeds 2 MiB |
 | `404` | Unknown provider, unknown conversation, or unmatched route |
 | `408` | Request canceled |
 | `503` | Provider disabled |

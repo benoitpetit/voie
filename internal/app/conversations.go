@@ -5,6 +5,23 @@ import (
 	"time"
 )
 
+type conversationScopeKey struct{}
+
+// WithConversationScope marks the project namespace used by persistent conversations.
+// An empty scope preserves the local, single-user store behavior.
+func WithConversationScope(ctx context.Context, scope string) context.Context {
+	if scope == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, conversationScopeKey{}, scope)
+}
+
+// ConversationScope returns the namespace attached to the request context.
+func ConversationScope(ctx context.Context) string {
+	scope, _ := ctx.Value(conversationScopeKey{}).(string)
+	return scope
+}
+
 // ConversationStore persists opt-in local conversation state. Implementations
 // must use optimistic versions so inference can happen outside a write lock.
 type ConversationStore interface {
