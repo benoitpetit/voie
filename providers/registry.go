@@ -19,5 +19,6 @@ func NewRegistry() *app.Registry {
 	registry.Register("openrouter", NewOpenRouter())
 	registry.Register("orcarouter", NewOrcaRouter())
 	registry.Register("antigravity", NewAntigravity())
+	registry.Register("kiro", NewKiro())
 	return registry
 }
