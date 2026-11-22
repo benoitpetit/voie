@@ -87,6 +87,7 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 	root.AddCommand(newVersionCommand())
 	root.AddCommand(newUpdateCommand())
 	root.AddCommand(newConnectCommand(nil))
+	root.AddCommand(newClineBridgeCommand())
 	return root
 }
 
