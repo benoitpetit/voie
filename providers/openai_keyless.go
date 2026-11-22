@@ -32,6 +32,7 @@ type openAIKeylessConfig struct {
 	Description    string
 	SupportsStream bool
 	Headers        map[string]string // optional extra headers (e.g. a loopback gateway key)
+	Ensure         func(context.Context) error // optional lazy gateway startup
 }
 
 type openAIKeylessProvider struct {
@@ -100,6 +101,11 @@ func (p *openAIKeylessProvider) resolve(model string) (string, error) {
 }
 
 func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message, model string, stream bool) (*http.Response, error) {
+	if p.cfg.Ensure != nil {
+		if err := p.cfg.Ensure(ctx); err != nil {
+			return nil, app.WrapNetworkFailure(err, p.cfg.Name, model)
+		}
+	}
 	payload, err := json.Marshal(openAIKeylessRequest{
 		Model:     model,
 		Messages:  messages,
