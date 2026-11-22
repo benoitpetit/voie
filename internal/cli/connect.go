@@ -149,6 +149,10 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					if err := providers.StartACPBridge(provider); err != nil {
 						return fmt.Errorf("start %s ACP bridge: %w", provider, err)
 					}
+				} else if provider == "cline" {
+					if err := providers.StartClineBridge(); err != nil {
+						return fmt.Errorf("start cline ACP bridge (did you run `cline auth`?): %w", err)
+					}
 				}
 			}
 			if check != nil {
