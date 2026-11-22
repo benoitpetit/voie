@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/benoitpetit/voie/internal/app"
@@ -30,10 +31,17 @@ type modelItem struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider"`
 	OwnedBy  string `json:"owned_by"`
+	Group    string `json:"group,omitempty"`
+}
+
+type modelGroup struct {
+	Name   string      `json:"name"`
+	Models []modelItem `json:"models"`
 }
 
 type modelsOutput struct {
-	Models []modelItem `json:"models"`
+	Models []modelItem  `json:"models"`
+	Groups []modelGroup `json:"groups"`
 }
 
 type providerItem struct {
@@ -79,13 +87,31 @@ func NewServer(service *app.Service) *mcp.Server {
 	}, logToolCall(listModelsToolName, func(context.Context, *mcp.CallToolRequest, emptyInput) (*mcp.CallToolResult, modelsOutput, error) {
 		models := service.ListModels()
 		output := modelsOutput{Models: make([]modelItem, 0, len(models))}
-		var lines []string
+		byGroup := make(map[string][]modelItem)
 		for _, model := range models {
 			provider, _ := model.Meta["provider"].(string)
-			output.Models = append(output.Models, modelItem{ID: model.ID, Provider: provider, OwnedBy: model.OwnedBy})
-			lines = append(lines, fmt.Sprintf("%s (%s)", model.ID, provider))
+			group := model.Group
+			if group == "" {
+				group = model.OwnedBy
+			}
+			item := modelItem{ID: model.ID, Provider: provider, OwnedBy: model.OwnedBy, Group: group}
+			output.Models = append(output.Models, item)
+			byGroup[group] = append(byGroup[group], item)
 		}
-		return textToolResult("Supported models:\n" + strings.Join(lines, "\n")), output, nil
+		names := make([]string, 0, len(byGroup))
+		for name := range byGroup {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		var lines []string
+		for _, name := range names {
+			lines = append(lines, fmt.Sprintf("%s:", name))
+			for _, item := range byGroup[name] {
+				lines = append(lines, fmt.Sprintf("  %s (%s)", item.ID, item.Provider))
+			}
+			output.Groups = append(output.Groups, modelGroup{Name: name, Models: byGroup[name]})
+		}
+		return textToolResult("Supported models by provider:\n" + strings.Join(lines, "\n")), output, nil
 	}))
 	mcp.AddTool(server, &mcp.Tool{
 		Name: listProvidersToolName, Description: "List providers and check whether their URLs are reachable over HTTP.",

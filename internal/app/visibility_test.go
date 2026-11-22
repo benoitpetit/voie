@@ -21,7 +21,7 @@ func (p *visibilityProvider) ChatCompletionStream(context.Context, []app.Message
 	return nil
 }
 func (p *visibilityProvider) GetInfo() app.ProviderInfo {
-	return app.ProviderInfo{Name: p.name, Working: p.working, SupportedModels: []string{p.model}}
+	return app.ProviderInfo{Name: p.name, Label: p.name, Working: p.working, SupportedModels: []string{p.model}}
 }
 func (p *visibilityProvider) SupportsModel(model string) bool { return p.working && model == p.model }
 
@@ -49,6 +49,14 @@ func TestUnconfiguredProviderHiddenFromListModels(t *testing.T) {
 	models := service.ListModels()
 	if len(models) != 1 || models[0].ID != "visible-model" {
 		t.Fatalf("ListModels = %+v, want only visible-model", models)
+	}
+}
+
+func TestListModelsCarriesGroupMetadata(t *testing.T) {
+	service := newVisibilityService(t, &visibilityProvider{name: "visible", working: true, model: "visible-model"})
+	models := service.ListModels()
+	if len(models) != 1 || models[0].Group == "" {
+		t.Fatalf("ListModels = %+v, want group metadata", models)
 	}
 }
 

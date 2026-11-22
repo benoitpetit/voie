@@ -116,6 +116,7 @@ type ModelInfo struct {
 	Object     string                 `json:"object"`
 	Created    int64                  `json:"created"`
 	OwnedBy    string                 `json:"owned_by"`
+	Group      string                 `json:"group,omitempty"`
 	Permission []interface{}          `json:"permission"`
 	Root       string                 `json:"root"`
 	Parent     *string                `json:"parent"`

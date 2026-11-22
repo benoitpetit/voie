@@ -505,6 +505,7 @@ func (s *Service) ListModels() []ModelInfo {
 			}
 			models = append(models, ModelInfo{
 				ID: id, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
+				Group:      ownerInfo.Label,
 				Permission: []interface{}{}, Root: id,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
 			})
