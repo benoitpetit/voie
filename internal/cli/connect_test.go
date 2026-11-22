@@ -9,6 +9,9 @@ import (
 func runConnect(t *testing.T, args []string, stdin string, check func(string, string) error) (string, string, error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
+	if check == nil {
+		check = func(string, string) error { return nil }
+	}
 	command := newConnectCommand(check)
 	command.SetIn(strings.NewReader(stdin))
 	command.SetOut(&stdout)

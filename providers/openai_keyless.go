@@ -31,7 +31,8 @@ type openAIKeylessConfig struct {
 	ModelIDs       map[string]string // voie ID -> upstream model ID
 	Description    string
 	SupportsStream bool
-	Headers        map[string]string // optional extra headers (e.g. a loopback gateway key)
+	Headers        map[string]string           // optional extra headers (e.g. a loopback gateway key)
+	TokenSupplier  func() string               // resolves the bearer token per request
 	Ensure         func(context.Context) error // optional lazy gateway startup
 }
 
@@ -130,6 +131,9 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 	sort.Strings(names)
 	for _, name := range names {
 		req.Header.Set(name, p.cfg.Headers[name])
+	}
+	if p.cfg.TokenSupplier != nil {
+		req.Header.Set("Authorization", "Bearer "+p.cfg.TokenSupplier())
 	}
 	// Anonymous lanes set no Authorization header; a local gateway may supply one.
 	resp, err := p.client.Do(req)

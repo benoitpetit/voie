@@ -44,6 +44,8 @@ oauth:
 	return LocalGatewaySpec{
 		Name:       "antigravity",
 		Binary:     "CLIProxyAPI",
+		Args:       []string{"-config", filepath.Join(configDir, "config.yaml")},
+		Dir:        configDir,
 		ConfigPath: filepath.Join(configDir, "config.yaml"),
 		ConfigBody: []byte(body),
 		BaseURL:    "http://127.0.0.1:8317",

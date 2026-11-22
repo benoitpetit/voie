@@ -41,6 +41,7 @@ ACP_TRUST_TOOLS=false
 		Name:       "kiro",
 		Binary:     "uv",
 		Args:       []string{"run", "main.py"},
+		Dir:        dir,
 		ConfigPath: filepath.Join(dir, ".env"),
 		ConfigBody: []byte(body),
 		BaseURL:    "http://127.0.0.1:8091",

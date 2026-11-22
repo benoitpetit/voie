@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/spf13/cobra"
@@ -18,12 +20,15 @@ var connectableProviders = []string{"opencode-zen", "opencode-go", "openrouter",
 type tokenChecker func(provider, token string) error
 
 func newConnectCommand(check tokenChecker) *cobra.Command {
+	if check == nil {
+		check = validateToken
+	}
 	var token string
 	var list bool
 	command := &cobra.Command{
 		Use:   "connect [provider]",
 		Short: "Connect a provider with its token",
-		Long: "Connect stores one token per provider in the user config directory (0600). Environment variables override saved tokens. The two opencode providers use the local gateway key, which defaults to voie-local.",
+		Long:  "Connect stores one token per provider in the user config directory (0600). Environment variables override saved tokens. The two opencode providers use the local gateway key, which defaults to voie-local.",
 		Example: `  voie connect
   voie connect openrouter --token sk-or-v1-...
   voie connect --list
@@ -94,6 +99,34 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 	command.Flags().StringVar(&token, "token", "", "provider token (non-interactive)")
 	command.Flags().BoolVar(&list, "list", false, "list connectable providers and their state")
 	return command
+}
+
+func validateToken(provider, token string) error {
+	url := ""
+	switch provider {
+	case "openrouter":
+		url = "https://openrouter.ai/api/v1/key"
+	case "orcarouter":
+		url = "https://api.orcarouter.ai/v1/models"
+	case "opencode-zen", "opencode-go":
+		url = "http://127.0.0.1:8090/healthz"
+	default:
+		return nil
+	}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return fmt.Errorf("provider rejected the token (HTTP %d)", resp.StatusCode)
+	}
+	return nil
 }
 
 func isConnectable(name string) bool {

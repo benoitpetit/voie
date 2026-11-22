@@ -29,7 +29,8 @@ func newClineBridgeCommand() *cobra.Command {
 				return err
 			}
 			base := filepath.Join(dir, "voie", "gateways", "cline")
-			if err := os.MkdirAll(base, 0o700); err != nil {
+			scratch := filepath.Join(base, "scratch")
+			if err := os.MkdirAll(scratch, 0o700); err != nil {
 				return err
 			}
 			store, _ := config.LoadCredentials()
@@ -43,8 +44,8 @@ func newClineBridgeCommand() *cobra.Command {
 			return clinebridge.Run(command.Context(), clinebridge.Config{
 				Listen:     listen,
 				ClinePath:  clinePath,
-				ScratchDir: filepath.Join(base, "scratch"),
-				HookPath:   filepath.Join(base, "hooks.json"),
+				ScratchDir: scratch,
+				HookPath:   filepath.Join(scratch, "hooks.mjs"),
 				LocalKey:   key,
 				Model:      model,
 			})

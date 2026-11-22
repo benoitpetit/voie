@@ -32,7 +32,7 @@ func newVisibilityService(t *testing.T, providers ...*visibilityProvider) *app.S
 		registry.Register(provider.name, provider)
 	}
 	service, err := app.NewService(registry, app.ServiceOptions{
-		Timeout:    time.Second,
+		Timeout:     time.Second,
 		HealthProbe: func(context.Context, string) bool { return true },
 	})
 	if err != nil {
@@ -49,6 +49,24 @@ func TestUnconfiguredProviderHiddenFromListModels(t *testing.T) {
 	models := service.ListModels()
 	if len(models) != 1 || models[0].ID != "visible-model" {
 		t.Fatalf("ListModels = %+v, want only visible-model", models)
+	}
+}
+
+func TestUnconfiguredProviderHiddenFromDiscovery(t *testing.T) {
+	service := newVisibilityService(t,
+		&visibilityProvider{name: "hidden", working: false, model: "hidden-model"},
+		&visibilityProvider{name: "visible", working: true, model: "visible-model"},
+	)
+	providers, err := service.ListProviders(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 1 || providers[0].Name != "visible" {
+		t.Errorf("ListProviders = %+v", providers)
+	}
+	metadata := service.ListProviderMetadata()
+	if len(metadata) != 1 || metadata[0].Name != "visible" {
+		t.Errorf("ListProviderMetadata = %+v", metadata)
 	}
 }
 

@@ -517,7 +517,7 @@ func (s *Service) ListModels() []ModelInfo {
 }
 
 func (s *Service) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
-	names := s.registry.GetProviderNames()
+	names := s.workingProviderNames()
 	providers := make([]ProviderInfo, len(names))
 	var waitGroup sync.WaitGroup
 	for i, name := range names {
@@ -539,12 +539,25 @@ func (s *Service) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
 
 // ListProviderMetadata returns the catalogue without probing external URLs.
 func (s *Service) ListProviderMetadata() []ProviderInfo {
-	names := s.registry.GetProviderNames()
+	names := s.workingProviderNames()
 	providers := make([]ProviderInfo, 0, len(names))
 	for _, name := range names {
 		providers = append(providers, s.registry.Get(name).GetInfo())
 	}
 	return providers
+}
+
+// workingProviderNames hides providers that cannot serve requests, so a token
+// provider without a credential is absent from every discovery surface.
+func (s *Service) workingProviderNames() []string {
+	all := s.registry.GetProviderNames()
+	names := make([]string, 0, len(all))
+	for _, name := range all {
+		if s.registry.Get(name).GetInfo().Working {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func (s *Service) selectProvider(request CompletionRequest) (Provider, string, error) {

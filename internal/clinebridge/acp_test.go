@@ -104,14 +104,18 @@ func TestCollectsAgentMessageChunks(t *testing.T) {
 func TestPermissionRequestsAreDenied(t *testing.T) {
 	agent := newFakeAgent()
 	client := NewClient(agent, agent)
-	agent.pushNow(`{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1"}}`)
+	agent.pushNow(`{"jsonrpc":"2.0","id":9,"method":"session/request_permission","params":{"sessionId":"s1","options":[{"optionId":"opt-allow","kind":"allow_once"},{"optionId":"opt-reject","kind":"reject_once"}]}}`)
 	agent.push(`{"jsonrpc":"2.0","id":1,"result":{}}`)
 	agent.push(`{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s1"}}`)
 	agent.push(`{"jsonrpc":"2.0","id":3,"result":{}}`)
 	if _, err := client.Handshake(context.Background(), "/tmp/scratch", "m"); err != nil {
 		t.Fatal(err)
 	}
-	if sent := agent.sent(); !strings.Contains(sent, "reject_once") {
-		t.Errorf("permission was not denied:\n%s", sent)
+	sent := agent.sent()
+	if !strings.Contains(sent, `"optionId":"opt-reject"`) {
+		t.Errorf("permission denial did not use the offered reject option:\n%s", sent)
+	}
+	if strings.Contains(sent, `"optionId":"reject_once"`) {
+		t.Errorf("hardcoded optionId leaked:\n%s", sent)
 	}
 }

@@ -15,7 +15,6 @@ type OrcaRouter struct {
 }
 
 func NewOrcaRouter() *OrcaRouter {
-	store, _ := config.LoadCredentials()
 	return &OrcaRouter{newOpenAIKeylessProvider(openAIKeylessConfig{
 		Name:           "orcarouter",
 		Label:          "OrcaRouter",
@@ -25,7 +24,10 @@ func NewOrcaRouter() *OrcaRouter {
 		ModelIDs:       map[string]string{"orcafree": "orcarouter/free"},
 		Description:    "Free OrcaRouter models through a configured API token",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + store.Token("orcarouter")},
+		TokenSupplier: func() string {
+			current, _ := config.LoadCredentials()
+			return current.Token("orcarouter")
+		},
 	}, &http.Client{Timeout: openAIKeylessTimeout})}
 }
 

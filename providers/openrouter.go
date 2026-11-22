@@ -16,7 +16,6 @@ type OpenRouter struct {
 }
 
 func NewOpenRouter() *OpenRouter {
-	store, _ := config.LoadCredentials()
 	return &OpenRouter{newOpenAIKeylessProvider(openAIKeylessConfig{
 		Name:           "openrouter",
 		Label:          "OpenRouter",
@@ -26,7 +25,10 @@ func NewOpenRouter() *OpenRouter {
 		ModelIDs:       map[string]string{"orfree": "openrouter/free"},
 		Description:    "Free OpenRouter models through a configured API token",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + store.Token("openrouter")},
+		TokenSupplier: func() string {
+			current, _ := config.LoadCredentials()
+			return current.Token("openrouter")
+		},
 	}, &http.Client{Timeout: openAIKeylessTimeout})}
 }
 

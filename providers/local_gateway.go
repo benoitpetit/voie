@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ type LocalGatewaySpec struct {
 	Name       string
 	Binary     string
 	Args       []string
+	Dir        string
 	ConfigPath string
 	ConfigBody []byte
 	BaseURL    string
@@ -40,24 +42,35 @@ var (
 
 func NewLocalGateway(spec LocalGatewaySpec) *LocalGateway { return &LocalGateway{spec: spec} }
 
-// Available reports whether the gateway can be started. It performs no network.
-func (g *LocalGateway) Available() bool {
-	if _, err := exec.LookPath(g.spec.Binary); err != nil {
-		return false
-	}
+// localKey resolves the loopback key. Local gateways default to voie-local, so
+// the key is never a precondition for visibility — only the binary is.
+func (g *LocalGateway) localKey() string {
 	store, err := config.LoadCredentials()
 	if err != nil {
-		return false
+		return "voie-local"
 	}
-	return store.Token(g.spec.Name) != ""
+	if key := store.Token(g.spec.Name); key != "" {
+		return key
+	}
+	return "voie-local"
+}
+
+// Available reports whether the gateway can be started. It performs no network.
+func (g *LocalGateway) Available() bool {
+	_, err := exec.LookPath(g.spec.Binary)
+	return err == nil
 }
 
 func (g *LocalGateway) healthy() bool {
 	if g.HealthCheck != nil {
 		return g.HealthCheck()
 	}
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(g.spec.BaseURL + g.spec.HealthPath)
+	req, err := http.NewRequest(http.MethodGet, g.spec.BaseURL+g.spec.HealthPath, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+g.localKey())
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
 	if err != nil {
 		return false
 	}
@@ -86,7 +99,10 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 			return err
 		}
 	}
-	cmd := exec.CommandContext(ctx, g.spec.Binary, g.spec.Args...)
+	// Gateway lifetime is owned by the manager, not by the caller's request
+	// context: a request ending must not kill a shared local gateway.
+	cmd := exec.Command(g.spec.Binary, g.spec.Args...)
+	cmd.Dir = g.spec.Dir
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
@@ -104,7 +120,7 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	return nil
+	return fmt.Errorf("gateway %s did not become healthy within 15s", g.spec.Name)
 }
 
 func runningGateways() map[string]*exec.Cmd {
@@ -124,6 +140,7 @@ func ShutdownGateways() {
 	for name, cmd := range gatewayProcess {
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
 		}
 		delete(gatewayProcess, name)
 	}

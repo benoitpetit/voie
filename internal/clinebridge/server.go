@@ -10,14 +10,20 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
-var denyHook = []byte(`{
-  "hooks": {
-    "beforeTool": [{ "matcher": "*", "action": "skip", "reason": "voie bridge serves chat completions only" }]
+// Cline hooks are JavaScript plugins exporting a beforeTool function that
+// returns {skip:true}. A JSON config is not loaded by Cline.
+var denyHook = []byte(`export default {
+  hooks: {
+    beforeTool: async () => ({
+      skip: true,
+      reason: "voie bridge serves chat completions only"
+    })
   }
-}
+};
 `)
 
 // Run starts the ACP child and the OpenAI-compatible HTTP endpoint.
@@ -56,6 +62,10 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
+
+	// ACP sessions are sequential: serialize prompts so concurrent HTTP
+	// requests cannot interleave agent message chunks.
+	var promptMu sync.Mutex
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +107,8 @@ func Run(ctx context.Context, cfg Config) error {
 		if request.Stream {
 			w.Header().Set("Content-Type", "text/event-stream")
 			flusher, _ := w.(http.Flusher)
+			promptMu.Lock()
+			defer promptMu.Unlock()
 			_ = client.Prompt(r.Context(), sessionID, prompt, func(token string) {
 				payload, _ := json.Marshal(map[string]any{
 					"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"content": token}}},
@@ -110,6 +122,8 @@ func Run(ctx context.Context, cfg Config) error {
 			return
 		}
 		var answer bytes.Buffer
+		promptMu.Lock()
+		defer promptMu.Unlock()
 		if err := client.Prompt(r.Context(), sessionID, prompt, func(token string) { answer.WriteString(token) }); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return

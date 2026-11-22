@@ -62,14 +62,24 @@ func (c *Client) readLoop() {
 		}
 		if message.ID != nil && message.Method != "" {
 			// Agent-initiated request: deny tool permissions so a chat
-			// completion can never modify the workspace.
-			_ = c.send(rpcMessage{
-				JSONRPC: "2.0",
-				ID:      message.ID,
-				Result: map[string]any{
-					"outcome": map[string]any{"outcome": "selected", "optionId": "reject_once"},
-				},
-			})
+			// completion can never modify the workspace. ACP option IDs are
+			// agent-chosen; select the option by its stable `kind`.
+			reply := map[string]any{"outcome": map[string]any{"outcome": "cancelled"}}
+			if message.Method == "session/request_permission" {
+				options, _ := message.Params["options"].([]any)
+				for _, raw := range options {
+					option, _ := raw.(map[string]any)
+					if option["kind"] == "reject_once" {
+						if id, ok := option["optionId"].(string); ok && id != "" {
+							reply = map[string]any{"outcome": map[string]any{
+								"outcome": "selected", "optionId": id,
+							}}
+						}
+						break
+					}
+				}
+			}
+			_ = c.send(rpcMessage{JSONRPC: "2.0", ID: message.ID, Result: reply})
 			continue
 		}
 		if message.ID != nil {
