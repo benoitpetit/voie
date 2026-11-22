@@ -7,7 +7,7 @@ import (
 
 type conversationScopeKey struct{}
 
-// WithConversationScope marks the project namespace used by persistent conversations.
+// WithConversationScope marks the namespace used by persistent conversations.
 // An empty scope preserves the local, single-user store behavior.
 func WithConversationScope(ctx context.Context, scope string) context.Context {
 	if scope == "" {

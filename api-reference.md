@@ -14,7 +14,7 @@ Loopback binds do not require a token. A non-loopback `HOST` requires `API_TOKEN
 Authorization: Bearer <API_TOKEN>
 ```
 
-Hosted deployments also set `REQUIRE_CONVERSATION_SCOPE=true`. In that mode every `/v1/*` route requires a valid 64-character lowercase hexadecimal `X-Voie-Project-ID` supplied by the trusted Worker. The Worker derives it after verifying the project key and replaces any client-supplied value; hosted API clients should not set this header themselves.
+Hosted deployments also set `REQUIRE_CONVERSATION_SCOPE=true`. In that mode every `/v1/*` route requires a valid 64-character lowercase hexadecimal `X-Voie-Conversation-Scope` supplied by the trusted Worker. The Worker derives it from the active API key record and replaces any client-supplied value; hosted API clients should not set this header themselves. Rate limiting remains at project level.
 
 Cross-origin browser requests are rejected. Requests without an `Origin` header (including CLI and MCP clients) are unaffected; browser clients should call the API from the same host origin.
 
@@ -201,7 +201,7 @@ Returns local registry health without probing provider websites. The response in
 
 ## Local conversations
 
-Conversation storage is SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days. In a hosted deployment, the Worker supplies a verified project scope and all conversation operations are isolated to that scope; legacy unscoped rows are inaccessible to scoped requests and removed by expiry cleanup.
+Conversation storage is SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days. Local binary use keeps the default single-user namespace. In a hosted deployment, the Worker supplies an opaque scope for the active API key, and every conversation operation is isolated to that key. Existing project-scoped hosted rows are not reassigned to keys; they become inaccessible through the hosted API and expire through normal cleanup.
 
 - `POST /v1/conversations` creates a conversation and returns `201` with its ID and timestamps.
 - `GET /v1/conversations` returns summary rows without transcript contents.

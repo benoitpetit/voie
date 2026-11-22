@@ -56,7 +56,7 @@ func TestConversationScopeCanBeRequiredForHostedAPI(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, test.path, nil)
 			request.Header.Set("Authorization", "Bearer secret")
 			if test.scope != "" {
-				request.Header.Set("X-Voie-Project-ID", test.scope)
+				request.Header.Set("X-Voie-Conversation-Scope", test.scope)
 			}
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
@@ -74,7 +74,7 @@ func TestRequiredConversationScopeStillRequiresBearerToken(t *testing.T) {
 		RequireConversationScope: true,
 	})
 	request := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	request.Header.Set("X-Voie-Project-ID", strings.Repeat("a", 64))
+	request.Header.Set("X-Voie-Conversation-Scope", strings.Repeat("a", 64))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
@@ -103,7 +103,7 @@ func TestCORSAllowsConversationDeletionFromSameOrigin(t *testing.T) {
 	request := httptest.NewRequest(http.MethodOptions, "http://127.0.0.1:8080/v1/conversations/id", nil)
 	request.Header.Set("Origin", "http://127.0.0.1:8080")
 	request.Header.Set("Access-Control-Request-Method", "DELETE")
-	request.Header.Set("Access-Control-Request-Headers", "authorization,content-type,x-voie-project-id")
+	request.Header.Set("Access-Control-Request-Headers", "authorization,content-type,x-voie-conversation-scope")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusNoContent {
@@ -112,7 +112,7 @@ func TestCORSAllowsConversationDeletionFromSameOrigin(t *testing.T) {
 	if got := response.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "DELETE") {
 		t.Fatalf("allow methods = %q, want DELETE", got)
 	}
-	if got := strings.ToLower(response.Header().Get("Access-Control-Allow-Headers")); !strings.Contains(got, "x-voie-project-id") {
-		t.Fatalf("allow headers = %q, want project scope", got)
+	if got := strings.ToLower(response.Header().Get("Access-Control-Allow-Headers")); !strings.Contains(got, "x-voie-conversation-scope") {
+		t.Fatalf("allow headers = %q, want conversation scope", got)
 	}
 }

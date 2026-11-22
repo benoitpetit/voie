@@ -101,7 +101,7 @@ The commands use the same environment variables as the HTTP runtime:
 | `DEFAULT_PROVIDER` | empty | Provider used for the API's generic `openai` model |
 | `TIMEOUT` | `120` | End-to-end timeout in seconds |
 | `API_TOKEN` | empty | Required for non-loopback HTTP binds |
-| `REQUIRE_CONVERSATION_SCOPE` | `false` | Require a trusted project scope on `/v1/*`; requires `API_TOKEN` |
+| `REQUIRE_CONVERSATION_SCOPE` | `false` | Require a trusted conversation scope on hosted `/v1/*`; requires `API_TOKEN` |
 | `ROUTER_MODEL` | empty | Model selected by profiles using router selection; fallback synthesizer |
 | `SYNTHESIS_MODEL` | empty | Ensemble synthesis model; defaults to `ROUTER_MODEL` |
 | `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local routing policy file |

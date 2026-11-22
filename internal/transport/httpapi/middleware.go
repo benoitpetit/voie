@@ -10,9 +10,9 @@ import (
 	"github.com/benoitpetit/voie/internal/app"
 )
 
-func bearerAuth(token string, requireProjectScope bool, next http.Handler) http.Handler {
+func bearerAuth(token string, requireConversationScope bool, next http.Handler) http.Handler {
 	if strings.TrimSpace(token) == "" {
-		if requireProjectScope {
+		if requireConversationScope {
 			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				writeError(w, http.StatusUnauthorized, "valid bearer token required")
 			})
@@ -30,20 +30,20 @@ func bearerAuth(token string, requireProjectScope bool, next http.Handler) http.
 			writeError(w, http.StatusUnauthorized, "valid bearer token required")
 			return
 		}
-		scope := r.Header.Get("X-Voie-Project-ID")
-		if scope != "" && !validProjectScope(scope) {
-			writeError(w, http.StatusBadRequest, "invalid project scope")
+		scope := r.Header.Get("X-Voie-Conversation-Scope")
+		if scope != "" && !validConversationScope(scope) {
+			writeError(w, http.StatusBadRequest, "invalid conversation scope")
 			return
 		}
-		if requireProjectScope && strings.HasPrefix(r.URL.Path, "/v1/") && scope == "" {
-			writeError(w, http.StatusUnauthorized, "project scope required")
+		if requireConversationScope && strings.HasPrefix(r.URL.Path, "/v1/") && scope == "" {
+			writeError(w, http.StatusUnauthorized, "conversation scope required")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(app.WithConversationScope(r.Context(), scope)))
 	})
 }
 
-func validProjectScope(scope string) bool {
+func validConversationScope(scope string) bool {
 	if len(scope) != 64 {
 		return false
 	}
@@ -67,7 +67,7 @@ func cors(next http.Handler) http.Handler {
 			w.Header().Add("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Voie-Project-ID")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Voie-Conversation-Scope")
 			w.Header().Set("Access-Control-Max-Age", "86400")
 		}
 		if r.Method == http.MethodOptions {

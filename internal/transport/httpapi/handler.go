@@ -42,12 +42,12 @@ func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
 	mux.HandleFunc("/v1/conversations", handler.conversations)
 	mux.HandleFunc("/v1/conversations/", handler.conversation)
 	var token string
-	var requireProjectScope bool
+	var requireConversationScope bool
 	if cfg != nil {
 		token = cfg.APIToken
-		requireProjectScope = cfg.RequireConversationScope
+		requireConversationScope = cfg.RequireConversationScope
 	}
-	return requestLogging(cors(bearerAuth(token, requireProjectScope, mux)))
+	return requestLogging(cors(bearerAuth(token, requireConversationScope, mux)))
 }
 
 type apiHandler struct{ service *app.Service }

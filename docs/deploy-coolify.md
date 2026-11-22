@@ -28,11 +28,17 @@ binds to `0.0.0.0:8080` in the container and refuses to start on a non-loopback
 host when `API_TOKEN` is empty.
 
 Set `REQUIRE_CONVERSATION_SCOPE=true` in the Coolify environment as well. Deploy
-the updated Core image with this setting before deploying the Worker that sends
-project scopes. During the interval, requests without a verified scope receive
-`401`; after the Worker update, active project keys receive their isolated
-conversation namespace. `/health` remains available to the authenticated
-container health check.
+the Worker first: it sends a per-key `X-Voie-Conversation-Scope` and also
+sends the legacy `X-Voie-Project-ID` for compatibility with the currently
+deployed Core. Then deploy the Core image that requires the new conversation-
+scope header; it ignores the legacy header. Afterward, each active API key gets its own history,
+while rate limiting remains per repository. `/health` remains available to the
+authenticated container health check.
+
+Existing hosted conversations were stored under a shared project scope, so
+their creating key cannot be determined. Do not migrate or reassign those rows:
+they become inaccessible through the hosted API and expire through the normal
+conversation cleanup period.
 
 Set the exact same secret as the Cloudflare Worker secret `VOIE_ORIGIN_TOKEN`.
 The Worker replaces each project's API key with this origin token before

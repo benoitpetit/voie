@@ -94,7 +94,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `DEFAULT_PROVIDER` | empty | Provider used for the generic `openai` model in API requests |
 | `TIMEOUT` | `120` | End-to-end completion timeout in seconds |
 | `API_TOKEN` | empty | Bearer token required for non-loopback binds |
-| `REQUIRE_CONVERSATION_SCOPE` | `false` | Require the trusted project scope header on `/v1/*`; requires `API_TOKEN` |
+| `REQUIRE_CONVERSATION_SCOPE` | `false` | Require the trusted conversation scope header on `/v1/*`; requires `API_TOKEN` |
 | `ROUTER_MODEL` | empty | Optional model used by profiles with `selection: "router"`; also the ensemble synthesizer fallback |
 | `SYNTHESIS_MODEL` | empty | Model that merges ensemble answers; falls back to `ROUTER_MODEL` |
 | `ROUTING_CONFIG_PATH` | `<user-config-dir>/voie/routing.json` | Local model descriptions, routing profiles, ensemble defaults, and fallback rules |
@@ -106,7 +106,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
 
-The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`. Hosted deployments should set `REQUIRE_CONVERSATION_SCOPE=true`; this makes `/v1/*` reject requests without the project scope supplied by the trusted Worker.
+The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP requests must include `Authorization: Bearer <token>`. Hosted deployments should set `REQUIRE_CONVERSATION_SCOPE=true`; this makes `/v1/*` reject requests without the opaque conversation scope supplied by the trusted Worker. The setting is off by default, so the local binary does not need a hosted API key or scope.
 
 ### Releases
 

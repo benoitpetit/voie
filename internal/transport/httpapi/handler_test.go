@@ -292,7 +292,7 @@ func TestHTTPConversationLifecycle(t *testing.T) {
 	}
 }
 
-func TestHTTPConversationAccessIsScopedByProject(t *testing.T) {
+func TestHTTPConversationAccessIsScopedByConversationScope(t *testing.T) {
 	registry := app.NewRegistry()
 	registry.Register("test", &httpTestProvider{})
 	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
@@ -305,11 +305,11 @@ func TestHTTPConversationAccessIsScopedByProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	handler := NewHandler(service, &config.Config{APIToken: "origin-secret"})
-	request := func(method, path, projectScope string) *httptest.ResponseRecorder {
+	request := func(method, path, conversationScope string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, nil)
 		req.Header.Set("Authorization", "Bearer origin-secret")
-		if projectScope != "" {
-			req.Header.Set("X-Voie-Project-ID", projectScope)
+		if conversationScope != "" {
+			req.Header.Set("X-Voie-Conversation-Scope", conversationScope)
 		}
 		recorder := httptest.NewRecorder()
 		handler.ServeHTTP(recorder, req)
