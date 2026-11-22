@@ -53,6 +53,18 @@ func (r *Registry) GetForModel(model string) Provider {
 	if model == "" {
 		return nil
 	}
+	if provider := r.lookup(model); provider != nil {
+		return provider
+	}
+	// Public IDs carry a provider prefix; accept the unprefixed legacy form too.
+	normalized := NormalizeModelID(model)
+	if normalized == model {
+		return nil
+	}
+	return r.lookup(normalized)
+}
+
+func (r *Registry) lookup(model string) Provider {
 	// Prefer the previous routing precedence for aliases shared by providers.
 	priority := []string{"duckai", "perplexity", "deepai", "quillbot", "cohere", "yqcloud", "jimmy"}
 	seen := make(map[string]bool, len(priority))

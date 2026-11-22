@@ -494,17 +494,18 @@ func (s *Service) ListModels() []ModelInfo {
 			continue
 		}
 		for _, id := range info.SupportedModels {
-			if seen[id] {
-				continue
-			}
-			seen[id] = true
 			ownerName, ownerInfo := name, info
 			if routed := s.registry.GetForModel(id); routed != nil {
 				ownerInfo = routed.GetInfo()
 				ownerName = strings.ToLower(ownerInfo.Name)
 			}
+			publicID := PrefixModelID(ownerName, id)
+			if seen[publicID] {
+				continue
+			}
+			seen[publicID] = true
 			models = append(models, ModelInfo{
-				ID: id, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
+				ID: publicID, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
 				Group:      ownerInfo.Label,
 				Permission: []interface{}{}, Root: id,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
@@ -561,6 +562,25 @@ func (s *Service) workingProviderNames() []string {
 	return names
 }
 
+func supportsModel(provider Provider, model string) bool {
+	if provider.SupportsModel(model) {
+		return true
+	}
+	normalized := NormalizeModelID(model)
+	return normalized != model && provider.SupportsModel(normalized)
+}
+
+func callModel(provider Provider, model string) string {
+	if provider.SupportsModel(model) {
+		return model
+	}
+	normalized := NormalizeModelID(model)
+	if provider.SupportsModel(normalized) {
+		return normalized
+	}
+	return model
+}
+
 func (s *Service) selectProvider(request CompletionRequest) (Provider, string, error) {
 	requestedModel := strings.TrimSpace(request.Model)
 	requestedProvider := strings.ToLower(strings.TrimSpace(request.Provider))
@@ -603,11 +623,11 @@ func (s *Service) selectProvider(request CompletionRequest) (Provider, string, e
 		if routed == nil {
 			return nil, "", appError(ErrUnknownModel, fmt.Sprintf("model %q is not supported", model), nil)
 		}
-		if !provider.SupportsModel(model) {
+		if !supportsModel(provider, model) {
 			return nil, "", appError(ErrProviderModelMismatch, fmt.Sprintf("provider %q does not support model %q", info.Name, model), nil)
 		}
 	}
-	return provider, model, nil
+	return provider, callModel(provider, model), nil
 }
 
 func validateMessages(messages []Message) error {

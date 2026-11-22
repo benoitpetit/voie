@@ -204,7 +204,7 @@ func TestServiceHonorsExplicitProviderForSharedModelAndDiscoveryRouting(t *testi
 
 	var alias *ModelInfo
 	for _, model := range service.ListModels() {
-		if model.ID == "alias" {
+		if model.ID == "dk-alias" {
 			alias = &model
 			break
 		}
