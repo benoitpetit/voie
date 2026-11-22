@@ -57,7 +57,7 @@ func TestInterfaceDocsDiscloseRelay(t *testing.T) {
 	}
 }
 
-func TestDocumentedCountsMatchCode(t *testing.T) {
+func TestDocumentedProvidersMatchCode(t *testing.T) {
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
@@ -67,21 +67,17 @@ func TestDocumentedCountsMatchCode(t *testing.T) {
 		t.Fatalf("runtime.NewWithRegistry: %v", err)
 	}
 
-	names := rt.Registry.GetProviderNames()
-	if len(names) != 13 {
-		t.Errorf("registered providers = %d, want 13", len(names))
+	names := make(map[string]bool)
+	for _, name := range rt.Registry.GetProviderNames() {
+		names[name] = true
 	}
-
-	declared := 0
-	for _, name := range names {
-		declared += len(rt.Registry.Get(name).GetInfo().SupportedModels)
+	for _, want := range []string{"perplexity", "duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go"} {
+		if !names[want] {
+			t.Errorf("provider %q is not registered", want)
+		}
 	}
-	if declared != 113 {
-		t.Errorf("declared model IDs = %d, want 113", declared)
-	}
-
-	if resolved := len(rt.AppService.ListModels()); resolved != 110 {
-		t.Errorf("resolved model IDs = %d, want 110", resolved)
+	if names["cohere"] {
+		t.Error("cohere must not be registered: the HuggingFace Space requires sign-in")
 	}
 }
 

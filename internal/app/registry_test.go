@@ -11,7 +11,7 @@ import (
 
 func TestRegistryRoutesOnlySupportedModels(t *testing.T) {
 	registry := providers.NewRegistry()
-	for _, model := range []string{"gpt-5.6-luna", "claude-3-haiku", "turbo", "command-a"} {
+	for _, model := range []string{"gpt-5.6-luna", "claude-3-haiku", "turbo"} {
 		if got := registry.GetForModel(model); got == nil {
 			t.Errorf("GetForModel(%q) = nil, want registered provider", model)
 		}
@@ -23,7 +23,7 @@ func TestRegistryRoutesOnlySupportedModels(t *testing.T) {
 
 func TestRegistryProviderNamesAreStable(t *testing.T) {
 	registry := providers.NewRegistry()
-	want := []string{"blockrun", "cohere", "deepai", "duckai", "jimmy", "kilo", "opencode-go", "opencode-zen", "ovh", "perplexity", "pollinations", "quillbot", "yqcloud"}
+	want := []string{"blockrun", "deepai", "duckai", "jimmy", "kilo", "opencode-go", "opencode-zen", "ovh", "perplexity", "pollinations", "quillbot", "yqcloud"}
 	if got := registry.GetProviderNames(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("GetProviderNames() = %v, want %v", got, want)
 	}

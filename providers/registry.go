@@ -9,7 +9,6 @@ func NewRegistry() *app.Registry {
 	registry.Register("deepai", &DeepAI{})
 	registry.Register("quillbot", &Quillbot{})
 	registry.Register("yqcloud", &Yqcloud{})
-	registry.Register("cohere", &CohereCommand{})
 	registry.Register("jimmy", &Jimmy{})
 	registry.Register("kilo", NewKilo())
 	registry.Register("ovh", NewOVH())

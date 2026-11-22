@@ -23,8 +23,8 @@ func TestNewKeylessModelsRouteToTheirProviders(t *testing.T) {
 	}
 	for _, tc := range []struct{ model, provider string }{
 		{"gpt-5.6-luna", "duckai"},
-		{"command-a", "cohere"},
 	} {
+
 		provider := registry.GetForModel(tc.model)
 		if provider == nil || provider.GetInfo().Name != tc.provider {
 			t.Errorf("GetForModel(%q) provider = %v, want %q", tc.model, provider, tc.provider)
