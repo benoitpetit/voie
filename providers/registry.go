@@ -16,5 +16,7 @@ func NewRegistry() *app.Registry {
 	registry.Register("pollinations", NewPollinations())
 	registry.Register("opencode-zen", NewOpenCodeZen())
 	registry.Register("opencode-go", NewOpenCodeGo())
+	registry.Register("openrouter", NewOpenRouter())
+	registry.Register("orcarouter", NewOrcaRouter())
 	return registry
 }
