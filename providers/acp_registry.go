@@ -17,6 +17,9 @@ type ACPProviderSpec struct {
 	Name       string
 	Label      string
 	Binary     string
+	AgentArgs  []string // ACP invocation; some CLIs use `acp`, others `--acp`
+	AuthCheck  []string // command whose exit status says whether the CLI is logged in
+	AuthLogin  []string // interactive login command launched by `voie connect`
 	Alias      string
 	Model      string
 	Port       int
@@ -26,12 +29,12 @@ type ACPProviderSpec struct {
 
 // ACPProviders are opt-in bridges over the user's own agent CLI login.
 var ACPProviders = []ACPProviderSpec{
-	{Name: "codebuddy", Label: "CodeBuddy", Binary: "codebuddy", Alias: "cb-auto", Model: "auto", Port: 8093},
-	{Name: "minimax-code", Label: "MiniMax Code", Binary: "mcode", Alias: "mm-auto", Model: "auto", Port: 8094},
-	{Name: "devin", Label: "Devin", Binary: "devin", Alias: "dv-auto", Model: "auto", Port: 8095},
-	{Name: "qoder", Label: "Qoder", Binary: "qoder", Alias: "qd-auto", Model: "auto", Port: 8096},
-	{Name: "copilot-cli", Label: "GitHub Copilot CLI", Binary: "copilot", Alias: "cp-auto", Model: "auto", Port: 8097},
-	{Name: "cursor", Label: "Cursor", Binary: "agent", Alias: "cu-auto", Model: "auto", Port: 8098},
+	{Name: "codebuddy", Label: "CodeBuddy", Binary: "codebuddy", AgentArgs: []string{"--acp"}, Alias: "cb-auto", Model: "auto", Port: 8093},
+	{Name: "minimax-code", Label: "MiniMax Code", Binary: "mcode", AgentArgs: []string{"acp"}, Alias: "mm-auto", Model: "auto", Port: 8094},
+	{Name: "devin", Label: "Devin", Binary: "devin", AgentArgs: []string{"acp"}, AuthCheck: []string{"auth", "status"}, AuthLogin: []string{"auth", "login"}, Alias: "dv-auto", Model: "auto", Port: 8095},
+	{Name: "qoder", Label: "Qoder", Binary: "qoder", AgentArgs: []string{"--acp"}, Alias: "qd-auto", Model: "auto", Port: 8096},
+	{Name: "copilot-cli", Label: "GitHub Copilot CLI", Binary: "copilot", AgentArgs: []string{"--acp"}, Alias: "cp-auto", Model: "auto", Port: 8097},
+	{Name: "cursor", Label: "Cursor", Binary: "agent", AgentArgs: []string{"acp"}, Alias: "cu-auto", Model: "auto", Port: 8098},
 }
 
 func ACPProviderSpecByName(name string) (ACPProviderSpec, bool) {

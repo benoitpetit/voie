@@ -62,6 +62,13 @@ func Run(ctx context.Context, cfg Config) error {
 		_ = os.RemoveAll(cfg.ScratchDir)
 	}()
 
+	if cfg.StartupDelay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(cfg.StartupDelay):
+		}
+	}
 	client := NewClient(stdin, stdout)
 	sessionID, err := client.Handshake(ctx, cfg.ScratchDir, cfg.Model)
 	if err != nil {

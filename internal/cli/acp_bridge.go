@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/clinebridge"
@@ -50,13 +51,14 @@ func newACPBridgeCommand() *cobra.Command {
 				key = "voie-local"
 			}
 			return clinebridge.Run(command.Context(), clinebridge.Config{
-				Listen:     fmt.Sprintf("127.0.0.1:%d", spec.Port),
-				ClinePath:  binary,
-				AgentArgs:  []string{"--acp"},
-				ScratchDir: scratch,
-				HookPath:   filepath.Join(scratch, "hooks.mjs"),
-				LocalKey:   key,
-				Model:      spec.Model,
+				Listen:       fmt.Sprintf("127.0.0.1:%d", spec.Port),
+				ClinePath:    binary,
+				AgentArgs:    spec.AgentArgs,
+				StartupDelay: 1500 * time.Millisecond,
+				ScratchDir:   scratch,
+				HookPath:     filepath.Join(scratch, "hooks.mjs"),
+				LocalKey:     key,
+				Model:        spec.Model,
 			})
 		},
 	}

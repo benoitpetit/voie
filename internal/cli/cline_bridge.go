@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/clinebridge"
@@ -52,13 +53,14 @@ func newClineBridgeCommand() *cobra.Command {
 				args = append(args, "--model", model)
 			}
 			return clinebridge.Run(command.Context(), clinebridge.Config{
-				Listen:     listen,
-				ClinePath:  clinePath,
-				AgentArgs:  args,
-				ScratchDir: scratch,
-				HookPath:   filepath.Join(scratch, "hooks.mjs"),
-				LocalKey:   key,
-				Model:      model,
+				Listen:       listen,
+				ClinePath:    clinePath,
+				AgentArgs:    args,
+				StartupDelay: 500 * time.Millisecond,
+				ScratchDir:   scratch,
+				HookPath:     filepath.Join(scratch, "hooks.mjs"),
+				LocalKey:     key,
+				Model:        model,
 			})
 		},
 	}

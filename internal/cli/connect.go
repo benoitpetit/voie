@@ -153,7 +153,10 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 						return fmt.Errorf("cline auth: %w", err)
 					}
 				}
-				if _, ok := providers.ACPProviderSpecByName(provider); ok {
+				if spec, ok := providers.ACPProviderSpecByName(provider); ok {
+					if err := ensureACPAuth(command, binary, spec.AuthCheck, spec.AuthLogin); err != nil {
+						return fmt.Errorf("%s auth: %w", provider, err)
+					}
 					if err := providers.StartACPBridge(provider); err != nil {
 						return fmt.Errorf("start %s ACP bridge: %w", provider, err)
 					}
@@ -217,6 +220,25 @@ func validateToken(provider, token string) error {
 
 // ensureClineAuth launches the official interactive login once, attached to
 // the user's terminal. Auth stays inside the Cline CLI; voie never sees it.
+func ensureACPAuth(command *cobra.Command, binary string, check, login []string) error {
+	if len(login) == 0 {
+		return nil
+	}
+	if len(check) > 0 {
+		status := exec.Command(binary, check...)
+		output, err := status.CombinedOutput()
+		if err == nil && !strings.Contains(strings.ToLower(string(output)), "not logged in") {
+			return nil
+		}
+	}
+	fmt.Fprintf(command.ErrOrStderr(), "%s is not authenticated; launching its login command.\n", filepath.Base(binary))
+	auth := exec.Command(binary, login...)
+	auth.Stdin = command.InOrStdin()
+	auth.Stdout = command.OutOrStdout()
+	auth.Stderr = command.ErrOrStderr()
+	return auth.Run()
+}
+
 func ensureClineAuth(command *cobra.Command, clinePath string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {

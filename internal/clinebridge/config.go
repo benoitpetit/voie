@@ -13,14 +13,15 @@ const defaultFreeFeed = "https://api.cline.bot/api/v1/ai/cline/recommended-model
 
 // Config is the local bridge configuration.
 type Config struct {
-	Listen      string
-	ClinePath   string
-	AgentArgs   []string
-	ScratchDir  string
-	HookPath    string
-	LocalKey    string
-	Model       string
-	FreeFeedURL string
+	Listen       string
+	ClinePath    string
+	AgentArgs    []string
+	ScratchDir   string
+	HookPath     string
+	LocalKey     string
+	Model        string
+	FreeFeedURL  string
+	StartupDelay time.Duration // wait before sending `initialize`
 }
 
 type freeFeed struct {
