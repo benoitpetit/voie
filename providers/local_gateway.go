@@ -168,7 +168,7 @@ func ShutdownGateways() {
 			go func() { _ = cmd.Wait(); close(done) }()
 			select {
 			case <-done:
-			case <-time.After(2 * time.Second):
+			case <-time.After(500 * time.Millisecond):
 				_ = cmd.Process.Kill()
 				<-done
 			}
