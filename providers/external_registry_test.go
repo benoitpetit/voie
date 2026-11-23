@@ -102,7 +102,7 @@ func TestExternalGatewaySpecsAreCoherent(t *testing.T) {
 		if spec.SetupHint == "" {
 			t.Errorf("%s has no account setup hint", spec.Name)
 		}
-		if !strings.HasPrefix(spec.HealthPath, "/health") && spec.HealthPath != "/v1/models" {
+		if !strings.HasPrefix(spec.HealthPath, "/health") && spec.HealthPath != "/v1/models" && spec.HealthPath != "/api/tags" {
 			t.Errorf("%s health path %q is not a documented probe", spec.Name, spec.HealthPath)
 		}
 		if previous, ok := ports[spec.Port]; ok {

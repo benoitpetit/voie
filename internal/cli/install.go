@@ -112,6 +112,10 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		fmt.Fprintf(command.OutOrStdout(), "%s is already installed. Start it with: %s\n", spec.Name, startCommand)
 		return printSetupHint(command, spec.Name)
 	}
+	if spec.ManualInstall != "" {
+		fmt.Fprintf(command.OutOrStdout(), "%s is installed manually: %s\n", spec.Name, spec.ManualInstall)
+		return printSetupHint(command, spec.Name)
+	}
 	dir := providers.ExternalGatewayDir(spec.Name)
 	steps := make([][]string, 0, len(spec.Deps)+1)
 	if len(spec.Install) > 0 {

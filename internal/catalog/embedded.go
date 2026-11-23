@@ -22,9 +22,9 @@ var embeddedModels = map[string]map[string]string{
 		"or-inclusionai-ling-3-2-flash-free":                    "inclusionai/ling-3.2-flash:free",
 	},
 	"orcarouter": {
-		"orc-deepseek-deepseek-v4-flash-free":   "deepseek/deepseek-v4-flash-free",
-		"orc-deepseek-deepseek-v4-1-flash-free": "deepseek/deepseek-v4.1-flash-free",
-		"orc-z-ai-glm-5-3-flash-free":           "z-ai/glm-5.3-flash-free",
+		"ocr-deepseek-deepseek-v4-flash-free":   "deepseek/deepseek-v4-flash-free",
+		"ocr-deepseek-deepseek-v4-1-flash-free": "deepseek/deepseek-v4.1-flash-free",
+		"ocr-z-ai-glm-5-3-flash-free":           "z-ai/glm-5.3-flash-free",
 	},
 	"groq": {
 		"gq-openai-gpt-oss-120b": "openai/gpt-oss-120b",
@@ -146,6 +146,9 @@ var embeddedModels = map[string]map[string]string{
 	},
 	"iflytek-spark": {
 		"spark-lite": "lite",
+	},
+	"together": {
+		"tg-prism-ml-ternary-bonsai-27b": "Prism-ML/Ternary-Bonsai-27B",
 	},
 	"vlm-run": {
 		"vlm-qwen-qwen3-5-0-8b":                "qwen/qwen3.5-0.8b",

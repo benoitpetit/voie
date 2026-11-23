@@ -39,6 +39,7 @@ var TokenProviders = []TokenProviderSpec{
 	{Name: "beatapi", Label: "BeatAPI", CompletionsURL: "https://api.beatapi.io/v1/chat/completions", ModelsURL: "https://api.beatapi.io/v1/text/models", Alias: "beatfree", UpstreamModel: "glm-5.3-flash-free", EnvVar: "VOIE_BEATAPI_KEY"},
 	{Name: "iflytek-spark", Label: "iFlytek Spark Lite", CompletionsURL: "https://spark-api-open.xf-yun.com/v1/chat/completions", ModelsURL: "https://spark-api-open.xf-yun.com/v1/models", Alias: "sparkfree", UpstreamModel: "lite", EnvVar: "VOIE_IFLYTEK_SPARK_KEY"},
 	{Name: "vlm-run", Label: "VLM Run Gateway", CompletionsURL: "https://gateway.vlm.run/v1/openai/chat/completions", ModelsURL: "https://gateway.vlm.run/v1/openai/models", Alias: "vlmfree", UpstreamModel: "qwen/qwen3.5-0.8b", EnvVar: "VOIE_VLM_RUN_KEY"},
+	{Name: "runcrate", Label: "Runcrate", CompletionsURL: "https://api.runcrate.ai/v1/chat/completions", ModelsURL: "https://api.runcrate.ai/v1/models", Alias: "runfree", UpstreamModel: "deepseek-ai/DeepSeek-V4.1-Flash", EnvVar: "VOIE_RUNCRATE_KEY"},
 }
 
 const cloudflareAccountKey = "cloudflare-ai-account"
@@ -107,6 +108,16 @@ func localKeyDefault(provider string) string {
 	return ""
 }
 
+// anonymousToken is the documented no-signup credential for a few providers.
+func anonymousToken(provider string) string {
+	switch provider {
+	case "vlm-run":
+		return "vlmrun"
+	default:
+		return ""
+	}
+}
+
 // tokenErrorHint adds a reconnect hint only for authentication failures.
 // Rate limits and transient errors already carry their own status in the
 // typed ProviderFailure and must not suggest replacing a valid token.
@@ -137,8 +148,8 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 		TokenSupplier: func() string {
 			store, _ := config.LoadCredentials()
 			value := store.Token(spec.Name)
-			if value == "" && spec.Name == "vlm-run" {
-				return "vlmrun"
+			if value == "" && (spec.Name == "vlm-run") {
+				return anonymousToken(spec.Name)
 			}
 			return value
 		},
@@ -154,9 +165,8 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 func (p *TokenProvider) token() string {
 	store, _ := config.LoadCredentials()
 	value := strings.TrimSpace(store.Token(p.spec.Name))
-	if value == "" && p.spec.Name == "vlm-run" {
-		// Documented anonymous bearer for the free evaluation tier.
-		return "vlmrun"
+	if value == "" {
+		return anonymousToken(p.spec.Name)
 	}
 	return value
 }

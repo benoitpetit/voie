@@ -123,6 +123,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `VOIE_BEATAPI_KEY` | saved token | BeatAPI token |
 | `VOIE_IFLYTEK_SPARK_KEY` | saved token | iFlytek Spark APIPassword |
 | `VOIE_VLM_RUN_KEY` | `vlmrun` | VLM Run key; anonymous bearer works by default |
+| `VOIE_RUNCRATE_KEY` | saved token | Runcrate key (`rc_live_...`), free weekly allowance |
 
 Additional overrides: `VOIE_OPENCODE_GATEWAY_URL` (local gateway base URL), `KIRO_GATEWAY_DIR` (ACP bridge checkout), `VOIE_CLINE_FREE_FEED_URL` (free-model feed). ACP and third-party gateway providers accept `VOIE_<PROVIDER>_KEY` overrides as well (`VOIE_CODEBUDDY_KEY`, `VOIE_MINIMAX_CODE_KEY`, `VOIE_DEVIN_KEY`, `VOIE_QODER_KEY`, `VOIE_COPILOT_CLI_KEY`, `VOIE_CURSOR_KEY`, `VOIE_OMNIROUTE_KEY`, `VOIE_QODER2API_KEY`, `VOIE_WINDSURFAPI_KEY`, `VOIE_COPILOT_API_KEY`, `VOIE_CURSOR_API_PROXY_KEY`, `VOIE_CODEARTS2API_KEY`, `VOIE_CLI2API_KEY`, `VOIE_WORKBUDDY2API_KEY`); saved credentials take precedence when no override is set.
 
@@ -132,7 +133,7 @@ The server refuses a non-loopback bind without `API_TOKEN`. Authenticated HTTP r
 
 ### Connect a provider
 
-Fifteen hosted APIs are available by token (OpenRouter, OrcaRouter and thirteen declarative providers): OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI (10,000 neurons/day free), Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark and VLM Run (anonymous by default). Six coding agents are available through their official ACP interface: CodeBuddy, MiniMax Code, Devin, Qoder, GitHub Copilot CLI and Cursor. Eight third-party reverse-engineered gateways (OmniRoute, Qoder2API, WindsurfAPI, Copilot API, Cursor ACP Proxy, CodeArts2API, CLI2API, WorkBuddy2API) are declared as opt-in providers: they are hidden until you install them yourself and carry ToS/account risk. `voie install <provider>` prints the exact install command for those gateways.
+Sixteen hosted APIs are available by token (OpenRouter, OrcaRouter and fourteen declarative providers): OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI (10,000 neurons/day free), Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run (anonymous by default) and Runcrate. Six coding agents are available through their official ACP interface: CodeBuddy, MiniMax Code, Devin, Qoder, GitHub Copilot CLI and Cursor. Thirteen third-party gateways and local runtimes: OmniRoute, Qoder2API, WindsurfAPI, Copilot API, Cursor ACP Proxy, CodeArts2API, CLI2API, WorkBuddy2API, FreeLLM Pool, Free LLM Proxy Router, Trae2API Hub, Ollama, LM Studio and llama.cpp are declared as opt-in providers: they are hidden until you install them yourself and carry ToS/account risk. `voie install <provider>` prints the exact install command for those gateways.
 
 `voie models` prints `MODEL` and `PROVIDER` columns; `GET /v1/models` and MCP `list_models` carry the same provider metadata.
 

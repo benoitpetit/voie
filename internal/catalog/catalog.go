@@ -64,6 +64,7 @@ var providerAliases = map[string][2]string{
 	"beatapi":               {"beatapi", "beat"},
 	"iflytek-spark":         {"iflytek-spark", "spark"},
 	"vlm-run-gateway":       {"vlm-run", "vlm"},
+	"runcrate":              {"runcrate", "run"},
 }
 
 type registryEntry struct {

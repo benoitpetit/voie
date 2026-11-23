@@ -34,6 +34,7 @@ type ExternalGatewaySpec struct {
 	Deps            [][]string // commands run in the gateway dir after install
 	Start           []string   // command that launches the gateway on its loopback port
 	Check           []string   // optional command that proves the tool is really installed
+	ManualInstall   string     // shown instead of running an automated installer
 	SetupHint       string     // account configuration required before inference
 	AccountRequired string     // "none", "upstream", "dashboard+upstream"
 	AccountKind     string     // which account exactly
@@ -134,6 +135,60 @@ var ExternalGateways = []ExternalGatewaySpec{
 		KeyRequired:     "none: placeholder accepted",
 		Start:           []string{"python", "-m", "codebuddy_proxy"},
 		Check:           []string{"python", "-c", "import codebuddy_proxy"},
+	},
+	{
+		Name: "freellmpool", Label: "FreeLLM Pool", Repo: "https://github.com/0xzr/freellmpool",
+		Port: 8083, Alias: "pool-free", Upstream: "auto", HealthPath: "/healthz",
+		Install:         []string{"pip", "install", "freellmpool"},
+		SetupHint:       "works keyless out of the box; keyless routes send prompts to third parties",
+		AccountRequired: "none", AccountKind: "keyless routes (Pollinations, OVHcloud, Kilo, LLM7)",
+		AccountURL: "https://github.com/0xzr/freellmpool", KeyRequired: "optional (--api-key)",
+		Start: []string{"freellmpool", "proxy", "--port", "8083"},
+	},
+	{
+		Name: "free-llm-router", Label: "Free LLM Proxy Router", Repo: "https://github.com/kaiser-data/free-llm-proxy-router",
+		Port: 8082, Alias: "router-free", Upstream: "auto", HealthPath: "/health",
+		Install:         []string{"sh", "-c", "curl -fsSL https://raw.githubusercontent.com/kaiser-data/free-llm-proxy-router/main/scripts/install.sh | sh"},
+		SetupHint:       "official free-tier API keys only; no OAuth or session reuse",
+		AccountRequired: "upstream", AccountKind: "official free API key (Groq, Gemini, OpenRouter, ...)",
+		AccountURL: "https://github.com/kaiser-data/free-llm-proxy-router", KeyRequired: "optional loopback auth token",
+		Start: []string{"free-llm-proxy"},
+	},
+	{
+		Name: "trae2api", Label: "Trae2API Hub", Repo: "https://github.com/shuishuipingan/trae2api-hub",
+		Port: 8791, Alias: "trae2-free", Upstream: "auto", HealthPath: "/health",
+		Deps:            [][]string{{"bash", "-c", "chmod +x *.sh"}},
+		SetupHint:       "consumer-subscription reverse proxy: link your own Trae account in the dashboard; ToS risk",
+		AccountRequired: "upstream", AccountKind: "Trae personal account (CN or INTL)",
+		AccountURL: "http://127.0.0.1:8791", KeyRequired: "optional locally (dashboard password admin)",
+		Start: []string{"bash", "start-trae2api-hub.sh"},
+	},
+	{
+		Name: "ollama", Label: "Ollama", Repo: "https://ollama.com",
+		Port: 11434, Alias: "ollama-local", Upstream: "llama3.2", HealthPath: "/api/tags",
+		Install:         []string{"sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"},
+		SetupHint:       "download a model first: ollama pull llama3.2 (inference stays on your machine)",
+		AccountRequired: "none", AccountKind: "local models, no account",
+		AccountURL: "https://ollama.com/library", KeyRequired: "none",
+		Start: []string{"ollama", "serve"},
+	},
+	{
+		Name: "lmstudio", Label: "LM Studio", Repo: "https://lmstudio.ai",
+		Port: 1234, Alias: "lms-local", Upstream: "local-model", HealthPath: "/v1/models",
+		ManualInstall:   "install LM Studio from https://lmstudio.ai and download a model in the GUI",
+		SetupHint:       "start the server in Developer tab or with `lms server start` after downloading a model",
+		AccountRequired: "none", AccountKind: "local models, no account",
+		AccountURL: "https://lmstudio.ai/docs/developer/core/server", KeyRequired: "none",
+		Start: []string{"lms", "server", "start"},
+	},
+	{
+		Name: "llamacpp", Label: "llama.cpp", Repo: "https://github.com/ggml-org/llama.cpp",
+		Port: 9931, Alias: "llamacpp-local", Upstream: "local-gguf", HealthPath: "/health",
+		ManualInstall:   "build llama-server from https://github.com/ggml-org/llama.cpp and provide a GGUF model",
+		SetupHint:       "start with: llama-server --host 127.0.0.1 --port 9931 -m /path/to/model.gguf",
+		AccountRequired: "none", AccountKind: "local GGUF model, no account",
+		AccountURL: "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md", KeyRequired: "none",
+		Start: []string{"llama-server", "--host", "127.0.0.1", "--port", "9931"},
 	},
 }
 
@@ -359,6 +414,9 @@ func (p *ExternalGateway) GetInfo() app.ProviderInfo {
 
 // InstallCommand returns the exact command a user must run to install a gateway.
 func (p *ExternalGateway) InstallCommand() string {
+	if p.spec.ManualInstall != "" {
+		return "manual: " + p.spec.ManualInstall
+	}
 	if len(p.spec.Install) > 0 {
 		return strings.Join(p.spec.Install, " ")
 	}
