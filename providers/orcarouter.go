@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/benoitpetit/voie/config"
@@ -48,14 +47,14 @@ func (p *OrcaRouter) GetInfo() app.ProviderInfo {
 func (p *OrcaRouter) ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
 	response, err := p.openAIKeylessProvider.ChatCompletion(ctx, messages, model)
 	if err != nil {
-		return nil, fmt.Errorf("%w (run `voie connect orcarouter` if the token was rejected)", err)
+		return nil, tokenErrorHint(err, "orcarouter")
 	}
 	return response, nil
 }
 
 func (p *OrcaRouter) ChatCompletionStream(ctx context.Context, messages []Message, model string, callback func(string)) error {
 	if err := p.openAIKeylessProvider.ChatCompletionStream(ctx, messages, model, callback); err != nil {
-		return fmt.Errorf("%w (run `voie connect orcarouter` if the token was rejected)", err)
+		return tokenErrorHint(err, "orcarouter")
 	}
 	return nil
 }

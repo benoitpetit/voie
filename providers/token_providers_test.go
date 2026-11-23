@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/app"
 )
 
 func TestOpenRouterUsesBearerToken(t *testing.T) {
@@ -92,6 +93,17 @@ func extractModel(body string) string {
 		return ""
 	}
 	return rest[:end]
+}
+
+func TestTokenErrorHintOnlyForAuthFailures(t *testing.T) {
+	auth := tokenErrorHint(app.NewProviderFailure(app.FailurePermanent, "openrouter", "m", 401, nil), "openrouter")
+	if !strings.Contains(auth.Error(), "voie connect openrouter") {
+		t.Errorf("auth error has no reconnect hint: %v", auth)
+	}
+	rate := tokenErrorHint(app.NewProviderFailure(app.FailureTransient, "orcarouter", "m", 429, nil), "orcarouter")
+	if strings.Contains(rate.Error(), "voie connect") {
+		t.Errorf("rate-limit error suggests reconnecting: %v", rate)
+	}
 }
 
 func TestOpencodeUsesLocalKeyFromCredentials(t *testing.T) {

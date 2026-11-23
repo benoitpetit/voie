@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	"github.com/benoitpetit/voie/config"
@@ -49,14 +48,14 @@ func (p *OpenRouter) GetInfo() app.ProviderInfo {
 func (p *OpenRouter) ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
 	response, err := p.openAIKeylessProvider.ChatCompletion(ctx, messages, model)
 	if err != nil {
-		return nil, fmt.Errorf("%w (run `voie connect openrouter` if the token was rejected)", err)
+		return nil, tokenErrorHint(err, "openrouter")
 	}
 	return response, nil
 }
 
 func (p *OpenRouter) ChatCompletionStream(ctx context.Context, messages []Message, model string, callback func(string)) error {
 	if err := p.openAIKeylessProvider.ChatCompletionStream(ctx, messages, model, callback); err != nil {
-		return fmt.Errorf("%w (run `voie connect openrouter` if the token was rejected)", err)
+		return tokenErrorHint(err, "openrouter")
 	}
 	return nil
 }

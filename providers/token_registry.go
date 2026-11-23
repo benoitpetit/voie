@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -103,6 +105,17 @@ func localKeyDefault(provider string) string {
 		return "voie-local"
 	}
 	return ""
+}
+
+// tokenErrorHint adds a reconnect hint only for authentication failures.
+// Rate limits and transient errors already carry their own status in the
+// typed ProviderFailure and must not suggest replacing a valid token.
+func tokenErrorHint(err error, provider string) error {
+	var failure *app.ProviderFailure
+	if errors.As(err, &failure) && (failure.Status == http.StatusUnauthorized || failure.Status == http.StatusForbidden) {
+		return fmt.Errorf("%w (run `voie connect %s` if the token was rejected)", err, provider)
+	}
+	return err
 }
 
 // TokenProvider is one instance of the declarative catalogue.
