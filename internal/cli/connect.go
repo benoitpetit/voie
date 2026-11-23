@@ -112,6 +112,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			printKeyHelp(command, provider)
 			required := providers.ConnectFields(provider)
 			supplied := make(map[string]string)
 			for _, item := range fields {
@@ -228,6 +229,13 @@ func validateToken(provider, token string) error {
 
 // ensureClineAuth launches the official interactive login once, attached to
 // the user's terminal. Auth stays inside the Cline CLI; voie never sees it.
+func printKeyHelp(command *cobra.Command, provider string) {
+	fmt.Fprintf(command.ErrOrStderr(), "How to get %s credentials:\n", provider)
+	for _, step := range providers.KeyHelp(provider) {
+		fmt.Fprintf(command.ErrOrStderr(), "  - %s\n", step)
+	}
+}
+
 func ensureACPAuth(command *cobra.Command, binary string, check, login []string, input *bufio.Reader) error {
 	if len(login) == 0 {
 		return nil

@@ -43,6 +43,23 @@ func TestConnectCancelFromMenu(t *testing.T) {
 	}
 }
 
+func TestKeysCommandShowsAcquisitionSteps(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := newKeysCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{"cloudflare-ai"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String() + stderr.String()
+	for _, want := range []string{"Account ID", "Workers AI", "API token"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("keys output missing %q:\n%s", want, output)
+		}
+	}
+}
+
 func TestConnectSavesTokenFromFlag(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	stdout, _, err := runConnect(t, []string{"openrouter", "--token", "sk-or-v1-test"}, "", nil)

@@ -130,6 +130,8 @@ Nine hosted APIs are available by token: Groq, Google AI Studio, NVIDIA NIM, Z.a
 
 `voie models`, `GET /v1/models` and the MCP `list_models` tool group models by provider label, so the catalogue stays readable as it grows.
 
+`voie keys` prints the exact steps and URLs to obtain credentials for any provider (`voie keys cloudflare-ai` for one). `voie connect` shows the same steps before asking for the value.
+
 Run `voie install` with no argument to list every installable toolchain and third-party gateway, with its port, installation status and exact install command. `voie install <name>` installs it; `voie connect --list` also shows gateway status. Once installed, a gateway appears in `voie models` with its alias and is started automatically on the first call. Third-party gateways reverse-engineer upstream endpoints and carry ToS/account risk.
 
 `voie connect` is the single entry point for providers that accept a token. Run it with no argument for an interactive menu, or `voie connect <provider> --token <value>` for scripts. Tokens are stored in `<user-config-dir>/voie/credentials.json` with `0600` permissions; the environment variables above override the saved value. `voie connect --list` shows which providers are connected, and `voie connect disconnect <provider>` removes one. A provider that needs a token and has none is absent from `voie models` and from automatic routing.
