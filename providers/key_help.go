@@ -70,9 +70,13 @@ func KeyHelp(name string) []string {
 		return []string{"Run `agent login`, or create a key at https://cursor.com/dashboard/api (CURSOR_API_KEY).", "Cursor has no guaranteed free model tier for automated use."}
 	}
 	if spec, ok := ExternalGatewayByName(name); ok {
+		account, _ := ExternalGatewayAccount(name)
 		return []string{
 			"Third-party gateway (reverse-engineered endpoints, ToS/account risk).",
 			"Install with: voie install " + spec.Name,
+			"Account required: " + account.Required + " — " + account.Kind,
+			"Account setup: " + account.URL,
+			"Client key: " + account.Key,
 			spec.SetupHint,
 			"Then call the model with: voie chat --model " + spec.Alias,
 		}

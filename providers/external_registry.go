@@ -15,17 +15,21 @@ import (
 // one or more coding-agent services as OpenAI-compatible endpoints. These are
 // opt-in and user-installed: voie never bundles or operates them.
 type ExternalGatewaySpec struct {
-	Name       string
-	Label      string
-	Repo       string
-	Port       int
-	Alias      string
-	Upstream   string
-	HealthPath string
-	Install    []string   // explicit install; empty means git clone Repo into the gateway dir
-	Deps       [][]string // commands run in the gateway dir after install
-	Start      []string   // command that launches the gateway on its loopback port
-	SetupHint  string     // account/key configuration required before inference
+	Name            string
+	Label           string
+	Repo            string
+	Port            int
+	Alias           string
+	Upstream        string
+	HealthPath      string
+	Install         []string   // explicit install; empty means git clone Repo into the gateway dir
+	Deps            [][]string // commands run in the gateway dir after install
+	Start           []string   // command that launches the gateway on its loopback port
+	SetupHint       string     // account configuration required before inference
+	AccountRequired string     // "none", "upstream", "dashboard+upstream"
+	AccountKind     string     // which account exactly
+	AccountURL      string     // where to create or link it
+	KeyRequired     string     // local gateway key policy
 }
 
 // ExternalGateways are ranked by observed activity in Nov 2026. Install and
@@ -35,58 +39,90 @@ var ExternalGateways = []ExternalGatewaySpec{
 	{
 		Name: "omniroute", Label: "OmniRoute", Repo: "https://github.com/cheaper-inference/OmniRoute",
 		Port: 20128, Alias: "omni-free", Upstream: "openrouter/free", HealthPath: "/healthz",
-		Install:   []string{"npm", "install", "-g", "omniroute@latest"},
-		SetupHint: "connect a provider in the OmniRoute dashboard and create a gateway API key",
-		Start:     []string{"omniroute"},
+		Install:         []string{"npm", "install", "-g", "omniroute@latest"},
+		SetupHint:       "connect a provider in the OmniRoute dashboard and create a gateway API key",
+		AccountRequired: "dashboard+upstream",
+		AccountKind:     "OmniRoute dashboard password + at least one upstream provider (keyless NOAUTH providers exist)",
+		AccountURL:      "http://localhost:20128",
+		KeyRequired:     "optional locally (REQUIRE_API_KEY off by default)",
+		Start:           []string{"omniroute"},
 	},
 	{
 		Name: "qoder2api", Label: "Qoder2API Hub", Repo: "https://github.com/shuishuipingan/qoder2api-hub",
 		Port: 8790, Alias: "qoder2-free", Upstream: "auto", HealthPath: "/health",
-		Deps:      [][]string{{"bash", "-c", "chmod +x *.sh"}},
-		SetupHint: "open the dashboard (default password admin) and add your Qoder account",
-		Start:     []string{"bash", "start-qoder-proxy.sh"},
+		Deps:            [][]string{{"bash", "-c", "chmod +x *.sh"}},
+		SetupHint:       "open the dashboard (default password admin) and add your Qoder account",
+		AccountRequired: "upstream",
+		AccountKind:     "Qoder CN/intl account (free daily check-in credits)",
+		AccountURL:      "https://qoder.com/account/integrations",
+		KeyRequired:     "optional on localhost when no key is set",
+		Start:           []string{"bash", "start-qoder-proxy.sh"},
 	},
 	{
 		Name: "windsurfapi", Label: "WindsurfAPI", Repo: "https://github.com/dwgx/WindsurfAPI",
 		Port: 3003, Alias: "devin2-free", Upstream: "swe-2-flash-medium", HealthPath: "/health",
-		Deps:      [][]string{{"bash", "setup.sh"}},
-		SetupHint: "log in with a Windsurf/Devin account and set API_KEY in .env",
-		Start:     []string{"npm", "start"},
+		Deps:            [][]string{{"bash", "setup.sh"}},
+		SetupHint:       "log in with a Windsurf/Devin account and set API_KEY in .env",
+		AccountRequired: "upstream",
+		AccountKind:     "Windsurf/Devin account (free models available)",
+		AccountURL:      "https://windsurf.com/show-auth-token",
+		KeyRequired:     "required: API_KEY or WINDSURFAPI_ALLOW_UNAUTHENTICATED=1 on loopback",
+		Start:           []string{"npm", "start"},
 	},
 	{
 		Name: "copilot-api", Label: "Copilot API", Repo: "https://github.com/caozhiyuan/copilot-api",
 		Port: 4141, Alias: "copilot2-free", Upstream: "auto", HealthPath: "/v1/models",
-		Install:   []string{"npm", "install", "-g", "@jeffreycao/copilot-api@latest"},
-		SetupHint: "run the gateway once and complete provider setup (Copilot/Codex/xAI login)",
-		Start:     []string{"copilot-api", "start"},
+		Install:         []string{"npm", "install", "-g", "@jeffreycao/copilot-api@latest"},
+		SetupHint:       "run the gateway once and complete provider setup (Copilot/Codex/xAI login)",
+		AccountRequired: "upstream",
+		AccountKind:     "GitHub Copilot Free, Codex or xAI account",
+		AccountURL:      "https://github.com/settings/copilot",
+		KeyRequired:     "optional on loopback",
+		Start:           []string{"copilot-api", "start"},
 	},
 	{
 		Name: "cursor-api-proxy", Label: "Cursor ACP Proxy", Repo: "https://github.com/anyrobert/cursor-api-proxy",
 		Port: 8765, Alias: "cursor2-free", Upstream: "auto", HealthPath: "/healthz",
-		Install:   []string{"npm", "install", "-g", "cursor-api-proxy@latest"},
-		SetupHint: "install the Cursor agent CLI and run `agent login` (or set CURSOR_API_KEY)",
-		Start:     []string{"cursor-api-proxy"},
+		Install:         []string{"npm", "install", "-g", "cursor-api-proxy@latest"},
+		SetupHint:       "install the Cursor agent CLI and run `agent login` (or set CURSOR_API_KEY)",
+		AccountRequired: "upstream",
+		AccountKind:     "Cursor Free/Hobby account or dashboard integration key",
+		AccountURL:      "https://cursor.com/dashboard/integrations",
+		KeyRequired:     "optional",
+		Start:           []string{"cursor-api-proxy"},
 	},
 	{
 		Name: "codearts2api", Label: "CodeArts2API", Repo: "https://github.com/zhuweiyou/codearts2api",
-		Port: 8088, Alias: "codearts-free", Upstream: "minimax", HealthPath: "/healthz",
-		Deps:      [][]string{{"corepack", "enable"}, {"pnpm", "install"}, {"pnpm", "run", "build"}},
-		SetupHint: "add a channel/account in /admin and save the generated gateway key",
-		Start:     []string{"pnpm", "start"},
+		Port: 8088, Alias: "codearts-free", Upstream: "opencode/mimo-v2.6-flash-free", HealthPath: "/healthz",
+		Deps:            [][]string{{"corepack", "enable"}, {"pnpm", "install"}, {"pnpm", "run", "build"}},
+		SetupHint:       "add a channel/account in /admin and save the generated gateway key",
+		AccountRequired: "none",
+		AccountKind:     "auto-added OpenCode anonymous channel (api_key=public, mimo-v2.6-flash-free) works with no account",
+		AccountURL:      "https://github.com/zhuweiyou/codearts2api",
+		KeyRequired:     "required: generated gateway key at <home>/openai-gateway/api-key",
+		Start:           []string{"pnpm", "start"},
 	},
 	{
 		Name: "cli2api", Label: "CLI2API", Repo: "https://github.com/caigee-cmd/cli2api",
 		Port: 3010, Alias: "cli2-free", Upstream: "qoder", HealthPath: "/health",
-		Deps:      [][]string{{"go", "build", "-o", "gateway", "./cmd/server"}},
-		SetupHint: "save the admin key, add an upstream account, then create a client key",
-		Start:     []string{"./gateway"},
+		Deps:            [][]string{{"go", "build", "-o", "gateway", "./cmd/server"}},
+		SetupHint:       "save the admin key, add an upstream account, then create a client key",
+		AccountRequired: "upstream",
+		AccountKind:     "Qoder / WorkBuddy / Trae account",
+		AccountURL:      "http://127.0.0.1:3010",
+		KeyRequired:     "required: generated admin or client key",
+		Start:           []string{"./gateway"},
 	},
 	{
 		Name: "workbuddy2api", Label: "WorkBuddy2API", Repo: "https://github.com/hawklithm/workbuddy2api",
 		Port: 8787, Alias: "wb2-free", Upstream: "auto", HealthPath: "/health",
-		Install:   []string{"pip", "install", "workbuddy2api"},
-		SetupHint: "link a CodeBuddy account at /admin or with --login",
-		Start:     []string{"python", "-m", "codebuddy_proxy"},
+		Install:         []string{"pip", "install", "workbuddy2api"},
+		SetupHint:       "link a CodeBuddy account at /admin or with --login",
+		AccountRequired: "upstream",
+		AccountKind:     "CodeBuddy (CN) or WorkBuddy (Global) account",
+		AccountURL:      "http://127.0.0.1:8787/admin",
+		KeyRequired:     "none: placeholder accepted",
+		Start:           []string{"python", "-m", "codebuddy_proxy"},
 	},
 }
 
@@ -193,6 +229,24 @@ func ExternalGatewayStatus(name string) (installed bool, installCommand, startCo
 		command = strings.Join(spec.Start, " ")
 	}
 	return installed, NewExternalGateway(spec).InstallCommand(), command
+}
+
+// GatewayAccount describes what a user must set up before a gateway serves
+// real inference.
+type GatewayAccount struct {
+	Required string
+	Kind     string
+	URL      string
+	Key      string
+}
+
+// ExternalGatewayAccount returns the account requirements for a gateway.
+func ExternalGatewayAccount(name string) (GatewayAccount, bool) {
+	spec, ok := ExternalGatewayByName(name)
+	if !ok {
+		return GatewayAccount{}, false
+	}
+	return GatewayAccount{Required: spec.AccountRequired, Kind: spec.AccountKind, URL: spec.AccountURL, Key: spec.KeyRequired}, true
 }
 
 // ExternalGatewaySetupHint returns the account configuration a gateway needs

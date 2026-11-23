@@ -52,7 +52,7 @@ func newInstallCommand() *cobra.Command {
 
 func runInstallList(out io.Writer) error {
 	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(table, "NAME\tTYPE\tLABEL\tPORT\tSTATUS\tINSTALL\tSETUP REQUIRED"); err != nil {
+	if _, err := fmt.Fprintln(table, "NAME\tTYPE\tLABEL\tPORT\tSTATUS\tACCOUNT\tINSTALL\tSETUP REQUIRED"); err != nil {
 		return err
 	}
 	for _, spec := range providers.ExternalGateways {
@@ -62,12 +62,13 @@ func runInstallList(out io.Writer) error {
 			state = "installed"
 		}
 		hint := providers.ExternalGatewaySetupHint(spec.Name)
-		if _, err := fmt.Fprintf(table, "%s\tgateway\t%s\t%d\t%s\t%s\t%s\n", spec.Name, spec.Label, spec.Port, state, command, hint); err != nil {
+		account, _ := providers.ExternalGatewayAccount(spec.Name)
+		if _, err := fmt.Fprintf(table, "%s\tgateway\t%s\t%d\t%s\t%s\t%s\t%s\n", spec.Name, spec.Label, spec.Port, state, account.Required, command, hint); err != nil {
 			return err
 		}
 	}
 	for _, name := range []string{"cline", "kiro", "antigravity", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor"} {
-		if _, err := fmt.Fprintf(table, "%s\tcli\t%s\t-\t%s\tvoie install %s\t-\n", name, name, cliState(name), name); err != nil {
+		if _, err := fmt.Fprintf(table, "%s\tcli\t%s\t-\t%s\t-\tvoie install %s\t-\n", name, name, cliState(name), name); err != nil {
 			return err
 		}
 	}

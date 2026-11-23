@@ -26,6 +26,23 @@ func TestExternalGatewayHiddenWithoutInstall(t *testing.T) {
 	}
 }
 
+func TestExternalGatewayAccountRequirements(t *testing.T) {
+	for _, spec := range ExternalGateways {
+		account, ok := ExternalGatewayAccount(spec.Name)
+		if !ok {
+			t.Errorf("no account info for %s", spec.Name)
+			continue
+		}
+		if account.Required == "" || account.Kind == "" || account.URL == "" || account.Key == "" {
+			t.Errorf("incomplete account info for %s: %+v", spec.Name, account)
+		}
+	}
+	codearts, _ := ExternalGatewayAccount("codearts2api")
+	if codearts.Required != "none" {
+		t.Errorf("codearts2api should have a zero-account anonymous path, got %q", codearts.Required)
+	}
+}
+
 func TestExternalGatewaySpecsAreCoherent(t *testing.T) {
 	ports := make(map[int]string)
 	for _, spec := range ExternalGateways {

@@ -253,9 +253,10 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 	}
 	for _, spec := range providers.ExternalGateways {
 		installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
+		account, _ := providers.ExternalGatewayAccount(spec.Name)
 		state := "not installed (voie install " + spec.Name + ")"
 		if installed {
-			state = "installed"
+			state = "installed — account: " + account.Required
 		}
 		if _, err := fmt.Fprintf(out, "  %-18s %s\n", spec.Name, state); err != nil {
 			return err
