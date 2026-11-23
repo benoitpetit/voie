@@ -222,8 +222,8 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 		title string
 		names []string
 	}{
-		{"API TOKEN (clé à créer chez le provider)", tokenProviders},
-		{"CLI / GATEWAY LOCAL (login dans l'outil officiel)", cliProviders},
+		{"API TOKEN (create a key with the provider)", tokenProviders},
+		{"CLI / LOCAL GATEWAY (sign in with the official tool)", cliProviders},
 	}
 	for _, section := range sections {
 		if _, err := fmt.Fprintf(out, "\n%s\n", section.title); err != nil {
@@ -241,7 +241,7 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 			}
 		}
 	}
-	if _, err := fmt.Fprintln(out, "\nREVERSE-ENGINEERED GATEWAYS (risque ToS, opt-in)"); err != nil {
+	if _, err := fmt.Fprintln(out, "\nREVERSE-ENGINEERED GATEWAYS (ToS risk, opt-in)"); err != nil {
 		return err
 	}
 	for _, spec := range providers.ExternalGateways {

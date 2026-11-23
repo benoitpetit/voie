@@ -107,7 +107,7 @@ func TestConnectListIncludesThirdPartyGateways(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"API TOKEN", "CLI / GATEWAY LOCAL", "REVERSE-ENGINEERED GATEWAYS", "omniroute", "not installed", "qoder2api"} {
+	for _, want := range []string{"API TOKEN", "CLI / LOCAL GATEWAY", "REVERSE-ENGINEERED GATEWAYS", "omniroute", "not installed", "qoder2api"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("--list missing %q:\n%s", want, stdout)
 		}
