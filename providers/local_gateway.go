@@ -3,13 +3,13 @@ package providers
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/benoitpetit/voie/config"
@@ -36,9 +36,14 @@ type LocalGateway struct {
 	HealthCheck func() bool // test seam; nil uses HTTP against BaseURL+HealthPath
 }
 
+type runningProcess struct {
+	cmd  *exec.Cmd
+	done chan struct{}
+}
+
 var (
 	gatewayMu      sync.Mutex
-	gatewayProcess = make(map[string]*exec.Cmd)
+	gatewayProcess = make(map[string]*runningProcess)
 )
 
 func NewLocalGateway(spec LocalGatewaySpec) *LocalGateway { return &LocalGateway{spec: spec} }
@@ -115,19 +120,34 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	// context: a request ending must not kill a shared local gateway.
 	cmd := exec.Command(g.resolveBinary(), g.spec.Args...)
 	cmd.Dir = g.spec.Dir
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
+	// Never let a gateway inherit the caller's terminal: several of them
+	// watch stdin to detect parent exit, which keeps the user's shell open.
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	cmd.Stdin = strings.NewReader("")
+	// A real *os.File avoids os/exec's copying goroutines: a grandchild that
+	// inherits the write end would keep Wait() blocked forever otherwise.
+	cmd.Stdout = devNull
+	cmd.Stderr = devNull
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	gatewayProcess[g.spec.Name] = cmd
+	running := &runningProcess{cmd: cmd, done: make(chan struct{})}
+	gatewayProcess[g.spec.Name] = running
+	// Exactly one Wait() per process, owned by the manager. A second Wait()
+	// from ShutdownGateways can block forever on some platforms.
 	go func() {
 		_ = cmd.Wait()
+		_ = devNull.Close()
 		gatewayMu.Lock()
-		if gatewayProcess[g.spec.Name] == cmd {
+		if gatewayProcess[g.spec.Name] == running {
 			delete(gatewayProcess, g.spec.Name)
 		}
 		gatewayMu.Unlock()
+		close(running.done)
 	}()
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
@@ -141,7 +161,7 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		}
 	}
 	_ = cmd.Process.Kill()
-	delete(gatewayProcess, g.spec.Name)
+	<-running.done
 	return fmt.Errorf("gateway %s did not become healthy within 15s", g.spec.Name)
 }
 
@@ -149,8 +169,8 @@ func runningGateways() map[string]*exec.Cmd {
 	gatewayMu.Lock()
 	defer gatewayMu.Unlock()
 	copy := make(map[string]*exec.Cmd, len(gatewayProcess))
-	for name, cmd := range gatewayProcess {
-		copy[name] = cmd
+	for name, running := range gatewayProcess {
+		copy[name] = running.cmd
 	}
 	return copy
 }
@@ -158,21 +178,22 @@ func runningGateways() map[string]*exec.Cmd {
 // ShutdownGateways terminates every gateway started by this process.
 func ShutdownGateways() {
 	gatewayMu.Lock()
-	defer gatewayMu.Unlock()
-	for name, cmd := range gatewayProcess {
-		if cmd.Process != nil {
-			// Let the bridge run its defers (kill the agent child, remove the
-			// scratch dir) before forcing a SIGKILL.
-			_ = cmd.Process.Signal(os.Interrupt)
-			done := make(chan struct{})
-			go func() { _ = cmd.Wait(); close(done) }()
-			select {
-			case <-done:
-			case <-time.After(500 * time.Millisecond):
-				_ = cmd.Process.Kill()
-				<-done
-			}
-		}
+	processes := make([]*runningProcess, 0, len(gatewayProcess))
+	for name, running := range gatewayProcess {
+		processes = append(processes, running)
 		delete(gatewayProcess, name)
+	}
+	gatewayMu.Unlock()
+	for _, running := range processes {
+		if running.cmd.Process == nil {
+			continue
+		}
+		_ = running.cmd.Process.Signal(os.Interrupt)
+		select {
+		case <-running.done:
+		case <-time.After(500 * time.Millisecond):
+			_ = syscall.Kill(-running.cmd.Process.Pid, syscall.SIGKILL)
+			<-running.done
+		}
 	}
 }
