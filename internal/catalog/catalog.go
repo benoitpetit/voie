@@ -59,6 +59,11 @@ var providerAliases = map[string][2]string{
 	"cohere":                {"cohere-trial", "coh"},
 	"requesty":              {"requesty", "rq"},
 	"aihubmix":              {"aihubmix", "ah"},
+	"anyapi":                {"anyapi", "any"},
+	"beatapi":               {"beatapi", "beat"},
+	"iflytek-spark":         {"iflytek-spark", "spark"},
+	"together-ai":           {"together", "tg"},
+	"vlm-run-gateway":       {"vlm-run", "vlm"},
 }
 
 type registryEntry struct {

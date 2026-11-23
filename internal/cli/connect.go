@@ -235,6 +235,8 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 				state = "connected"
 			} else if name == "opencode-zen" || name == "opencode-go" {
 				state = "available (anonymous / local key)"
+			} else if name == "vlm-run" {
+				state = "available (anonymous bearer)"
 			}
 			if _, err := fmt.Fprintf(out, "  %-18s %s\n", name, state); err != nil {
 				return err

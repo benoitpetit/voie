@@ -64,6 +64,39 @@ func TestRegistryCatalogueExpandsTokenProviders(t *testing.T) {
 	}
 }
 
+func TestVLMRunWorksWithAnonymousBearer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("VOIE_VLM_RUN_KEY", "")
+	spec, ok := findTokenProvider("vlm-run")
+	if !ok {
+		t.Fatal("vlm-run provider missing")
+	}
+	provider := NewTokenProvider(spec)
+	if !provider.GetInfo().Working {
+		t.Fatal("vlm-run must be available with the documented anonymous bearer")
+	}
+	var gotAuth string
+	useProviderHandler(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"hi"}}]}`)
+	}))
+	if _, err := provider.ChatCompletion(context.Background(), []Message{{Role: "user", Content: "hi"}}, spec.Alias); err != nil {
+		t.Fatal(err)
+	}
+	if gotAuth != "Bearer vlmrun" {
+		t.Errorf("Authorization = %q, want anonymous bearer", gotAuth)
+	}
+}
+
+func findTokenProvider(name string) (TokenProviderSpec, bool) {
+	for _, spec := range TokenProviders {
+		if spec.Name == name {
+			return spec, true
+		}
+	}
+	return TokenProviderSpec{}, false
+}
+
 func TestOpenRouterExposesRegistryModels(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	catalog.SetSource("")
@@ -86,6 +119,9 @@ func TestOpenRouterExposesRegistryModels(t *testing.T) {
 func TestTokenProviderHiddenWithoutToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, spec := range TokenProviders {
+		if spec.Name == "vlm-run" {
+			continue // documented anonymous bearer makes it always available
+		}
 		t.Setenv(spec.EnvVar, "")
 		provider := NewTokenProvider(spec)
 		if provider.GetInfo().Working {

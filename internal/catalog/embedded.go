@@ -22,9 +22,9 @@ var embeddedModels = map[string]map[string]string{
 		"or-inclusionai-ling-3-2-flash-free":                    "inclusionai/ling-3.2-flash:free",
 	},
 	"orcarouter": {
-		"orc-deepseek-deepseek-v4-flash-free":   "deepseek/deepseek-v4-flash-free",
-		"orc-deepseek-deepseek-v4-1-flash-free": "deepseek/deepseek-v4.1-flash-free",
-		"orc-z-ai-glm-5-3-flash-free":           "z-ai/glm-5.3-flash-free",
+		"ocr-deepseek-deepseek-v4-flash-free":   "deepseek/deepseek-v4-flash-free",
+		"ocr-deepseek-deepseek-v4-1-flash-free": "deepseek/deepseek-v4.1-flash-free",
+		"ocr-z-ai-glm-5-3-flash-free":           "z-ai/glm-5.3-flash-free",
 	},
 	"groq": {
 		"gq-openai-gpt-oss-120b": "openai/gpt-oss-120b",
@@ -133,5 +133,26 @@ var embeddedModels = map[string]map[string]string{
 		"ah-particle-1-free":                             "particle-1-free",
 		"ah-lfm-3-1-7b-free":                             "lfm-3-1.7b-free",
 		"ah-ling-3-2-flash-free":                         "ling-3.2-flash-free",
+	},
+	"anyapi": {
+		"any-qwen-qwen3-8-27b-free":                 "qwen/qwen3.8-27b:free",
+		"any-inclusionai-ling-3-0-flash-fin-free":   "inclusionai/ling-3.0-flash-fin:free",
+		"any-inclusionai-ling-3-0-flash-sante-free": "inclusionai/ling-3.0-flash-sante:free",
+	},
+	"beatapi": {
+		"beat-glm-5-3-flash-free":       "glm-5.3-flash-free",
+		"beat-deepseek-v4-1-flash-free": "deepseek-v4.1-flash-free",
+		"beat-hy4-flash-free":           "hy4-flash-free",
+	},
+	"iflytek-spark": {
+		"spark-lite": "lite",
+	},
+	"together": {
+		"tg-prism-ml-ternary-bonsai-27b": "Prism-ML/Ternary-Bonsai-27B",
+	},
+	"vlm-run": {
+		"vlm-qwen-qwen3-8-27b":                 "qwen/qwen3.8-27b",
+		"vlm-qwen-qwen3-5-0-8b":                "qwen/qwen3.5-0.8b",
+		"vlm-google-diffusiongemma-26b-a4b-it": "google/diffusiongemma-26b-a4b-it",
 	},
 }

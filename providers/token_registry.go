@@ -33,6 +33,11 @@ var TokenProviders = []TokenProviderSpec{
 	{Name: "cohere-trial", Label: "Cohere Trial", CompletionsURL: "https://api.cohere.com/compatibility/v1/chat/completions", ModelsURL: "https://api.cohere.com/compatibility/v1/models", Alias: "cohfree", UpstreamModel: "north-mini-code-1-0", EnvVar: "VOIE_COHERE_TRIAL_KEY"},
 	{Name: "requesty", Label: "Requesty", CompletionsURL: "https://router.requesty.ai/v1/chat/completions", ModelsURL: "https://router.requesty.ai/v1/models", Alias: "reqfree", UpstreamModel: "nvidia/nemotron-3-ultra-550b-a55b", EnvVar: "VOIE_REQUESTY_KEY"},
 	{Name: "aihubmix", Label: "AIHubMix", CompletionsURL: "https://aihubmix.com/v1/chat/completions", ModelsURL: "https://aihubmix.com/v1/models", Alias: "ahfree", UpstreamModel: "coding-glm-5.3-flash-free", EnvVar: "VOIE_AIHUBMIX_KEY"},
+	{Name: "anyapi", Label: "AnyAPI", CompletionsURL: "https://api.anyapi.ai/v1/chat/completions", ModelsURL: "https://api.anyapi.ai/v1/models", Alias: "anyfree", UpstreamModel: "qwen/qwen3.8-27b:free", EnvVar: "VOIE_ANYAPI_KEY"},
+	{Name: "beatapi", Label: "BeatAPI", CompletionsURL: "https://api.beatapi.io/v1/chat/completions", ModelsURL: "https://api.beatapi.io/v1/text/models", Alias: "beatfree", UpstreamModel: "glm-5.3-flash-free", EnvVar: "VOIE_BEATAPI_KEY"},
+	{Name: "iflytek-spark", Label: "iFlytek Spark Lite", CompletionsURL: "https://spark-api-open.xf-yun.com/v1/chat/completions", ModelsURL: "https://spark-api-open.xf-yun.com/v1/models", Alias: "sparkfree", UpstreamModel: "lite", EnvVar: "VOIE_IFLYTEK_SPARK_KEY"},
+	{Name: "together", Label: "Together AI", CompletionsURL: "https://api.together.xyz/v1/chat/completions", ModelsURL: "https://api.together.xyz/v1/models", Alias: "tgfree", UpstreamModel: "Prism-ML/Ternary-Bonsai-27B", EnvVar: "VOIE_TOGETHER_KEY"},
+	{Name: "vlm-run", Label: "VLM Run Gateway", CompletionsURL: "https://gateway.vlm.run/v1/openai/chat/completions", ModelsURL: "https://gateway.vlm.run/v1/openai/models", Alias: "vlmfree", UpstreamModel: "qwen/qwen3.5-0.8b", EnvVar: "VOIE_VLM_RUN_KEY"},
 }
 
 const cloudflareAccountKey = "cloudflare-ai-account"
@@ -119,7 +124,11 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 		SupportsStream: true,
 		TokenSupplier: func() string {
 			store, _ := config.LoadCredentials()
-			return store.Token(spec.Name)
+			value := store.Token(spec.Name)
+			if value == "" && spec.Name == "vlm-run" {
+				return "vlmrun"
+			}
+			return value
 		},
 	}
 	cfg.ModelsSupplier = func() map[string]string { return catalog.Models(spec.Name) }
@@ -132,7 +141,12 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 
 func (p *TokenProvider) token() string {
 	store, _ := config.LoadCredentials()
-	return strings.TrimSpace(store.Token(p.spec.Name))
+	value := strings.TrimSpace(store.Token(p.spec.Name))
+	if value == "" && p.spec.Name == "vlm-run" {
+		// Documented anonymous bearer for the free evaluation tier.
+		return "vlmrun"
+	}
+	return value
 }
 
 func (p *TokenProvider) SupportsModel(model string) bool {
