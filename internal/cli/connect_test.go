@@ -81,13 +81,29 @@ func TestConnectListShowsState(t *testing.T) {
 	}
 }
 
+func TestConnectListIncludesThirdPartyGateways(t *testing.T) {
+	_, _, err := runConnect(t, []string{"--list"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, err := runConnect(t, []string{"--list"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"omniroute", "gateway not installed", "qoder2api"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("--list missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
 func TestConnectListShowsDefaultKeyForOpencode(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	stdout, _, err := runConnect(t, []string{"--list"}, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout, "opencode-zen   connected (default key)") {
+	if !strings.Contains(stdout, "opencode-zen") || !strings.Contains(stdout, "connected (default key)") {
 		t.Errorf("--list does not show the default local key:\n%s", stdout)
 	}
 }

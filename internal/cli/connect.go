@@ -74,7 +74,15 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					} else if name == "opencode-zen" || name == "opencode-go" {
 						state = "connected (default key)"
 					}
-					fmt.Fprintf(command.OutOrStdout(), "%-14s %s\n", name, state)
+					fmt.Fprintf(command.OutOrStdout(), "%-18s %s\n", name, state)
+				}
+				for _, spec := range providers.ExternalGateways {
+					installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
+					state := "gateway not installed (voie install " + spec.Name + ")"
+					if installed {
+						state = "gateway installed"
+					}
+					fmt.Fprintf(command.OutOrStdout(), "%-18s %s\n", spec.Name, state)
 				}
 				return nil
 			}
