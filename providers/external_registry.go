@@ -78,7 +78,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 	{
 		Name: "windsurfapi", Label: "WindsurfAPI", Repo: "https://github.com/dwgx/WindsurfAPI",
 		Port: 3003, Alias: "devin2-free", Upstream: "swe-2-flash-medium", HealthPath: "/health",
-		Deps:            [][]string{{"bash", "setup.sh"}},
+		Deps:            [][]string{{"bash", "-c", "sed -i 's#/opt/windsurf#$HOME/.windsurf#g' setup.sh && bash setup.sh"}},
 		SetupHint:       "log in with a Windsurf/Devin account and set API_KEY in .env",
 		AccountRequired: "upstream",
 		AccountKind:     "Windsurf/Devin account (free models available)",
@@ -134,19 +134,19 @@ var ExternalGateways = []ExternalGatewaySpec{
 	{
 		Name: "workbuddy2api", Label: "WorkBuddy2API", Repo: "https://github.com/hawklithm/workbuddy2api",
 		Port: 8787, Alias: "wb2-free", Upstream: "auto", HealthPath: "/health",
-		Install:         []string{"pip", "install", "workbuddy2api"},
+		Install:         []string{"uv", "tool", "install", "workbuddy2api"},
 		SetupHint:       "link a CodeBuddy account at /admin or with --login",
 		AccountRequired: "upstream",
 		AccountKind:     "CodeBuddy (CN) or WorkBuddy (Global) account",
 		AccountURL:      "http://127.0.0.1:8787/admin",
 		KeyRequired:     "none: placeholder accepted",
-		Start:           []string{"python", "-m", "codebuddy_proxy"},
-		Check:           []string{"python", "-c", "import codebuddy_proxy"},
+		Start:           []string{"workbuddy2api", "--port", "8787"},
+		Check:           []string{"workbuddy2api", "--help"},
 	},
 	{
 		Name: "freellmpool", Label: "FreeLLM Pool", Repo: "https://github.com/0xzr/freellmpool",
 		Port: 8083, Alias: "pool-free", Upstream: "auto", HealthPath: "/healthz",
-		Install:         []string{"pip", "install", "freellmpool"},
+		Install:         []string{"uv", "tool", "install", "freellmpool"},
 		SetupHint:       "works keyless out of the box; keyless routes send prompts to third parties",
 		AccountRequired: "none", AccountKind: "keyless routes (Pollinations, OVHcloud, Kilo, LLM7)",
 		AccountURL: "https://github.com/0xzr/freellmpool", KeyRequired: "optional (--api-key)",
@@ -159,7 +159,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		SetupHint:       "official free-tier API keys only; no OAuth or session reuse",
 		AccountRequired: "upstream", AccountKind: "official free API key (Groq, Gemini, OpenRouter, ...)",
 		AccountURL: "https://github.com/kaiser-data/free-llm-proxy-router", KeyRequired: "optional loopback auth token",
-		Start: []string{"free-llm-proxy"},
+		Start: []string{"./free-llm-proxy", "--port", "8082"},
 	},
 	{
 		Name: "trae2api", Label: "Trae2API Hub", Repo: "https://github.com/shuishuipingan/trae2api-hub",
@@ -172,9 +172,9 @@ var ExternalGateways = []ExternalGatewaySpec{
 	},
 	{
 		Name: "ollama", Label: "Ollama", Repo: "https://ollama.com",
-		Port: 11434, Alias: "ollama-local", Upstream: "llama3.2", HealthPath: "/api/tags",
+		Port: 11434, Alias: "ollama-local", Upstream: "qwen3.5:4b", HealthPath: "/api/tags",
 		Install:         []string{"sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"},
-		SetupHint:       "download a model first: ollama pull llama3.2 (inference stays on your machine)",
+		SetupHint:       "download a model first: ollama pull qwen3.5:4b (or any ID from `ollama list`; inference stays on your machine)",
 		AccountRequired: "none", AccountKind: "local models, no account",
 		AccountURL: "https://ollama.com/library", KeyRequired: "none",
 		Start: []string{"ollama", "serve"},
@@ -215,7 +215,8 @@ var ExternalGateways = []ExternalGatewaySpec{
 	{
 		Name: "freellmapi", Label: "FreeLLMAPI", Repo: "https://github.com/tashfeenahmed/freellmapi",
 		Port: 3001, Alias: "flm-free", Upstream: "auto", HealthPath: "/api/ping",
-		Deps: [][]string{{"docker", "compose", "up", "-d"}},
+		Deps:         [][]string{{"docker", "compose", "up", "-d"}},
+		GeneratedEnv: []string{"ENCRYPTION_KEY"},
 		Env: map[string]string{
 			"CATALOG_SYNC_DISABLED":   "1",
 			"FREELLMAPI_UPDATE_CHECK": "off",
@@ -389,15 +390,18 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 // ProvisionGatewayEnv creates the generated secrets once and reuses them on
 // every start, so the gateway works without manual environment setup.
 func ProvisionGatewayEnv(spec ExternalGatewaySpec) error {
+	dir := gatewayDir(spec)
+	// The gateway process uses this directory as its working directory; create
+	// it even when no secrets are needed so exec does not fail with ENOENT.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
 	if len(spec.GeneratedEnv) == 0 {
 		return nil
 	}
-	path := filepath.Join(gatewayDir(spec), ".env")
+	path := filepath.Join(dir, ".env")
 	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
 		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
 	}
 	var lines []string
 	for _, key := range spec.GeneratedEnv {
@@ -416,6 +420,11 @@ func generatedSecret(key string) string {
 		}
 	case "JWT_SECRET":
 		size = 32
+	case "ENCRYPTION_KEY":
+		buffer := make([]byte, 32)
+		if _, err := rand.Read(buffer); err == nil {
+			return hex.EncodeToString(buffer)
+		}
 	}
 	buffer := make([]byte, size)
 	if _, err := rand.Read(buffer); err != nil {
@@ -542,8 +551,15 @@ func (p *ExternalGateway) working() bool {
 		return cmd.Run() == nil
 	}
 	if len(p.spec.Install) > 0 {
-		// Globally installed tools have no gateway directory.
-		_, err := exec.LookPath(p.spec.Start[0])
+		binary := p.spec.Start[0]
+		// Installers that drop binaries into the gateway directory (instead
+		// of installing globally) use a ./ path — resolve it there.
+		if strings.HasPrefix(binary, "./") {
+			candidate := filepath.Join(gatewayDir(p.spec), strings.TrimPrefix(binary, "./"))
+			info, err := os.Stat(candidate)
+			return err == nil && !info.IsDir()
+		}
+		_, err := exec.LookPath(binary)
 		return err == nil
 	}
 	dir := gatewayDir(p.spec)

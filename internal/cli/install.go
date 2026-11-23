@@ -120,32 +120,51 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		return printSetupHint(command, spec.Name)
 	}
 	dir := providers.ExternalGatewayDir(spec.Name)
+	_, statErr := os.Stat(dir)
+	needsClone := os.IsNotExist(statErr)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("prepare %s directory: %w", spec.Name, err)
+	}
 	steps := make([][]string, 0, len(spec.Deps)+1)
 	if len(spec.Install) > 0 {
 		steps = append(steps, spec.Install)
-	} else if _, err := os.Stat(dir); os.IsNotExist(err) {
+	} else if needsClone {
 		steps = append(steps, []string{"git", "clone", spec.Repo, dir})
 	} else {
 		fmt.Fprintf(command.OutOrStdout(), "%s already cloned; running dependencies only\n", spec.Name)
 	}
+	depsStart := len(steps)
 	steps = append(steps, spec.Deps...)
+	// Secrets must exist before the depend steps run (docker compose reads
+	// .env), but the directory must still be empty for git clone — so generate
+	// them between the clone/install step and the dependency steps.
+	provisioned := false
+	provision := func() error {
+		if provisioned {
+			return nil
+		}
+		provisioned = true
+		return providers.ProvisionGatewayEnv(spec)
+	}
 	for index, step := range steps {
+		if index == depsStart {
+			if err := provision(); err != nil {
+				return fmt.Errorf("prepare %s configuration: %w", spec.Name, err)
+			}
+		}
 		if _, err := exec.LookPath(step[0]); err != nil {
 			if step[0] == "corepack" {
 				fmt.Fprintf(command.OutOrStderr(), "skipping corepack (not provided by the active Node); continuing\n")
 				continue
 			}
-			return fmt.Errorf("install %s: %q is not available; switch to a Node 20-24 toolchain (e.g. `mise use node@22`) and retry", spec.Name, step[0])
+			return fmt.Errorf("install %s: %q is not available; install this tool first (Node 20-24 via `mise use node@22`, Python via `uv`) and retry", spec.Name, step[0])
 		}
 		fmt.Fprintf(command.OutOrStdout(), "+ %v\n", step)
 		cmd := exec.CommandContext(command.Context(), step[0], step[1:]...)
-		if index == 0 && len(spec.Install) > 0 {
-			cmd.Dir = ""
-		} else if len(step) > 2 && step[1] == "clone" {
-			cmd.Dir = ""
-		} else {
-			cmd.Dir = dir
-		}
+		// Every step runs inside the gateway directory: install scripts that
+		// download binaries into the current directory must not pollute the
+		// caller's working tree (and git clone accepts an existing empty dir).
+		cmd.Dir = dir
 		if len(spec.Env) > 0 {
 			cmd.Env = append(cmd.Env, os.Environ()...)
 			for key, value := range spec.Env {
@@ -160,10 +179,10 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 				fmt.Fprintf(command.OutOrStderr(), "corepack unavailable with the active Node; continuing without it\n")
 				continue
 			}
-			return fmt.Errorf("install %s: %w (use a Node 20-24 toolchain if this is a Node dependency)", spec.Name, err)
+			return fmt.Errorf("install %s: %w", spec.Name, err)
 		}
 	}
-	if err := providers.ProvisionGatewayEnv(spec); err != nil {
+	if err := provision(); err != nil {
 		return fmt.Errorf("prepare %s configuration: %w", spec.Name, err)
 	}
 	fmt.Fprintf(command.OutOrStdout(), "%s installed. Start it with: %s\n", spec.Name, startCommand)

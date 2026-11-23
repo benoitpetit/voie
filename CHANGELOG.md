@@ -15,6 +15,9 @@
 ### Changed
 
 - Removed the Cohere provider: its HuggingFace Space now requires sign-in, so the keyless endpoint can no longer serve requests.
+- Gateway installers now use `uv` instead of `pip` for Python packages, run entirely inside the gateway directory (install scripts can no longer overwrite files in the caller's repository), and generate secrets before dependency steps that need them.
+- Fixed a deadlock that made `voie connect` hang forever when a gateway never became healthy; it now reports the timeout and exits.
+- Fixed startup paths for `free-llm-router` (local binary plus explicit port), `windsurfapi` (no root needed), `freellmapi` (generated `ENCRYPTION_KEY`), `workbuddy2api` (uv CLI) and Ollama's default alias (model present on the machine).
 
 ## v0.1.4 - 2026-11-22
 

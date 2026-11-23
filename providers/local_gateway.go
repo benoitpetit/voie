@@ -125,7 +125,9 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	// Gateway lifetime is owned by the manager, not by the caller's request
 	// context: a request ending must not kill a shared local gateway.
 	cmd := exec.Command(g.resolveBinary(), g.spec.Args...)
-	cmd.Dir = g.spec.Dir
+	if info, err := os.Stat(g.spec.Dir); err == nil && info.IsDir() {
+		cmd.Dir = g.spec.Dir
+	}
 	// Never let a gateway inherit the caller's terminal: several of them
 	// watch stdin to detect parent exit, which keeps the user's shell open.
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -167,12 +169,15 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	go func() {
 		_ = cmd.Wait()
 		_ = devNull.Close()
+		// Signal exit before taking the lock: Ensure() holds gatewayMu while
+		// it waits on done, so closing afterwards would deadlock whenever a
+		// gateway never becomes healthy.
+		close(running.done)
 		gatewayMu.Lock()
 		if gatewayProcess[g.spec.Name] == running {
 			delete(gatewayProcess, g.spec.Name)
 		}
 		gatewayMu.Unlock()
-		close(running.done)
 	}()
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
@@ -186,7 +191,10 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		}
 	}
 	_ = cmd.Process.Kill()
-	<-running.done
+	select {
+	case <-running.done:
+	case <-time.After(5 * time.Second):
+	}
 	return fmt.Errorf("gateway %s did not become healthy within 15s", g.spec.Name)
 }
 

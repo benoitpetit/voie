@@ -125,7 +125,7 @@ func TestExternalGatewayCorrectedCommands(t *testing.T) {
 		t.Errorf("cli2api build = %q", got)
 	}
 	workbuddy, _ := ExternalGatewayByName("workbuddy2api")
-	if got := strings.Join(workbuddy.Start, " "); got != "python -m codebuddy_proxy" {
+	if got := strings.Join(workbuddy.Start, " "); got != "workbuddy2api --port 8787" {
 		t.Errorf("workbuddy start = %q", got)
 	}
 }
