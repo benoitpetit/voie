@@ -71,7 +71,7 @@ func TestDocumentedProvidersMatchCode(t *testing.T) {
 	for _, name := range rt.Registry.GetProviderNames() {
 		names[name] = true
 	}
-	for _, want := range []string{"perplexity", "duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline", "groq", "google-ai-studio", "nvidia-nim", "zai", "mistral", "cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor"} {
+	for _, want := range []string{"perplexity", "duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline", "groq", "google-ai-studio", "nvidia-nim", "zai", "mistral", "cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor", "omniroute", "qoder2api", "windsurfapi", "copilot-api", "cursor-api-proxy", "codearts2api", "cli2api", "workbuddy2api"} {
 		if !names[want] {
 			t.Errorf("provider %q is not registered", want)
 		}

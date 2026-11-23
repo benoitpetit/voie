@@ -53,7 +53,10 @@ func NewWithRegistry(cfg *config.Config, registry *app.Registry) (*Runtime, erro
 	registeredModels := make(map[string]struct{})
 	for _, name := range registry.GetProviderNames() {
 		for _, model := range registry.Get(name).GetInfo().SupportedModels {
-			registeredModels[strings.ToLower(strings.TrimSpace(model))] = struct{}{}
+			normalized := strings.ToLower(strings.TrimSpace(model))
+			registeredModels[normalized] = struct{}{}
+			// Public IDs are prefixed; routing.json may reference either form.
+			registeredModels[strings.ToLower(app.PrefixModelID(name, normalized))] = struct{}{}
 		}
 	}
 	if err := config.ValidateRoutingPolicy(policyConfig, registeredModels); err != nil {

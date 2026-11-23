@@ -19,6 +19,15 @@ func newKeysCommand() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 1 {
+				known := false
+				for _, name := range providers.KeyHelpProviders() {
+					if name == args[0] {
+						known = true
+					}
+				}
+				if !known {
+					return fmt.Errorf("unknown provider %q; run `voie keys` to list them", args[0])
+				}
 				return runKeysForProvider(command.OutOrStdout(), args[0])
 			}
 			return runKeysList(command.OutOrStdout())

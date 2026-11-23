@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
@@ -37,6 +38,23 @@ func opencodeGatewayKey() string {
 	return opencodeZenLocalKey
 }
 
+func (p *OpenCodeZen) GetInfo() app.ProviderInfo {
+	info := p.openAIKeylessProvider.GetInfo()
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(opencodeGatewayURL() + "/healthz")
+	if err != nil {
+		info.Working = false
+		return info
+	}
+	defer resp.Body.Close()
+	info.Working = resp.StatusCode >= 200 && resp.StatusCode < 400
+	return info
+}
+
+func (p *OpenCodeZen) SupportsModel(model string) bool {
+	return p.GetInfo().Working && p.openAIKeylessProvider.SupportsModel(model)
+}
+
 func opencodeZenConfig() openAIKeylessConfig {
 	return openAIKeylessConfig{
 		Name:           "opencode-zen",
@@ -46,7 +64,7 @@ func opencodeZenConfig() openAIKeylessConfig {
 		DefaultModel:   "oc2a-hy4-flash-free",
 		Description:    "Free OpenCode Zen models through a local opencode-zen gateway",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + opencodeGatewayKey()},
+		TokenSupplier:  opencodeGatewayKey,
 		ModelIDs: map[string]string{
 			"oc2a-beam-free":                   "beam-free",
 			"oc2a-big-pickle":                  "big-pickle",

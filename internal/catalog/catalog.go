@@ -32,6 +32,7 @@ func SetSource(url string) {
 	sourceOverride = url
 	remoteDisabled = url == ""
 	current = nil
+	lastFailure = time.Time{}
 }
 
 func source() string {
@@ -80,6 +81,7 @@ type snapshot struct {
 var (
 	mu          sync.Mutex
 	current     *snapshot
+	lastFailure time.Time
 	slugPattern = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
@@ -117,8 +119,14 @@ func load() *snapshot {
 		current = cached
 		return current
 	}
+	// A failed refresh is cached briefly so an offline start does not retry
+	// the network once per provider (15+ sequential 8s timeouts).
+	if !lastFailure.IsZero() && time.Since(lastFailure) < 10*time.Minute {
+		return nil
+	}
 	fresh, err := fetch()
 	if err != nil {
+		lastFailure = time.Now()
 		if cached := readCache(); cached != nil {
 			current = cached
 			return current

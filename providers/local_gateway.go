@@ -102,11 +102,13 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		return err
 	}
 	if g.spec.ConfigPath != "" && len(g.spec.ConfigBody) > 0 {
-		if err := os.MkdirAll(filepath.Dir(g.spec.ConfigPath), 0o700); err != nil {
-			return err
-		}
-		if err := os.WriteFile(g.spec.ConfigPath, g.spec.ConfigBody, 0o600); err != nil {
-			return err
+		if _, err := os.Stat(g.spec.ConfigPath); os.IsNotExist(err) {
+			if err := os.MkdirAll(filepath.Dir(g.spec.ConfigPath), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(g.spec.ConfigPath, g.spec.ConfigBody, 0o600); err != nil {
+				return err
+			}
 		}
 	}
 	// Gateway lifetime is owned by the manager, not by the caller's request
@@ -119,6 +121,14 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		return err
 	}
 	gatewayProcess[g.spec.Name] = cmd
+	go func() {
+		_ = cmd.Wait()
+		gatewayMu.Lock()
+		if gatewayProcess[g.spec.Name] == cmd {
+			delete(gatewayProcess, g.spec.Name)
+		}
+		gatewayMu.Unlock()
+	}()
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if g.healthy() {
@@ -130,6 +140,8 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
+	_ = cmd.Process.Kill()
+	delete(gatewayProcess, g.spec.Name)
 	return fmt.Errorf("gateway %s did not become healthy within 15s", g.spec.Name)
 }
 
@@ -149,8 +161,17 @@ func ShutdownGateways() {
 	defer gatewayMu.Unlock()
 	for name, cmd := range gatewayProcess {
 		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-			_ = cmd.Wait()
+			// Let the bridge run its defers (kill the agent child, remove the
+			// scratch dir) before forcing a SIGKILL.
+			_ = cmd.Process.Signal(os.Interrupt)
+			done := make(chan struct{})
+			go func() { _ = cmd.Wait(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				_ = cmd.Process.Kill()
+				<-done
+			}
 		}
 		delete(gatewayProcess, name)
 	}

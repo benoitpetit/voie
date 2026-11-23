@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/install"
 )
@@ -67,11 +66,6 @@ func NewACPProvider(spec ACPProviderSpec) *ACPProvider {
 		KeyEnv:     "VOIE_" + spec.Name + "_KEY",
 		Port:       spec.Port,
 	})
-	store, _ := config.LoadCredentials()
-	key := store.Token(spec.Name)
-	if key == "" {
-		key = "voie-local"
-	}
 	cfg := openAIKeylessConfig{
 		Name:           spec.Name,
 		Label:          spec.Label,
@@ -81,7 +75,7 @@ func NewACPProvider(spec ACPProviderSpec) *ACPProvider {
 		ModelIDs:       map[string]string{spec.Alias: spec.Model},
 		Description:    spec.Label + " free models through a local ACP bridge",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		TokenSupplier:  gateway.localKey,
 		Ensure:         gateway.Ensure,
 	}
 	return &ACPProvider{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec, gateway: gateway}

@@ -24,7 +24,7 @@ func opencodeGoConfig() openAIKeylessConfig {
 		DefaultModel:   "oc2ago-gpt-6-luna",
 		Description:    "OpenCode Go models via a local gateway; requires a Go API key or OAuth connection in the gateway",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + opencodeGatewayKey()},
+		TokenSupplier:  opencodeGatewayKey,
 		ModelIDs: map[string]string{
 			"oc2ago-gpt-6.2-astra":     "gpt-6.2-astra",
 			"oc2ago-gpt-6.2-sol":       "gpt-6.2-sol",

@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 )
 
@@ -69,7 +69,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 	},
 	{
 		Name: "codearts2api", Label: "CodeArts2API", Repo: "https://github.com/zhuweiyou/codearts2api",
-		Port: 8080, Alias: "codearts-free", Upstream: "minimax", HealthPath: "/healthz",
+		Port: 8088, Alias: "codearts-free", Upstream: "minimax", HealthPath: "/healthz",
 		Deps:      [][]string{{"corepack", "enable"}, {"pnpm", "install"}, {"pnpm", "run", "build"}},
 		SetupHint: "add a channel/account in /admin and save the generated gateway key",
 		Start:     []string{"pnpm", "start"},
@@ -115,11 +115,6 @@ type ExternalGateway struct {
 }
 
 func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
-	store, _ := config.LoadCredentials()
-	key := store.Token(spec.Name)
-	if key == "" {
-		key = "voie-local"
-	}
 	gateway := NewLocalGateway(LocalGatewaySpec{
 		Name:       spec.Name,
 		Binary:     spec.Start[0],
@@ -139,13 +134,18 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		ModelIDs:       map[string]string{spec.Alias: spec.Upstream},
 		Description:    spec.Label + " through a user-installed reverse-engineered gateway (ToS risk)",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		TokenSupplier:  gateway.localKey,
 		Ensure:         gateway.Ensure,
 	}
 	return &ExternalGateway{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec, gateway: gateway}
 }
 
 func (p *ExternalGateway) working() bool {
+	if len(p.spec.Install) > 0 {
+		// Globally installed tools have no gateway directory.
+		_, err := exec.LookPath(p.spec.Start[0])
+		return err == nil
+	}
 	dir := gatewayDir(p.spec)
 	if dir == "" {
 		return false
@@ -187,16 +187,12 @@ func ExternalGatewayStatus(name string) (installed bool, installCommand, startCo
 	if !ok {
 		return false, "", ""
 	}
-	dir := gatewayDir(spec)
-	_, err := os.Stat(dir)
+	installed = NewExternalGateway(spec).working()
 	command := ""
 	if len(spec.Start) > 0 {
 		command = strings.Join(spec.Start, " ")
-		if len(spec.Install) == 0 {
-			command += "  (in " + dir + ")"
-		}
 	}
-	return err == nil, NewExternalGateway(spec).InstallCommand(), command
+	return installed, NewExternalGateway(spec).InstallCommand(), command
 }
 
 // ExternalGatewaySetupHint returns the account configuration a gateway needs

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/install"
 )
@@ -62,11 +61,6 @@ oauth:
 }
 
 func NewAntigravity() *Antigravity {
-	store, _ := config.LoadCredentials()
-	key := store.Token("antigravity")
-	if key == "" {
-		key = "voie-local"
-	}
 	gateway := NewLocalGateway(antigravityGatewaySpec())
 	cfg := openAIKeylessConfig{
 		Name:           "antigravity",
@@ -80,7 +74,7 @@ func NewAntigravity() *Antigravity {
 		},
 		Description:    "Free Antigravity models through a local CLIProxyAPI gateway",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		TokenSupplier:  gateway.localKey,
 		BodyHint:       antigravityBodyHint,
 		Ensure:         gateway.Ensure,
 	}

@@ -74,7 +74,7 @@ func KeyHelp(name string) []string {
 			"Third-party gateway (reverse-engineered endpoints, ToS/account risk).",
 			"Install with: voie install " + spec.Name,
 			spec.SetupHint,
-			"Then: voie connect " + spec.Name + " and call the model with voie chat --model " + spec.Alias,
+			"Then call the model with: voie chat --model " + spec.Alias,
 		}
 	}
 	return []string{"No credential instructions are registered for " + name + "."}

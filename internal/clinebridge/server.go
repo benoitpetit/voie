@@ -88,6 +88,10 @@ func Run(ctx context.Context, cfg Config) error {
 		_, _ = io.WriteString(w, `{"status":"ok"}`)
 	})
 	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.LocalKey != "" && r.Header.Get("Authorization") != "Bearer "+cfg.LocalKey {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		ids, err := freeModels(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
@@ -155,6 +159,10 @@ func Run(ctx context.Context, cfg Config) error {
 		})
 	})
 	server := &http.Server{Addr: cfg.Listen, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		<-ctx.Done()
+		_ = server.Close()
+	}()
 	return server.ListenAndServe()
 }
 

@@ -52,7 +52,7 @@ voie serve --host 127.0.0.1 --port 8080
 voie mcp
 ```
 
-`chat` also accepts `-m` for `--model` and `-p` for `--provider`. Invalid commands and flags return an error and display usage. The command tree contains `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `connect`, `install`, `completion`, `version`, and `update`.
+`chat` also accepts `-m` for `--model` and `-p` for `--provider`. Invalid commands and flags return an error and display usage. The command tree contains `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `healthcheck`, `connect`, `install`, `keys`, `completion`, `version`, and `update`.
 
 `version`, `--version`, and `-v` print the executable's embedded build version without initializing providers. `update` checks GitHub for the newest stable release, downloads the matching asset and `checksums.txt`, verifies SHA-256, then replaces the current executable. Run it from a release build; development builds tagged `dev` are refused. Windows stages the checked executable and completes replacement after the current process exits. Updating may require write access to the current executable's directory.
 
@@ -116,6 +116,8 @@ The commands use the same environment variables as the HTTP runtime:
 | `VOIE_ANTIGRAVITY_KEY` | `voie-local` | Local CLIProxyAPI key |
 | `VOIE_KIRO_KEY` | `voie-local` | Local Kiro ACP gateway key |
 | `VOIE_CLINE_KEY` | `voie-local` | Local Cline ACP bridge key |
+
+The `VOIE_*_KEY` overrides for the other token, ACP and gateway providers follow the same pattern (`VOIE_<PROVIDER>_KEY`); see the README configuration table for the full list. `VOIE_OPENCODE_GATEWAY_URL`, `KIRO_GATEWAY_DIR` and `VOIE_CLINE_FREE_FEED_URL` override local gateway locations.
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories.
 

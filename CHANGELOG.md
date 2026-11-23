@@ -4,9 +4,9 @@
 
 ### Added
 
-- Nine token-based OpenAI-compatible providers (Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix) declared in one catalogue.
+- Fifteen token-based OpenAI-compatible providers (OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run) declared in one catalogue.
 - Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for eight opt-in third-party gateways.
-- Models are grouped by provider in `voie models`, `GET /v1/models` and MCP `list_models`.
+- Model IDs carry a provider prefix and list their provider in `voie models`, `GET /v1/models` and MCP `list_models`.
 
 - `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing. Connecting Antigravity, Kiro or Cline installs their missing toolchain automatically; `voie install <provider>` does the same explicitly.
 - OpenRouter and OrcaRouter providers with stable free-model aliases (`orfree`, `orcafree`).

@@ -17,6 +17,9 @@ func TestExternalGatewaysAreRegistered(t *testing.T) {
 func TestExternalGatewayHiddenWithoutInstall(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, spec := range ExternalGateways {
+		if len(spec.Install) > 0 {
+			continue // global installs are detected by binary presence
+		}
 		if NewExternalGateway(spec).GetInfo().Working {
 			t.Errorf("%s Working = true without an install directory", spec.Name)
 		}

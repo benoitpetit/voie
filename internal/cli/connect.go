@@ -130,10 +130,14 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				if value == "" {
 					return fmt.Errorf("%s is required for %s", field.Label, provider)
 				}
-				if err := store.Set(field.Key, value); err != nil {
+				supplied[field.Key] = value
+			}
+			// Save only once every field is known: a cancellation on the second
+			// field must not leave a half-configured provider behind.
+			for key, value := range supplied {
+				if err := store.Set(key, value); err != nil {
 					return fmt.Errorf("save %s credential: %w", provider, err)
 				}
-				supplied[field.Key] = value
 			}
 			if isGatewayProvider(provider) {
 				binary, err := connectInstaller(command.Context(), provider)
@@ -187,7 +191,8 @@ func validateToken(provider, token string) error {
 	case "orcarouter":
 		url = "https://api.orcarouter.ai/v1/models"
 	case "opencode-zen", "opencode-go":
-		url = "http://127.0.0.1:8090/healthz"
+		// The gateway is external; its absence must not block saving the key.
+		return nil
 	default:
 		url = providers.TokenProviderModelsURL(provider)
 		if url == "" {
@@ -271,6 +276,9 @@ func ensureACPAuth(command *cobra.Command, binary string, check, login []string,
 		return nil
 	}
 	if len(check) == 0 {
+		if file, ok := command.InOrStdin().(*os.File); !ok || !term.IsTerminal(int(file.Fd())) {
+			return fmt.Errorf("interactive login required: run `%s %s` in a terminal first", filepath.Base(binary), strings.Join(login, " "))
+		}
 		answer, err := readLine(command, input, "Launch "+filepath.Base(binary)+" login? [Y/n]: ", false)
 		if err != nil {
 			return err

@@ -150,7 +150,7 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 			if model == "" || seen[strings.ToLower(model)] {
 				return nil, "", nil, appError(ErrInvalidInput, "ensemble models must be non-empty and distinct", nil)
 			}
-			if synthesisModel != "" && strings.EqualFold(model, synthesisModel) {
+			if synthesisModel != "" && strings.EqualFold(NormalizeModelID(model), NormalizeModelID(synthesisModel)) {
 				return nil, "", nil, appError(ErrInvalidInput, "the synthesis model cannot also be an ensemble candidate", nil)
 			}
 			seen[strings.ToLower(model)] = true
@@ -163,7 +163,7 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 				if pinned == nil {
 					return nil, "", nil, appError(ErrUnknownProvider, fmt.Sprintf("provider %q is not registered", providerFilter), nil)
 				}
-				if !pinned.SupportsModel(model) {
+				if !supportsModel(pinned, model) {
 					return nil, "", nil, appError(ErrProviderModelMismatch, fmt.Sprintf("provider %q does not support model %q", providerFilter, model), nil)
 				}
 				provider = pinned
@@ -267,7 +267,7 @@ func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) (*
 	request.emitProgress(ProgressEvent{Stage: "routing", Message: fmt.Sprintf("Selected %d ensemble candidates", len(candidates)), Status: "succeeded"})
 	filtered := candidates[:0]
 	for _, candidate := range candidates {
-		if !strings.EqualFold(candidate.Model, synthesisModel) {
+		if !strings.EqualFold(NormalizeModelID(candidate.Model), NormalizeModelID(synthesisModel)) {
 			filtered = append(filtered, candidate)
 		}
 	}
@@ -573,7 +573,7 @@ func (s *Service) candidateForModel(model, providerFilter string) ModelCandidate
 	provider := s.registry.GetForModel(model)
 	if providerFilter = strings.ToLower(strings.TrimSpace(providerFilter)); providerFilter != "" {
 		pinned := s.registry.Get(providerFilter)
-		if pinned == nil || !pinned.SupportsModel(model) {
+		if pinned == nil || !supportsModel(pinned, model) {
 			return ModelCandidate{}
 		}
 		provider = pinned
@@ -621,7 +621,7 @@ func (s *Service) ensembleFallbacks(request CompletionRequest, policy FallbackPo
 		provider := s.registry.GetForModel(key)
 		if providerFilter := strings.ToLower(strings.TrimSpace(request.Provider)); providerFilter != "" {
 			pinned := s.registry.Get(providerFilter)
-			if pinned == nil || !pinned.SupportsModel(key) {
+			if pinned == nil || !supportsModel(pinned, key) {
 				return false
 			}
 			provider = pinned

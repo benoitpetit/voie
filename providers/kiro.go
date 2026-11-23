@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/install"
 )
@@ -29,10 +28,18 @@ func kiroGatewaySpec() LocalGatewaySpec {
 		}
 		dir = filepath.Join(configDir, "voie", "gateways", "kiro-gateway")
 	}
+	cliPath := install.BinaryPath("kiro")
+	if cliPath == "" {
+		if resolved, err := exec.LookPath("kiro-cli"); err == nil {
+			cliPath = resolved
+		} else {
+			cliPath = "kiro-cli"
+		}
+	}
 	body := `SERVER_HOST=127.0.0.1
-SERVER_PORT=8091
+SERVER_PORT=8099
 KIRO_GATEWAY_API_KEY=voie-local
-KIRO_CLI_PATH=` + filepath.Join(os.Getenv("HOME"), ".local", "bin", "kiro-cli") + `
+KIRO_CLI_PATH=` + cliPath + `
 KIRO_ACP_ENGINE=v2
 MODEL_VALIDATION=strict
 MCP_DISCOVERY=user
@@ -45,25 +52,20 @@ ACP_TRUST_TOOLS=false
 		Dir:        dir,
 		ConfigPath: filepath.Join(dir, ".env"),
 		ConfigBody: []byte(body),
-		BaseURL:    "http://127.0.0.1:8091",
+		BaseURL:    "http://127.0.0.1:8099",
 		HealthPath: "/health",
 		KeyEnv:     "VOIE_KIRO_KEY",
-		Port:       8091,
+		Port:       8099,
 	}
 }
 
 func NewKiro() *Kiro {
-	store, _ := config.LoadCredentials()
-	key := store.Token("kiro")
-	if key == "" {
-		key = "voie-local"
-	}
 	gateway := NewLocalGateway(kiroGatewaySpec())
 	cfg := openAIKeylessConfig{
 		Name:           "kiro",
 		Label:          "Kiro",
-		URL:            "http://127.0.0.1:8091/health",
-		CompletionsURL: "http://127.0.0.1:8091/v1/chat/completions",
+		URL:            "http://127.0.0.1:8099/health",
+		CompletionsURL: "http://127.0.0.1:8099/v1/chat/completions",
 		DefaultModel:   "kiro-auto",
 		ModelIDs: map[string]string{
 			"kiro-auto":   "auto",
@@ -71,7 +73,7 @@ func NewKiro() *Kiro {
 		},
 		Description:    "Free Kiro models through an official-CLI ACP bridge",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		TokenSupplier:  gateway.localKey,
 		Ensure:         gateway.Ensure,
 	}
 	return &Kiro{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), gateway: gateway}

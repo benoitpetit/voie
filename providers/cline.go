@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/install"
 )
@@ -37,11 +36,6 @@ func clineGatewaySpec() LocalGatewaySpec {
 }
 
 func NewCline() *Cline {
-	store, _ := config.LoadCredentials()
-	key := store.Token("cline")
-	if key == "" {
-		key = "voie-local"
-	}
 	gateway := NewLocalGateway(clineGatewaySpec())
 	cfg := openAIKeylessConfig{
 		Name:           "cline",
@@ -52,7 +46,7 @@ func NewCline() *Cline {
 		ModelIDs:       map[string]string{"cline-flash": "cline-free/nemotron-3.5-super-vl"},
 		Description:    "Free Cline models through a local ACP bridge",
 		SupportsStream: true,
-		Headers:        map[string]string{"Authorization": "Bearer " + key},
+		TokenSupplier:  gateway.localKey,
 		Ensure:         gateway.Ensure,
 	}
 	return &Cline{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), gateway: gateway}
