@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -32,6 +33,7 @@ type ExternalGatewaySpec struct {
 	Install         []string   // explicit install; empty means git clone Repo into the gateway dir
 	Deps            [][]string // commands run in the gateway dir after install
 	Start           []string   // command that launches the gateway on its loopback port
+	Check           []string   // optional command that proves the tool is really installed
 	SetupHint       string     // account configuration required before inference
 	AccountRequired string     // "none", "upstream", "dashboard+upstream"
 	AccountKind     string     // which account exactly
@@ -131,6 +133,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountURL:      "http://127.0.0.1:8787/admin",
 		KeyRequired:     "none: placeholder accepted",
 		Start:           []string{"python", "-m", "codebuddy_proxy"},
+		Check:           []string{"python", "-c", "import codebuddy_proxy"},
 	},
 }
 
@@ -316,6 +319,12 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 }
 
 func (p *ExternalGateway) working() bool {
+	if len(p.spec.Check) > 0 {
+		cmd := exec.Command(p.spec.Check[0], p.spec.Check[1:]...)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		return cmd.Run() == nil
+	}
 	if len(p.spec.Install) > 0 {
 		// Globally installed tools have no gateway directory.
 		_, err := exec.LookPath(p.spec.Start[0])
