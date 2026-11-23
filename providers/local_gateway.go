@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,9 +56,16 @@ func (g *LocalGateway) localKey() string {
 	return "voie-local"
 }
 
+func (g *LocalGateway) resolveBinary() string {
+	if strings.HasPrefix(g.spec.Binary, "./") && g.spec.Dir != "" {
+		return filepath.Join(g.spec.Dir, strings.TrimPrefix(g.spec.Binary, "./"))
+	}
+	return g.spec.Binary
+}
+
 // Available reports whether the gateway can be started. It performs no network.
 func (g *LocalGateway) Available() bool {
-	_, err := exec.LookPath(g.spec.Binary)
+	_, err := exec.LookPath(g.resolveBinary())
 	return err == nil
 }
 
@@ -75,7 +83,9 @@ func (g *LocalGateway) healthy() bool {
 		return false
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode >= 200 && resp.StatusCode < 400
+	// A responding port means the gateway is up. Several upstreams require
+	// their own login on /v1/models and would answer 401 to our local key.
+	return true
 }
 
 // Ensure starts the gateway if it is not already healthy.
@@ -88,7 +98,7 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	if g.healthy() {
 		return nil
 	}
-	if _, err := exec.LookPath(g.spec.Binary); err != nil {
+	if _, err := exec.LookPath(g.resolveBinary()); err != nil {
 		return err
 	}
 	if g.spec.ConfigPath != "" && len(g.spec.ConfigBody) > 0 {
@@ -101,7 +111,7 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	}
 	// Gateway lifetime is owned by the manager, not by the caller's request
 	// context: a request ending must not kill a shared local gateway.
-	cmd := exec.Command(g.spec.Binary, g.spec.Args...)
+	cmd := exec.Command(g.resolveBinary(), g.spec.Args...)
 	cmd.Dir = g.spec.Dir
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard

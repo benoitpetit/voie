@@ -52,7 +52,7 @@ func newInstallCommand() *cobra.Command {
 
 func runInstallList(out io.Writer) error {
 	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(table, "NAME\tTYPE\tLABEL\tPORT\tSTATUS\tINSTALL"); err != nil {
+	if _, err := fmt.Fprintln(table, "NAME\tTYPE\tLABEL\tPORT\tSTATUS\tINSTALL\tSETUP REQUIRED"); err != nil {
 		return err
 	}
 	for _, spec := range providers.ExternalGateways {
@@ -61,12 +61,13 @@ func runInstallList(out io.Writer) error {
 		if installed {
 			state = "installed"
 		}
-		if _, err := fmt.Fprintf(table, "%s\tgateway\t%s\t%d\t%s\t%s\n", spec.Name, spec.Label, spec.Port, state, command); err != nil {
+		hint := providers.ExternalGatewaySetupHint(spec.Name)
+		if _, err := fmt.Fprintf(table, "%s\tgateway\t%s\t%d\t%s\t%s\t%s\n", spec.Name, spec.Label, spec.Port, state, command, hint); err != nil {
 			return err
 		}
 	}
 	for _, name := range []string{"cline", "kiro", "antigravity", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor"} {
-		if _, err := fmt.Fprintf(table, "%s\tcli\t%s\t-\t%s\tvoie install %s\n", name, name, cliState(name), name); err != nil {
+		if _, err := fmt.Fprintf(table, "%s\tcli\t%s\t-\t%s\tvoie install %s\t-\n", name, name, cliState(name), name); err != nil {
 			return err
 		}
 	}
@@ -98,21 +99,27 @@ func cliBinary(name string) string {
 
 func installExternalGateway(command *cobra.Command, spec providers.ExternalGatewaySpec) error {
 	installed, _, startCommand := providers.ExternalGatewayStatus(spec.Name)
+	if len(spec.Install) > 0 && installedByBinary(spec.Start) {
+		installed = true
+	}
 	if installed {
 		fmt.Fprintf(command.OutOrStdout(), "%s is already installed. Start it with: %s\n", spec.Name, startCommand)
-		return nil
+		return printSetupHint(command, spec.Name)
 	}
 	dir := providers.ExternalGatewayDir(spec.Name)
-	steps := [][]string{
-		{"git", "clone", spec.Repo, dir},
+	steps := make([][]string, 0, len(spec.Deps)+1)
+	if len(spec.Install) > 0 {
+		steps = append(steps, spec.Install)
+	} else {
+		steps = append(steps, []string{"git", "clone", spec.Repo, dir})
 	}
-	if len(spec.Deps) > 0 {
-		steps = append(steps, spec.Deps)
-	}
-	for _, step := range steps {
+	steps = append(steps, spec.Deps...)
+	for index, step := range steps {
 		fmt.Fprintf(command.OutOrStdout(), "+ %v\n", step)
 		cmd := exec.CommandContext(command.Context(), step[0], step[1:]...)
-		if len(step) > 2 && step[1] == "clone" {
+		if index == 0 && len(spec.Install) > 0 {
+			cmd.Dir = ""
+		} else if len(step) > 2 && step[1] == "clone" {
 			cmd.Dir = ""
 		} else {
 			cmd.Dir = dir
@@ -125,5 +132,21 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		}
 	}
 	fmt.Fprintf(command.OutOrStdout(), "%s installed. Start it with: %s\n", spec.Name, startCommand)
+	return printSetupHint(command, spec.Name)
+}
+
+func installedByBinary(start []string) bool {
+	if len(start) == 0 {
+		return false
+	}
+	_, err := exec.LookPath(start[0])
+	return err == nil
+}
+
+func printSetupHint(command *cobra.Command, name string) error {
+	hint := providers.ExternalGatewaySetupHint(name)
+	if hint != "" {
+		fmt.Fprintf(command.OutOrStdout(), "Before inference: %s\n", hint)
+	}
 	return nil
 }

@@ -2,6 +2,8 @@ package providers
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,6 +90,31 @@ func TestGatewayReusesHealthyProcess(t *testing.T) {
 	}
 	if _, err := os.Stat(spec.ConfigPath); !os.IsNotExist(err) {
 		t.Error("a healthy gateway must not be spawned or reconfigured")
+	}
+}
+
+func TestGatewayHealthTreatsAuthResponseAsAlive(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	spec := LocalGatewaySpec{Name: "auth", Binary: "/bin/sh", BaseURL: server.URL, HealthPath: "/v1/models"}
+	gateway := NewLocalGateway(spec)
+	if !gateway.healthy() {
+		t.Error("a gateway answering 401 is up but was considered unhealthy")
+	}
+}
+
+func TestGatewayRelativeBinaryResolvesAgainstDir(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gateway")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	spec := LocalGatewaySpec{Name: "relative", Binary: "./gateway", Dir: dir}
+	gateway := NewLocalGateway(spec)
+	if !gateway.Available() {
+		t.Error("relative binary was not resolved against the gateway directory")
 	}
 }
 
