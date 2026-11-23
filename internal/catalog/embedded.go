@@ -148,7 +148,6 @@ var embeddedModels = map[string]map[string]string{
 		"spark-lite": "lite",
 	},
 	"vlm-run": {
-		"vlm-qwen-qwen3-8-27b":                 "qwen/qwen3.8-27b",
 		"vlm-qwen-qwen3-5-0-8b":                "qwen/qwen3.5-0.8b",
 		"vlm-google-diffusiongemma-26b-a4b-it": "google/diffusiongemma-26b-a4b-it",
 	},

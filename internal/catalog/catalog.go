@@ -93,17 +93,27 @@ func cachePath() string {
 	return filepath.Join(dir, "voie", "registry-cache.json")
 }
 
+// excludedModels are registry entries that are listed as free but were
+// verified to reject voie's anonymous/default credential.
+var excludedModels = map[string]bool{
+	"vlm-qwen-qwen3-8-27b": true, // 401: "requires an API key" on anonymous access
+}
+
 // Models returns the free-model aliases for a provider, refreshing the
 // catalogue from the registry when the cached snapshot is stale.
 func Models(provider string) map[string]string {
 	snap := load()
 	result := make(map[string]string)
 	for alias, upstream := range embeddedModels[provider] {
-		result[alias] = upstream
+		if !excludedModels[alias] {
+			result[alias] = upstream
+		}
 	}
 	if snap != nil {
 		for alias, upstream := range snap.Models[provider] {
-			result[alias] = upstream
+			if !excludedModels[alias] {
+				result[alias] = upstream
+			}
 		}
 	}
 	return result

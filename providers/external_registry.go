@@ -175,8 +175,8 @@ func gatewayTokenSupplier(spec ExternalGatewaySpec) func() string {
 }
 
 type gatewayModelCacheEntry struct {
-	at     time.Time
-	models map[string]string
+	At     time.Time         `json:"at"`
+	Models map[string]string `json:"models"`
 }
 
 var (
@@ -184,15 +184,62 @@ var (
 	gatewayModelCaches = make(map[string]gatewayModelCacheEntry)
 )
 
-// fetchGatewayModels reads a gateway's live /v1/models list. Failures are
-// cached briefly so a stopped gateway never slows down discovery repeatedly.
+func gatewayModelsCachePath() string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "voie", "gateway-models.json")
+}
+
+func readGatewayModelsCache() map[string]gatewayModelCacheEntry {
+	result := make(map[string]gatewayModelCacheEntry)
+	path := gatewayModelsCachePath()
+	if path == "" {
+		return result
+	}
+	data, err := os.ReadFile(path)
+	if err == nil {
+		_ = json.Unmarshal(data, &result)
+	}
+	return result
+}
+
+func writeGatewayModelsCache(entries map[string]gatewayModelCacheEntry) {
+	path := gatewayModelsCachePath()
+	if path == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err == nil {
+		_ = os.WriteFile(path, data, 0o600)
+	}
+}
+
+// fetchGatewayModels reads a gateway's live /v1/models list. A successful
+// discovery is persisted so the catalogue stays visible after the gateway
+// stops; failures are short-lived so a stopped gateway never slows discovery.
 func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	gatewayModelsMu.Lock()
 	entry, ok := gatewayModelCaches[name]
 	gatewayModelsMu.Unlock()
-	if ok && time.Since(entry.at) < 10*time.Minute {
-		return entry.models
+	if ok && time.Since(entry.At) < 10*time.Minute {
+		return entry.Models
 	}
+
+	gatewayModelsMu.Lock()
+	onDisk := readGatewayModelsCache()
+	gatewayModelsMu.Unlock()
+	if saved, ok := onDisk[name]; ok && len(saved.Models) > 0 && time.Since(saved.At) < 24*time.Hour {
+		gatewayModelsMu.Lock()
+		gatewayModelCaches[name] = saved
+		gatewayModelsMu.Unlock()
+		return saved.Models
+	}
+
 	models := make(map[string]string)
 	req, err := http.NewRequest(http.MethodGet, baseURL+"/v1/models", nil)
 	if err == nil {
@@ -216,8 +263,13 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 			resp.Body.Close()
 		}
 	}
+	fresh := gatewayModelCacheEntry{At: time.Now(), Models: models}
 	gatewayModelsMu.Lock()
-	gatewayModelCaches[name] = gatewayModelCacheEntry{at: time.Now(), models: models}
+	gatewayModelCaches[name] = fresh
+	if len(models) > 0 {
+		onDisk[name] = fresh
+		writeGatewayModelsCache(onDisk)
+	}
 	gatewayModelsMu.Unlock()
 	return models
 }

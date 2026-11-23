@@ -30,6 +30,7 @@ func TestExternalGatewayHiddenWithoutInstall(t *testing.T) {
 }
 
 func TestFetchGatewayModels(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -37,7 +38,6 @@ func TestFetchGatewayModels(t *testing.T) {
 		}
 		_, _ = io.WriteString(w, `{"data":[{"id":"opencode/big-pickle"},{"id":"opencode/hy4-flash-free"}]}`)
 	}))
-	defer server.Close()
 
 	models := fetchGatewayModels("groq", server.URL, "test-key")
 	if len(models) != 2 {
@@ -50,6 +50,16 @@ func TestFetchGatewayModels(t *testing.T) {
 		if upstream == "" {
 			t.Errorf("empty upstream for %q", alias)
 		}
+	}
+
+	// Simulate a fresh process with the gateway stopped: the persisted list
+	// must still be returned.
+	gatewayModelsMu.Lock()
+	delete(gatewayModelCaches, "groq")
+	gatewayModelsMu.Unlock()
+	server.Close()
+	if cached := fetchGatewayModels("groq", server.URL, "test-key"); len(cached) != 2 {
+		t.Errorf("persisted models = %v, want 2", cached)
 	}
 }
 

@@ -48,6 +48,16 @@ func TestModelsRefreshAutomaticallyAndCache(t *testing.T) {
 	}
 }
 
+func TestBrokenModelsAreExcluded(t *testing.T) {
+	SetSource("")
+	defer SetSource("")
+	for alias := range Models("vlm-run") {
+		if excludedModels[alias] {
+			t.Errorf("broken model %q is still exposed", alias)
+		}
+	}
+}
+
 func TestFallsBackToEmbeddedSnapshotOffline(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "empty"))
 	SetSource("")
