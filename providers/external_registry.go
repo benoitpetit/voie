@@ -318,6 +318,19 @@ func writeGatewayModelsCache(entries map[string]gatewayModelCacheEntry) {
 	}
 }
 
+// filterGatewayModels keeps only lanes usable without a linked account. Some
+// gateways expose hundreds of OAuth/web models that would all fail for a
+// fresh voie install.
+func filterGatewayModels(name string, models map[string]string) map[string]string {
+	if name != "9routerx" {
+		return models
+	}
+	// Verified on a fresh install: only the static `oc/big-pickle` alias answers;
+	// the hundreds of catalog entries (ocz/ocg/ag/web lanes) all fail with
+	// 400/502 until their upstream account is configured. Do not advertise them.
+	return map[string]string{}
+}
+
 // fetchGatewayModels reads a gateway's live /v1/models list. A successful
 // discovery is persisted so the catalogue stays visible after the gateway
 // stops; failures are short-lived so a stopped gateway never slows discovery.
@@ -326,7 +339,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	entry, ok := gatewayModelCaches[name]
 	gatewayModelsMu.Unlock()
 	if ok && time.Since(entry.At) < 10*time.Minute {
-		return entry.Models
+		return filterGatewayModels(name, entry.Models)
 	}
 
 	gatewayModelsMu.Lock()
@@ -336,7 +349,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 		gatewayModelsMu.Lock()
 		gatewayModelCaches[name] = saved
 		gatewayModelsMu.Unlock()
-		return saved.Models
+		return filterGatewayModels(name, saved.Models)
 	}
 
 	models := make(map[string]string)
@@ -370,7 +383,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 		writeGatewayModelsCache(onDisk)
 	}
 	gatewayModelsMu.Unlock()
-	return models
+	return filterGatewayModels(name, models)
 }
 
 // ProvisionGatewayEnv creates the generated secrets once and reuses them on
