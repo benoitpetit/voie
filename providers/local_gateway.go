@@ -28,6 +28,7 @@ type LocalGatewaySpec struct {
 	HealthPath string
 	KeyEnv     string
 	Port       int
+	Env        map[string]string
 }
 
 // LocalGateway manages one loopback gateway process.
@@ -125,6 +126,12 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err != nil {
 		return err
+	}
+	if len(g.spec.Env) > 0 {
+		cmd.Env = os.Environ()
+		for key, value := range g.spec.Env {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
 	}
 	cmd.Stdin = strings.NewReader("")
 	// A real *os.File avoids os/exec's copying goroutines: a grandchild that

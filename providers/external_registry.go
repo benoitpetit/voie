@@ -28,18 +28,19 @@ type ExternalGatewaySpec struct {
 	Alias           string
 	Upstream        string
 	HealthPath      string
-	HealthPort      int        // separate health port when admin and /v1 listeners differ
-	KeyFile         string     // generated gateway key file (absolute or ~-prefixed)
-	Install         []string   // explicit install; empty means git clone Repo into the gateway dir
-	Deps            [][]string // commands run in the gateway dir after install
-	Start           []string   // command that launches the gateway on its loopback port
-	Check           []string   // optional command that proves the tool is really installed
-	ManualInstall   string     // shown instead of running an automated installer
-	SetupHint       string     // account configuration required before inference
-	AccountRequired string     // "none", "upstream", "dashboard+upstream"
-	AccountKind     string     // which account exactly
-	AccountURL      string     // where to create or link it
-	KeyRequired     string     // local gateway key policy
+	HealthPort      int               // separate health port when admin and /v1 listeners differ
+	KeyFile         string            // generated gateway key file (absolute or ~-prefixed)
+	Install         []string          // explicit install; empty means git clone Repo into the gateway dir
+	Deps            [][]string        // commands run in the gateway dir after install
+	Start           []string          // command that launches the gateway on its loopback port
+	Check           []string          // optional command that proves the tool is really installed
+	ManualInstall   string            // shown instead of running an automated installer
+	Env             map[string]string // safe defaults forwarded to install and start commands
+	SetupHint       string            // account configuration required before inference
+	AccountRequired string            // "none", "upstream", "dashboard+upstream"
+	AccountKind     string            // which account exactly
+	AccountURL      string            // where to create or link it
+	KeyRequired     string            // local gateway key policy
 }
 
 // ExternalGateways are ranked by observed activity in Nov 2026. Install and
@@ -189,6 +190,35 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "none", AccountKind: "local GGUF model, no account",
 		AccountURL: "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md", KeyRequired: "none",
 		Start: []string{"llama-server", "--host", "127.0.0.1", "--port", "9931"},
+	},
+	{
+		Name: "9routerx", Label: "9routerx (safe lanes)", Repo: "https://github.com/yanstd888/9routerx",
+		Port: 20129, Alias: "9r-free", Upstream: "oc/big-pickle", HealthPath: "/v1/models",
+		Install: []string{"npm", "install", "-g", "9routerx"},
+		Env: map[string]string{
+			"PORT":                 "20129",
+			"ENABLE_WEB_EXECUTORS": "false",
+			"CLAUDE_WEB_ENABLED":   "false",
+		},
+		SetupHint:       "web-cookie lanes stay disabled; set ROUTER_MASTER_KEY, JWT_SECRET and INITIAL_PASSWORD before connect; never use /browser-login or /import-chrome",
+		AccountRequired: "none", AccountKind: "anonymous OpenCode lane (oc/big-pickle) or official API keys",
+		AccountURL: "https://github.com/yanstd888/9routerx", KeyRequired: "local sk- key created in dashboard",
+		Start: []string{"9routerx"},
+	},
+	{
+		Name: "freellmapi", Label: "FreeLLMAPI", Repo: "https://github.com/tashfeenahmed/freellmapi",
+		Port: 3001, Alias: "flm-free", Upstream: "auto", HealthPath: "/api/ping",
+		Deps: [][]string{{"docker", "compose", "up", "-d"}},
+		Env: map[string]string{
+			"CATALOG_SYNC_DISABLED":   "1",
+			"FREELLMAPI_UPDATE_CHECK": "off",
+			"HOST_BIND":               "127.0.0.1",
+			"PORT":                    "3001",
+		},
+		SetupHint:       "BYOK only: set ENCRYPTION_KEY before connect, add your own provider keys in the dashboard; remote catalog is disabled",
+		AccountRequired: "upstream", AccountKind: "official free API keys added in the dashboard",
+		AccountURL: "https://github.com/tashfeenahmed/freellmapi", KeyRequired: "unified key from the dashboard",
+		Start: []string{"docker", "compose", "up", "-d"},
 	},
 }
 
@@ -354,6 +384,7 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		HealthPath: spec.HealthPath,
 		KeyEnv:     "VOIE_" + spec.Name + "_KEY",
 		Port:       spec.Port,
+		Env:        spec.Env,
 	})
 	cfg := openAIKeylessConfig{
 		Name:           spec.Name,

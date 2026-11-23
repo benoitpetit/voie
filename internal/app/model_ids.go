@@ -36,6 +36,8 @@ var modelPrefixes = map[string]string{
 	"ollama":           "ollama",
 	"lmstudio":         "lms",
 	"llamacpp":         "llamacpp",
+	"9routerx":         "9r",
+	"freellmapi":       "flm",
 	"kilo":             "kilo",
 	"ovh":              "ovh",
 	"blockrun":         "blockrun",

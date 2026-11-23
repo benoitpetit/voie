@@ -100,7 +100,7 @@ func KeyHelpProviders() []string {
 func connectableNames() []string {
 	names := []string{
 		"openrouter", "orcarouter", "groq", "google-ai-studio", "nvidia-nim", "zai", "mistral",
-		"cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "runcrate", "opencode-zen", "opencode-go",
+		"cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "runcrate", "9routerx", "freellmapi", "opencode-zen", "opencode-go",
 		"antigravity", "kiro", "cline", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor",
 	}
 	return names

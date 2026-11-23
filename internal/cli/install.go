@@ -143,6 +143,12 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		} else {
 			cmd.Dir = dir
 		}
+		if len(spec.Env) > 0 {
+			cmd.Env = append(cmd.Env, os.Environ()...)
+			for key, value := range spec.Env {
+				cmd.Env = append(cmd.Env, key+"="+value)
+			}
+		}
 		cmd.Stdin = command.InOrStdin()
 		cmd.Stdout = command.OutOrStdout()
 		cmd.Stderr = command.ErrOrStderr()
