@@ -28,7 +28,6 @@ var modelPrefixes = map[string]string{
 	"anyapi":           "any",
 	"beatapi":          "beat",
 	"iflytek-spark":    "spark",
-	"together":         "tg",
 	"vlm-run":          "vlm",
 	"kilo":             "kilo",
 	"ovh":              "ovh",

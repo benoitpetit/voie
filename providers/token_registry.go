@@ -36,7 +36,6 @@ var TokenProviders = []TokenProviderSpec{
 	{Name: "anyapi", Label: "AnyAPI", CompletionsURL: "https://api.anyapi.ai/v1/chat/completions", ModelsURL: "https://api.anyapi.ai/v1/models", Alias: "anyfree", UpstreamModel: "qwen/qwen3.8-27b:free", EnvVar: "VOIE_ANYAPI_KEY"},
 	{Name: "beatapi", Label: "BeatAPI", CompletionsURL: "https://api.beatapi.io/v1/chat/completions", ModelsURL: "https://api.beatapi.io/v1/text/models", Alias: "beatfree", UpstreamModel: "glm-5.3-flash-free", EnvVar: "VOIE_BEATAPI_KEY"},
 	{Name: "iflytek-spark", Label: "iFlytek Spark Lite", CompletionsURL: "https://spark-api-open.xf-yun.com/v1/chat/completions", ModelsURL: "https://spark-api-open.xf-yun.com/v1/models", Alias: "sparkfree", UpstreamModel: "lite", EnvVar: "VOIE_IFLYTEK_SPARK_KEY"},
-	{Name: "together", Label: "Together AI", CompletionsURL: "https://api.together.xyz/v1/chat/completions", ModelsURL: "https://api.together.xyz/v1/models", Alias: "tgfree", UpstreamModel: "Prism-ML/Ternary-Bonsai-27B", EnvVar: "VOIE_TOGETHER_KEY"},
 	{Name: "vlm-run", Label: "VLM Run Gateway", CompletionsURL: "https://gateway.vlm.run/v1/openai/chat/completions", ModelsURL: "https://gateway.vlm.run/v1/openai/models", Alias: "vlmfree", UpstreamModel: "qwen/qwen3.5-0.8b", EnvVar: "VOIE_VLM_RUN_KEY"},
 }
 

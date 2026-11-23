@@ -62,7 +62,6 @@ var providerAliases = map[string][2]string{
 	"anyapi":                {"anyapi", "any"},
 	"beatapi":               {"beatapi", "beat"},
 	"iflytek-spark":         {"iflytek-spark", "spark"},
-	"together-ai":           {"together", "tg"},
 	"vlm-run-gateway":       {"vlm-run", "vlm"},
 }
 

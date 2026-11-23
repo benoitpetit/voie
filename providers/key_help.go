@@ -46,8 +46,6 @@ func KeyHelp(name string) []string {
 		return []string{"Open https://beatapi.io/dashboard/apikeys and create a key.", "Zero balance and never-topped-up accounts are allowed.", "Free tier is 1 request/minute until the first top-up; 3 free model IDs."}
 	case "iflytek-spark":
 		return []string{"Claim the free quota at https://xinghuo.xfyun.cn/sparkapi.", "Get the APIPassword at https://console.xfyun.cn/ (different password per model version).", "Real-name verification with national ID and phone is required; overseas review can take 3 business days.", "Only the `lite` model is free and it has no tool calling."}
-	case "together":
-		return []string{"Together AI has no free trial: a $15 credit purchase is required before keys can be created.", "If you accept that, open https://api.together.ai/settings/api-keys after topping up.", "Only one zero-priced chat model exists: Prism-ML/Ternary-Bonsai-27B."}
 	case "vlm-run":
 		return []string{"No key is needed: voie uses the documented anonymous `Bearer vlmrun`.", "For higher limits, create a free key at https://app.vlm.run/dashboard/settings/api-keys.", "Anonymous limits: 10/min, 30/hour, 100/day per IP.", "Only small chat models work anonymously; the tool-capable model requires a key."}
 	case "opencode-zen", "opencode-go":
@@ -94,7 +92,7 @@ func KeyHelpProviders() []string {
 func connectableNames() []string {
 	names := []string{
 		"openrouter", "orcarouter", "groq", "google-ai-studio", "nvidia-nim", "zai", "mistral",
-		"cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "together", "vlm-run", "opencode-zen", "opencode-go",
+		"cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "opencode-zen", "opencode-go",
 		"antigravity", "kiro", "cline", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor",
 	}
 	return names

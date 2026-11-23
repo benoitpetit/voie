@@ -122,7 +122,6 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `VOIE_ANYAPI_KEY` | saved token | AnyAPI token |
 | `VOIE_BEATAPI_KEY` | saved token | BeatAPI token |
 | `VOIE_IFLYTEK_SPARK_KEY` | saved token | iFlytek Spark APIPassword |
-| `VOIE_TOGETHER_KEY` | saved token | Together AI key (requires $15 activation) |
 | `VOIE_VLM_RUN_KEY` | `vlmrun` | VLM Run key; anonymous bearer works by default |
 
 On Linux, `<user-config-dir>` is typically `~/.config`; macOS and Windows use their standard per-user configuration directories. Set either path variable to choose another location.
