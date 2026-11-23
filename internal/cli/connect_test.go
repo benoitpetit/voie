@@ -12,6 +12,10 @@ import (
 
 func runConnect(t *testing.T, args []string, stdin string, check func(string, string) error) (string, string, error) {
 	t.Helper()
+	previousCline, previousACP := startClineBridge, startACPBridge
+	startClineBridge = func() error { return nil }
+	startACPBridge = func(string) error { return nil }
+	t.Cleanup(func() { startClineBridge, startACPBridge = previousCline, previousACP })
 	var stdout, stderr bytes.Buffer
 	if check == nil {
 		check = func(string, string) error { return nil }

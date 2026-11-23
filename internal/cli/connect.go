@@ -36,6 +36,9 @@ func buildConnectableProviders() []string {
 
 var connectInstaller = install.Ensure
 
+var startClineBridge = providers.StartClineBridge
+var startACPBridge = providers.StartACPBridge
+
 var errConnectCanceled = errors.New("connect canceled")
 
 func isGatewayProvider(provider string) bool {
@@ -159,11 +162,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					if err := ensureACPAuth(command, binary, spec.AuthCheck, spec.AuthLogin, input); err != nil {
 						return fmt.Errorf("%s auth: %w", provider, err)
 					}
-					if err := providers.StartACPBridge(provider); err != nil {
+					if err := startACPBridge(provider); err != nil {
 						return fmt.Errorf("start %s ACP bridge: %w", provider, err)
 					}
 				} else if provider == "cline" {
-					if err := providers.StartClineBridge(); err != nil {
+					if err := startClineBridge(); err != nil {
 						return fmt.Errorf("start cline ACP bridge (did you run `cline auth`?): %w", err)
 					}
 				}
