@@ -29,6 +29,7 @@ type LocalGatewaySpec struct {
 	KeyEnv     string
 	Port       int
 	Env        map[string]string
+	EnvFile    string
 }
 
 // LocalGateway manages one loopback gateway process.
@@ -127,8 +128,20 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if g.spec.EnvFile != "" {
+		if data, err := os.ReadFile(g.spec.EnvFile); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if line != "" && !strings.HasPrefix(line, "#") {
+					cmd.Env = append(cmd.Env, line)
+				}
+			}
+		}
+	}
 	if len(g.spec.Env) > 0 {
-		cmd.Env = os.Environ()
+		if cmd.Env == nil {
+			cmd.Env = os.Environ()
+		}
 		for key, value := range g.spec.Env {
 			cmd.Env = append(cmd.Env, key+"="+value)
 		}

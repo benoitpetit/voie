@@ -1,7 +1,11 @@
 package providers
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,6 +40,7 @@ type ExternalGatewaySpec struct {
 	Check           []string          // optional command that proves the tool is really installed
 	ManualInstall   string            // shown instead of running an automated installer
 	Env             map[string]string // safe defaults forwarded to install and start commands
+	GeneratedEnv    []string          // secrets generated once and reused via EnvFile
 	SetupHint       string            // account configuration required before inference
 	AccountRequired string            // "none", "upstream", "dashboard+upstream"
 	AccountKind     string            // which account exactly
@@ -196,11 +201,11 @@ var ExternalGateways = []ExternalGatewaySpec{
 		Port: 20129, Alias: "9r-free", Upstream: "oc/big-pickle", HealthPath: "/v1/models",
 		Install: []string{"npm", "install", "-g", "9routerx"},
 		Env: map[string]string{
-			"PORT":                 "20129",
-			"ENABLE_WEB_EXECUTORS": "false",
-			"CLAUDE_WEB_ENABLED":   "false",
+			"PORT":     "20129",
+			"DATA_DIR": gatewayDirFor("9routerx"),
 		},
-		SetupHint:       "web-cookie lanes stay disabled; set ROUTER_MASTER_KEY, JWT_SECRET and INITIAL_PASSWORD before connect; never use /browser-login or /import-chrome",
+		GeneratedEnv:    []string{"JWT_SECRET", "INITIAL_PASSWORD", "ROUTER_MASTER_KEY"},
+		SetupHint:       "secrets are generated automatically; web-cookie lanes are off by default — never use /browser-login or /import-chrome",
 		AccountRequired: "none", AccountKind: "anonymous OpenCode lane (oc/big-pickle) or official API keys",
 		AccountURL: "https://github.com/yanstd888/9routerx", KeyRequired: "local sk- key created in dashboard",
 		Start: []string{"9routerx"},
@@ -231,12 +236,16 @@ func ExternalGatewayByName(name string) (ExternalGatewaySpec, bool) {
 	return ExternalGatewaySpec{}, false
 }
 
-func gatewayDir(spec ExternalGatewaySpec) string {
+func gatewayDirFor(name string) string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "voie", "gateways", spec.Name)
+	return filepath.Join(dir, "voie", "gateways", name)
+}
+
+func gatewayDir(spec ExternalGatewaySpec) string {
+	return gatewayDirFor(spec.Name)
 }
 
 func gatewayTokenSupplier(spec ExternalGatewaySpec) func() string {
@@ -362,6 +371,110 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	return models
 }
 
+// ProvisionGatewayEnv creates the generated secrets once and reuses them on
+// every start, so the gateway works without manual environment setup.
+func ProvisionGatewayEnv(spec ExternalGatewaySpec) error {
+	if len(spec.GeneratedEnv) == 0 {
+		return nil
+	}
+	path := filepath.Join(gatewayDir(spec), ".env")
+	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	var lines []string
+	for _, key := range spec.GeneratedEnv {
+		lines = append(lines, key+"="+generatedSecret(key))
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+}
+
+func generatedSecret(key string) string {
+	size := 24
+	switch key {
+	case "ROUTER_MASTER_KEY":
+		buffer := make([]byte, 32)
+		if _, err := rand.Read(buffer); err == nil {
+			return base64.StdEncoding.EncodeToString(buffer)
+		}
+	case "JWT_SECRET":
+		size = 32
+	}
+	buffer := make([]byte, size)
+	if _, err := rand.Read(buffer); err != nil {
+		return "voie-" + key
+	}
+	return hex.EncodeToString(buffer)
+}
+
+// ProvisionGatewayKey creates the local dashboard key programmatically when
+// the gateway supports it, so no manual browser step is needed.
+func ProvisionGatewayKey(spec ExternalGatewaySpec) error {
+	if spec.Name != "9routerx" {
+		return nil
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		return err
+	}
+	if store.Token(spec.Name) != "" {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(gatewayDir(spec), ".env"))
+	if err != nil {
+		return err
+	}
+	password := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if name, value, ok := strings.Cut(strings.TrimSpace(line), "="); ok && name == "INITIAL_PASSWORD" {
+			password = value
+		}
+	}
+	if password == "" {
+		return fmt.Errorf("9routerx INITIAL_PASSWORD is missing")
+	}
+	base := "http://127.0.0.1:" + itoa(spec.Port)
+	client := &http.Client{Timeout: 5 * time.Second}
+	loginBody, _ := json.Marshal(map[string]string{"password": password})
+	login, err := client.Post(base+"/api/auth/login", "application/json", bytes.NewReader(loginBody))
+	if err != nil {
+		return err
+	}
+	defer login.Body.Close()
+	if login.StatusCode < 200 || login.StatusCode >= 300 {
+		return fmt.Errorf("9routerx login failed: HTTP %d", login.StatusCode)
+	}
+	cookie := ""
+	if setCookie := login.Header.Get("Set-Cookie"); setCookie != "" {
+		cookie = strings.SplitN(setCookie, ";", 2)[0]
+	}
+	key := "sk-" + generatedSecret("gateway-key")
+	keyBody, _ := json.Marshal(map[string]string{
+		"id":   generatedSecret("key-id"),
+		"key":  key,
+		"name": "voie",
+	})
+	request, err := http.NewRequest(http.MethodPost, base+"/api/keys", bytes.NewReader(keyBody))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	if cookie != "" {
+		request.Header.Set("Cookie", cookie)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("9routerx key creation failed: HTTP %d", response.StatusCode)
+	}
+	return store.Set(spec.Name, key)
+}
+
 // ExternalGateway is a normal provider pointed at a user-installed gateway.
 type ExternalGateway struct {
 	*openAIKeylessProvider
@@ -385,6 +498,7 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		KeyEnv:     "VOIE_" + spec.Name + "_KEY",
 		Port:       spec.Port,
 		Env:        spec.Env,
+		EnvFile:    filepath.Join(gatewayDir(spec), ".env"),
 	})
 	cfg := openAIKeylessConfig{
 		Name:           spec.Name,

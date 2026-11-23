@@ -234,8 +234,14 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 			return err
 		}
 	}
+	if err := providers.ProvisionGatewayEnv(spec); err != nil {
+		return fmt.Errorf("prepare %s configuration: %w", spec.Name, err)
+	}
 	if err := providers.StartExternalGateway(spec.Name); err != nil {
 		return fmt.Errorf("start %s gateway: %w", spec.Name, err)
+	}
+	if err := providers.ProvisionGatewayKey(spec); err != nil {
+		return fmt.Errorf("provision %s key: %w", spec.Name, err)
 	}
 	account, _ := providers.ExternalGatewayAccount(spec.Name)
 	fmt.Fprintf(command.OutOrStdout(), "%s ready (account: %s, model: %s)\n", spec.Name, account.Required, spec.Alias)

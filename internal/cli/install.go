@@ -109,6 +109,9 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		installed = true
 	}
 	if installed {
+		if err := providers.ProvisionGatewayEnv(spec); err != nil {
+			return fmt.Errorf("prepare %s configuration: %w", spec.Name, err)
+		}
 		fmt.Fprintf(command.OutOrStdout(), "%s is already installed. Start it with: %s\n", spec.Name, startCommand)
 		return printSetupHint(command, spec.Name)
 	}
@@ -159,6 +162,9 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 			}
 			return fmt.Errorf("install %s: %w (use a Node 20-24 toolchain if this is a Node dependency)", spec.Name, err)
 		}
+	}
+	if err := providers.ProvisionGatewayEnv(spec); err != nil {
+		return fmt.Errorf("prepare %s configuration: %w", spec.Name, err)
 	}
 	fmt.Fprintf(command.OutOrStdout(), "%s installed. Start it with: %s\n", spec.Name, startCommand)
 	return printSetupHint(command, spec.Name)
