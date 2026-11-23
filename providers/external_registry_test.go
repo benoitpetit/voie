@@ -1,6 +1,9 @@
 package providers
 
 import (
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -22,6 +25,30 @@ func TestExternalGatewayHiddenWithoutInstall(t *testing.T) {
 		}
 		if NewExternalGateway(spec).GetInfo().Working {
 			t.Errorf("%s Working = true without an install directory", spec.Name)
+		}
+	}
+}
+
+func TestFetchGatewayModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":[{"id":"opencode/big-pickle"},{"id":"opencode/hy4-flash-free"}]}`)
+	}))
+	defer server.Close()
+
+	models := fetchGatewayModels("groq", server.URL, "test-key")
+	if len(models) != 2 {
+		t.Fatalf("models = %v, want 2", models)
+	}
+	for alias, upstream := range models {
+		if !strings.HasPrefix(alias, "gq-") {
+			t.Errorf("alias %q is not provider-prefixed", alias)
+		}
+		if upstream == "" {
+			t.Errorf("empty upstream for %q", alias)
 		}
 	}
 }

@@ -2,12 +2,15 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
@@ -171,6 +174,54 @@ func gatewayTokenSupplier(spec ExternalGatewaySpec) func() string {
 	}
 }
 
+type gatewayModelCacheEntry struct {
+	at     time.Time
+	models map[string]string
+}
+
+var (
+	gatewayModelsMu    sync.Mutex
+	gatewayModelCaches = make(map[string]gatewayModelCacheEntry)
+)
+
+// fetchGatewayModels reads a gateway's live /v1/models list. Failures are
+// cached briefly so a stopped gateway never slows down discovery repeatedly.
+func fetchGatewayModels(name, baseURL, key string) map[string]string {
+	gatewayModelsMu.Lock()
+	entry, ok := gatewayModelCaches[name]
+	gatewayModelsMu.Unlock()
+	if ok && time.Since(entry.at) < 10*time.Minute {
+		return entry.models
+	}
+	models := make(map[string]string)
+	req, err := http.NewRequest(http.MethodGet, baseURL+"/v1/models", nil)
+	if err == nil {
+		req.Header.Set("Authorization", "Bearer "+key)
+		// Dedicated transport: other tests replace http.DefaultTransport to
+		// stub provider calls, and the gateway probe must reach its own URL.
+		resp, err := (&http.Client{Timeout: 1500 * time.Millisecond, Transport: &http.Transport{}}).Do(req)
+		if err == nil {
+			var payload struct {
+				Data []struct {
+					ID string `json:"id"`
+				} `json:"data"`
+			}
+			if json.NewDecoder(resp.Body).Decode(&payload) == nil {
+				for _, item := range payload.Data {
+					if item.ID != "" {
+						models[app.PrefixModelID(name, item.ID)] = item.ID
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+	}
+	gatewayModelsMu.Lock()
+	gatewayModelCaches[name] = gatewayModelCacheEntry{at: time.Now(), models: models}
+	gatewayModelsMu.Unlock()
+	return models
+}
+
 // ExternalGateway is a normal provider pointed at a user-installed gateway.
 type ExternalGateway struct {
 	*openAIKeylessProvider
@@ -204,7 +255,10 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		Description:    spec.Label + " through a user-installed reverse-engineered gateway (ToS risk)",
 		SupportsStream: true,
 		TokenSupplier:  tokenSupplier,
-		Ensure:         gateway.Ensure,
+		ModelsSupplier: func() map[string]string {
+			return fetchGatewayModels(spec.Name, "http://127.0.0.1:"+itoa(spec.Port), tokenSupplier())
+		},
+		Ensure: gateway.Ensure,
 	}
 	return &ExternalGateway{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec, gateway: gateway}
 }
