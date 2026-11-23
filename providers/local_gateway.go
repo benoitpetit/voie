@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -30,6 +31,7 @@ type LocalGatewaySpec struct {
 	Port       int
 	Env        map[string]string
 	EnvFile    string
+	Stop       []string
 }
 
 // LocalGateway manages one loopback gateway process.
@@ -41,11 +43,13 @@ type LocalGateway struct {
 type runningProcess struct {
 	cmd  *exec.Cmd
 	done chan struct{}
+	spec LocalGatewaySpec
 }
 
 var (
 	gatewayMu      sync.Mutex
 	gatewayProcess = make(map[string]*runningProcess)
+	gatewayStarted = make(map[string]bool)
 )
 
 func NewLocalGateway(spec LocalGatewaySpec) *LocalGateway { return &LocalGateway{spec: spec} }
@@ -155,8 +159,9 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	running := &runningProcess{cmd: cmd, done: make(chan struct{})}
+	running := &runningProcess{cmd: cmd, done: make(chan struct{}), spec: g.spec}
 	gatewayProcess[g.spec.Name] = running
+	gatewayStarted[g.spec.Name] = true
 	// Exactly one Wait() per process, owned by the manager. A second Wait()
 	// from ShutdownGateways can block forever on some platforms.
 	go func() {
@@ -195,6 +200,28 @@ func runningGateways() map[string]*exec.Cmd {
 	return copy
 }
 
+func killProcessesByBinary(binary string) {
+	want := filepath.Base(binary)
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		target, err := os.Readlink(filepath.Join("/proc", entry.Name(), "exe"))
+		if err != nil {
+			continue
+		}
+		if !strings.Contains(filepath.Base(strings.TrimSuffix(target, " (deleted)")), want) {
+			continue
+		}
+		pid, _ := strconv.Atoi(entry.Name())
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+}
+
 // ShutdownGateways terminates every gateway started by this process.
 func ShutdownGateways() {
 	gatewayMu.Lock()
@@ -203,8 +230,24 @@ func ShutdownGateways() {
 		processes = append(processes, running)
 		delete(gatewayProcess, name)
 	}
+	for name := range gatewayStarted {
+		for _, spec := range ExternalGateways {
+			if spec.Name != name || len(spec.Stop) == 0 {
+				continue
+			}
+			stop := exec.Command(spec.Stop[0], spec.Stop[1:]...)
+			stop.Env = os.Environ()
+			_ = stop.Run()
+			killProcessesByBinary(spec.Start[0])
+		}
+	}
 	gatewayMu.Unlock()
 	for _, running := range processes {
+		if len(running.spec.Stop) > 0 {
+			stop := exec.Command(running.spec.Stop[0], running.spec.Stop[1:]...)
+			stop.Env = os.Environ()
+			_ = stop.Run()
+		}
 		if running.cmd.Process == nil {
 			continue
 		}

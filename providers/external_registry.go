@@ -41,6 +41,7 @@ type ExternalGatewaySpec struct {
 	ManualInstall   string            // shown instead of running an automated installer
 	Env             map[string]string // safe defaults forwarded to install and start commands
 	GeneratedEnv    []string          // secrets generated once and reused via EnvFile
+	Stop            []string          // command that stops the gateway's own daemon
 	SetupHint       string            // account configuration required before inference
 	AccountRequired string            // "none", "upstream", "dashboard+upstream"
 	AccountKind     string            // which account exactly
@@ -209,6 +210,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "none", AccountKind: "anonymous OpenCode lane (oc/big-pickle) or official API keys",
 		AccountURL: "https://github.com/yanstd888/9routerx", KeyRequired: "local sk- key created in dashboard",
 		Start: []string{"9routerx"},
+		Stop:  []string{"9routerx", "stop"},
 	},
 	{
 		Name: "freellmapi", Label: "FreeLLMAPI", Repo: "https://github.com/tashfeenahmed/freellmapi",
@@ -499,6 +501,7 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		Port:       spec.Port,
 		Env:        spec.Env,
 		EnvFile:    filepath.Join(gatewayDir(spec), ".env"),
+		Stop:       spec.Stop,
 	})
 	cfg := openAIKeylessConfig{
 		Name:           spec.Name,
