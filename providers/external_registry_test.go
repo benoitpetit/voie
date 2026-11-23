@@ -26,6 +26,19 @@ func TestExternalGatewayHiddenWithoutInstall(t *testing.T) {
 	}
 }
 
+func TestCodeArtsGatewaySeparateHealthAndKey(t *testing.T) {
+	spec, ok := ExternalGatewayByName("codearts2api")
+	if !ok {
+		t.Fatal("missing codearts2api")
+	}
+	if spec.Port != 8326 || spec.HealthPort != 8080 {
+		t.Errorf("port/health = %d/%d, want 8326/8080", spec.Port, spec.HealthPort)
+	}
+	if spec.KeyFile == "" {
+		t.Error("no generated key file configured")
+	}
+}
+
 func TestExternalGatewayAccountRequirements(t *testing.T) {
 	for _, spec := range ExternalGateways {
 		account, ok := ExternalGatewayAccount(spec.Name)

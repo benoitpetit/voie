@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"text/tabwriter"
 
@@ -115,11 +116,20 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	steps := make([][]string, 0, len(spec.Deps)+1)
 	if len(spec.Install) > 0 {
 		steps = append(steps, spec.Install)
-	} else {
+	} else if _, err := os.Stat(dir); os.IsNotExist(err) {
 		steps = append(steps, []string{"git", "clone", spec.Repo, dir})
+	} else {
+		fmt.Fprintf(command.OutOrStdout(), "%s already cloned; running dependencies only\n", spec.Name)
 	}
 	steps = append(steps, spec.Deps...)
 	for index, step := range steps {
+		if _, err := exec.LookPath(step[0]); err != nil {
+			if step[0] == "corepack" {
+				fmt.Fprintf(command.OutOrStderr(), "skipping corepack (not provided by the active Node); continuing\n")
+				continue
+			}
+			return fmt.Errorf("install %s: %q is not available; switch to a Node 20-24 toolchain (e.g. `mise use node@22`) and retry", spec.Name, step[0])
+		}
 		fmt.Fprintf(command.OutOrStdout(), "+ %v\n", step)
 		cmd := exec.CommandContext(command.Context(), step[0], step[1:]...)
 		if index == 0 && len(spec.Install) > 0 {
@@ -133,7 +143,11 @@ func installExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		cmd.Stdout = command.OutOrStdout()
 		cmd.Stderr = command.ErrOrStderr()
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("install %s: %w", spec.Name, err)
+			if step[0] == "corepack" {
+				fmt.Fprintf(command.OutOrStderr(), "corepack unavailable with the active Node; continuing without it\n")
+				continue
+			}
+			return fmt.Errorf("install %s: %w (use a Node 20-24 toolchain if this is a Node dependency)", spec.Name, err)
 		}
 	}
 	fmt.Fprintf(command.OutOrStdout(), "%s installed. Start it with: %s\n", spec.Name, startCommand)

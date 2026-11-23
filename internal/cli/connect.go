@@ -28,6 +28,9 @@ func buildConnectableProviders() []string {
 	for _, spec := range providers.ACPProviders {
 		names = append(names, spec.Name)
 	}
+	for _, spec := range providers.ExternalGateways {
+		names = append(names, spec.Name)
+	}
 	return names
 }
 
@@ -94,6 +97,9 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 			}
 			if err != nil {
 				return err
+			}
+			if spec, ok := providers.ExternalGatewayByName(provider); ok {
+				return connectExternalGateway(command, spec)
 			}
 			printKeyHelp(command, provider)
 			required := providers.ConnectFields(provider)
@@ -217,6 +223,22 @@ func validateToken(provider, token string) error {
 
 // ensureClineAuth launches the official interactive login once, attached to
 // the user's terminal. Auth stays inside the Cline CLI; voie never sees it.
+func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatewaySpec) error {
+	printKeyHelp(command, spec.Name)
+	installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
+	if !installed {
+		if err := installExternalGateway(command, spec); err != nil {
+			return err
+		}
+	}
+	if err := providers.StartExternalGateway(spec.Name); err != nil {
+		return fmt.Errorf("start %s gateway: %w", spec.Name, err)
+	}
+	account, _ := providers.ExternalGatewayAccount(spec.Name)
+	fmt.Fprintf(command.OutOrStdout(), "%s ready (account: %s, model: %s)\n", spec.Name, account.Required, spec.Alias)
+	return nil
+}
+
 func runConnectList(out io.Writer, store *config.Credentials) error {
 	tokenProviders := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
 	cliProviders := []string{

@@ -2,12 +2,14 @@ package providers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 )
 
@@ -22,6 +24,8 @@ type ExternalGatewaySpec struct {
 	Alias           string
 	Upstream        string
 	HealthPath      string
+	HealthPort      int        // separate health port when admin and /v1 listeners differ
+	KeyFile         string     // generated gateway key file (absolute or ~-prefixed)
 	Install         []string   // explicit install; empty means git clone Repo into the gateway dir
 	Deps            [][]string // commands run in the gateway dir after install
 	Start           []string   // command that launches the gateway on its loopback port
@@ -93,9 +97,10 @@ var ExternalGateways = []ExternalGatewaySpec{
 	},
 	{
 		Name: "codearts2api", Label: "CodeArts2API", Repo: "https://github.com/zhuweiyou/codearts2api",
-		Port: 8088, Alias: "codearts-free", Upstream: "opencode/mimo-v2.6-flash-free", HealthPath: "/healthz",
-		Deps:            [][]string{{"corepack", "enable"}, {"pnpm", "install"}, {"pnpm", "run", "build"}},
-		SetupHint:       "add a channel/account in /admin and save the generated gateway key",
+		Port: 8326, Alias: "codearts-free", Upstream: "opencode/mimo-v2.6-flash-free", HealthPath: "/healthz",
+		HealthPort: 8080, KeyFile: "~/.codearts2api/openai-gateway/api-key",
+		Deps:            [][]string{{"npm", "install", "-g", "pnpm@11"}, {"pnpm", "install"}, {"pnpm", "run", "build"}},
+		SetupHint:       "no account needed: the OpenCode anonymous channel serves mimo-v2.6-flash-free; key read from ~/.codearts2api/openai-gateway/api-key",
 		AccountRequired: "none",
 		AccountKind:     "auto-added OpenCode anonymous channel (api_key=public, mimo-v2.6-flash-free) works with no account",
 		AccountURL:      "https://github.com/zhuweiyou/codearts2api",
@@ -143,6 +148,29 @@ func gatewayDir(spec ExternalGatewaySpec) string {
 	return filepath.Join(dir, "voie", "gateways", spec.Name)
 }
 
+func gatewayTokenSupplier(spec ExternalGatewaySpec) func() string {
+	return func() string {
+		store, _ := config.LoadCredentials()
+		if value := store.Token(spec.Name); value != "" {
+			return value
+		}
+		if spec.KeyFile != "" {
+			path := spec.KeyFile
+			if strings.HasPrefix(path, "~/") {
+				if home, err := os.UserHomeDir(); err == nil {
+					path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+				}
+			}
+			if data, err := os.ReadFile(path); err == nil {
+				if value := strings.TrimSpace(string(data)); value != "" {
+					return value
+				}
+			}
+		}
+		return "voie-local"
+	}
+}
+
 // ExternalGateway is a normal provider pointed at a user-installed gateway.
 type ExternalGateway struct {
 	*openAIKeylessProvider
@@ -151,12 +179,17 @@ type ExternalGateway struct {
 }
 
 func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
+	healthPort := spec.Port
+	if spec.HealthPort > 0 {
+		healthPort = spec.HealthPort
+	}
+	tokenSupplier := gatewayTokenSupplier(spec)
 	gateway := NewLocalGateway(LocalGatewaySpec{
 		Name:       spec.Name,
 		Binary:     spec.Start[0],
 		Args:       spec.Start[1:],
 		Dir:        gatewayDir(spec),
-		BaseURL:    "http://127.0.0.1:" + itoa(spec.Port),
+		BaseURL:    "http://127.0.0.1:" + itoa(healthPort),
 		HealthPath: spec.HealthPath,
 		KeyEnv:     "VOIE_" + spec.Name + "_KEY",
 		Port:       spec.Port,
@@ -164,13 +197,13 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 	cfg := openAIKeylessConfig{
 		Name:           spec.Name,
 		Label:          spec.Label,
-		URL:            "http://127.0.0.1:" + itoa(spec.Port) + spec.HealthPath,
+		URL:            "http://127.0.0.1:" + itoa(healthPort) + spec.HealthPath,
 		CompletionsURL: "http://127.0.0.1:" + itoa(spec.Port) + "/v1/chat/completions",
 		DefaultModel:   spec.Alias,
 		ModelIDs:       map[string]string{spec.Alias: spec.Upstream},
 		Description:    spec.Label + " through a user-installed reverse-engineered gateway (ToS risk)",
 		SupportsStream: true,
-		TokenSupplier:  gateway.localKey,
+		TokenSupplier:  tokenSupplier,
 		Ensure:         gateway.Ensure,
 	}
 	return &ExternalGateway{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec, gateway: gateway}
@@ -186,7 +219,16 @@ func (p *ExternalGateway) working() bool {
 	if dir == "" {
 		return false
 	}
-	_, err := os.Stat(dir)
+	if _, err := os.Stat(dir); err != nil {
+		return false
+	}
+	// A cloned gateway is only usable when its start command exists too.
+	binary := p.spec.Start[0]
+	if strings.HasPrefix(binary, "./") {
+		_, err := os.Stat(filepath.Join(dir, strings.TrimPrefix(binary, "./")))
+		return err == nil
+	}
+	_, err := exec.LookPath(binary)
 	return err == nil
 }
 
@@ -265,5 +307,9 @@ func StartExternalGateway(name string) error {
 	if !ok {
 		return errUnknownProvider
 	}
-	return NewExternalGateway(spec).gateway.Ensure(context.Background())
+	gateway := NewExternalGateway(spec).gateway
+	if !gateway.Available() {
+		return fmt.Errorf("%s start command %q is unavailable; run `voie install %s` and use a Node 20-24 toolchain if needed", name, spec.Start[0], name)
+	}
+	return gateway.Ensure(context.Background())
 }
