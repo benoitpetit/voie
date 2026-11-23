@@ -71,7 +71,11 @@ func runInstallList(out io.Writer) error {
 			return err
 		}
 	}
-	return table.Flush()
+	if err := table.Flush(); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "\nAPI token providers are not installed: run `voie keys` for their key URLs, then `voie connect <name>`.")
+	return nil
 }
 
 func cliState(name string) string {

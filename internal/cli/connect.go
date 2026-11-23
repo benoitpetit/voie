@@ -67,24 +67,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				return fmt.Errorf("load credentials: %w", err)
 			}
 			if list {
-				for _, name := range connectableProviders {
-					state := "not connected"
-					if store.Token(name) != "" {
-						state = "connected"
-					} else if name == "opencode-zen" || name == "opencode-go" {
-						state = "connected (default key)"
-					}
-					fmt.Fprintf(command.OutOrStdout(), "%-18s %s\n", name, state)
-				}
-				for _, spec := range providers.ExternalGateways {
-					installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
-					state := "gateway not installed (voie install " + spec.Name + ")"
-					if installed {
-						state = "gateway installed"
-					}
-					fmt.Fprintf(command.OutOrStdout(), "%-18s %s\n", spec.Name, state)
-				}
-				return nil
+				return runConnectList(command.OutOrStdout(), store)
 			}
 			if len(args) == 1 && args[0] == "disconnect" {
 				return fmt.Errorf("usage: voie connect disconnect <provider>")
@@ -229,6 +212,51 @@ func validateToken(provider, token string) error {
 
 // ensureClineAuth launches the official interactive login once, attached to
 // the user's terminal. Auth stays inside the Cline CLI; voie never sees it.
+func runConnectList(out io.Writer, store *config.Credentials) error {
+	tokenProviders := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
+	cliProviders := []string{
+		"opencode-zen", "opencode-go", "antigravity", "kiro", "cline",
+		"codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor",
+	}
+	sections := []struct {
+		title string
+		names []string
+	}{
+		{"API TOKEN (clé à créer chez le provider)", tokenProviders},
+		{"CLI / GATEWAY LOCAL (login dans l'outil officiel)", cliProviders},
+	}
+	for _, section := range sections {
+		if _, err := fmt.Fprintf(out, "\n%s\n", section.title); err != nil {
+			return err
+		}
+		for _, name := range section.names {
+			state := "not connected"
+			if store.Token(name) != "" {
+				state = "connected"
+			} else if name == "opencode-zen" || name == "opencode-go" {
+				state = "available (anonymous / local key)"
+			}
+			if _, err := fmt.Fprintf(out, "  %-18s %s\n", name, state); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := fmt.Fprintln(out, "\nREVERSE-ENGINEERED GATEWAYS (risque ToS, opt-in)"); err != nil {
+		return err
+	}
+	for _, spec := range providers.ExternalGateways {
+		installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
+		state := "not installed (voie install " + spec.Name + ")"
+		if installed {
+			state = "installed"
+		}
+		if _, err := fmt.Fprintf(out, "  %-18s %s\n", spec.Name, state); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func printKeyHelp(command *cobra.Command, provider string) {
 	fmt.Fprintf(command.ErrOrStderr(), "How to get %s credentials:\n", provider)
 	for _, step := range providers.KeyHelp(provider) {

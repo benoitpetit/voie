@@ -107,7 +107,7 @@ func TestConnectListIncludesThirdPartyGateways(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"omniroute", "gateway not installed", "qoder2api"} {
+	for _, want := range []string{"API TOKEN", "CLI / GATEWAY LOCAL", "REVERSE-ENGINEERED GATEWAYS", "omniroute", "not installed", "qoder2api"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("--list missing %q:\n%s", want, stdout)
 		}
@@ -120,7 +120,7 @@ func TestConnectListShowsDefaultKeyForOpencode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout, "opencode-zen") || !strings.Contains(stdout, "connected (default key)") {
+	if !strings.Contains(stdout, "opencode-zen") || !strings.Contains(stdout, "available (anonymous / local key)") {
 		t.Errorf("--list does not show the default local key:\n%s", stdout)
 	}
 }
