@@ -261,6 +261,7 @@ type recordingProvider struct {
 	info     ProviderInfo
 	response *ChatCompletionResponse
 	segments [][]Message
+	messages [][]Message
 	calls    int
 	failFrom int
 	delay    time.Duration
@@ -275,7 +276,8 @@ func (p *recordingProvider) SupportsModel(model string) bool {
 	}
 	return false
 }
-func (p *recordingProvider) ChatCompletion(_ context.Context, _ []Message, model string) (*ChatCompletionResponse, error) {
+func (p *recordingProvider) ChatCompletion(_ context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
+	p.segments = append(p.segments, messages)
 	p.calls++
 	if p.delay > 0 {
 		time.Sleep(p.delay)
@@ -292,11 +294,15 @@ func (p *recordingProvider) ChatCompletionStream(_ context.Context, messages []M
 
 func TestChainModeRunsSequentialReviews(t *testing.T) {
 	registry := NewRegistry()
-	a := &recordingProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "ANSWER-A"}}}}}
-	b := &recordingProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "ANSWER-B"}}}}}
-	synth := &recordingProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "FINAL"}}}}}
+	newAgent := func(name, answer string) *recordingProvider {
+		return &recordingProvider{info: ProviderInfo{Name: name, Working: true, SupportedModels: []string{name}},
+			response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: answer}}}}}
+	}
+	a, b, c := newAgent("a", "ANSWER-A"), newAgent("b", "ANSWER-B"), newAgent("c", "ANSWER-C")
+	synth := newAgent("synth", "FINAL")
 	registry.Register("a", a)
 	registry.Register("b", b)
+	registry.Register("c", c)
 	registry.Register("synth", synth)
 	service, err := NewService(registry, ServiceOptions{SynthesisModel: "synth"})
 	if err != nil {
@@ -304,17 +310,29 @@ func TestChainModeRunsSequentialReviews(t *testing.T) {
 	}
 	if _, err := service.runEnsemble(context.Background(), CompletionRequest{
 		Strategy: StrategyEnsemble,
-		Ensemble: &EnsembleRequestOptions{Mode: EnsembleChain, Models: []string{"a", "b"}},
+		Ensemble: &EnsembleRequestOptions{Mode: EnsembleChain, Models: []string{"a", "b", "c"}},
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(b.segments) > 0 {
-		t.Fatal("segments should be recorded by ChatCompletion")
+	if a.calls != 1 || b.calls != 1 || c.calls != 1 {
+		t.Fatalf("calls a=%d b=%d c=%d, want one each", a.calls, b.calls, c.calls)
 	}
-	if a.calls != 1 || b.calls != 1 {
-		t.Fatalf("calls a=%d b=%d, want one each", a.calls, b.calls)
+	if len(b.segments) == 0 || !strings.Contains(joinMessages(b.segments[0]), "ANSWER-A") {
+		t.Fatalf("second agent did not see the first answer: %v", b.segments)
 	}
+	if len(c.segments) == 0 || !strings.Contains(joinMessages(c.segments[0]), "ANSWER-B") {
+		t.Fatalf("third agent did not see the second answer: %v", c.segments)
+	}
+}
+
+func joinMessages(messages []Message) string {
+	var out strings.Builder
+	for _, message := range messages {
+		out.WriteString(message.Content)
+		out.WriteString("\n")
+	}
+	return out.String()
 }
 
 func TestDebateModeRunsRounds(t *testing.T) {
