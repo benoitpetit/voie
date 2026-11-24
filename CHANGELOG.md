@@ -19,6 +19,7 @@
 - Fixed a deadlock that made `voie connect` hang forever when a gateway never became healthy; it now reports the timeout and exits.
 - Fixed startup paths for `free-llm-router` (local binary plus explicit port), `windsurfapi` (no root needed), `freellmapi` (generated `ENCRYPTION_KEY`), `workbuddy2api` (uv CLI) and Ollama's default alias (model present on the machine).
 - Only verified free models are listed: gateways whose lane is keyless/local keep their live discovery, while Qoder/Trae expose only their documented free `Auto` mode and 9routerx stays limited to its working free alias. Renamed `free-llm-router` models to `flr-` and `trae2api` models to `te-`.
+- Reversed Perplexity's current web API: the ask payload is now wrapped in `params` with a new request reason and client hints, and answers arrive in nested `text_payload` workflow blocks. Only the anonymous `turbo` model is advertised; an optional `VOIE_PERPLEXITY_COOKIES` makes it reliable when anonymous traffic is throttled.
 
 ## v0.1.4 - 2026-11-22
 

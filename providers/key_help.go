@@ -5,6 +5,12 @@ package providers
 // fetched at runtime.
 func KeyHelp(name string) []string {
 	switch name {
+	case "perplexity":
+		return []string{
+			"Perplexity has no API key in voie: the anonymous `turbo` model works without sign-in.",
+			"Anonymous access is rate-limited and can return a sign-up message.",
+			"For reliability, set VOIE_PERPLEXITY_COOKIES to the Cookie header of an anonymous perplexity.ai browser session (pplx.edge-sid / pplx.edge-vid are set by its JavaScript).",
+		}
 	case "openrouter":
 		return []string{
 			"Open https://openrouter.ai/keys and sign in.",

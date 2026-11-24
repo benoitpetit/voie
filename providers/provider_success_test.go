@@ -18,21 +18,36 @@ func TestPerplexityCompletionReturnsResolvedModelAndAggregatedAnswer(t *testing.
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		if payload["model_preference"] != "gpt5" || payload["query_str"] != "Hello" {
+		params, _ := payload["params"].(map[string]interface{})
+		if params["model_preference"] != "turbo" || payload["query_str"] != "Hello" {
 			t.Errorf("payload = %#v, want resolved model and user prompt", payload)
 		}
+		if params["version"] != perplexityAPIVersion || params["mode"] != "copilot" {
+			t.Errorf("params = %#v, want the current Perplexity ask envelope", params)
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = io.WriteString(w, "data: {\"blocks\":[{\"markdown_block\":{\"answer\":\"Hel\"}}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"blocks\":[{\"diff_block\":{\"patches\":[{\"value\":{\"steps\":[{\"items\":[{\"payload\":{\"text_payload\":{\"text\":\"Hel\"}}}]}]}}]}}}]}\n\n")
 		_, _ = io.WriteString(w, "data: {\"blocks\":[{\"markdown_block\":{\"answer\":\"Hello\"}}]}\n\n")
 		_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	}))
 
-	response, err := (&Perplexity{}).ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hello"}}, "gpt-5")
+	response, err := (&Perplexity{}).ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hello"}}, "turbo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Model != "gpt5" || response.Choices[0].Message.Content != "Hello" {
-		t.Fatalf("response model/content = %q/%q, want gpt5/Hello", response.Model, response.Choices[0].Message.Content)
+	if response.Model != "turbo" || response.Choices[0].Message.Content != "Hello" {
+		t.Fatalf("response model/content = %q/%q, want turbo/Hello", response.Model, response.Choices[0].Message.Content)
+	}
+}
+
+func TestPerplexityOptionalCookieHeader(t *testing.T) {
+	t.Setenv("VOIE_PERPLEXITY_COOKIES", "  pplx.edge-sid=abc; pplx.edge-vid=def  ")
+	if got := perplexityCookies(); got != "pplx.edge-sid=abc; pplx.edge-vid=def" {
+		t.Fatalf("perplexityCookies() = %q", got)
+	}
+	t.Setenv("VOIE_PERPLEXITY_COOKIES", "")
+	if got := perplexityCookies(); got != "" {
+		t.Fatalf("perplexityCookies() with empty env = %q", got)
 	}
 }
 

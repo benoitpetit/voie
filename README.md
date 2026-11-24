@@ -124,6 +124,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `VOIE_IFLYTEK_SPARK_KEY` | saved token | iFlytek Spark APIPassword |
 | `VOIE_VLM_RUN_KEY` | `vlmrun` | VLM Run key; anonymous bearer works by default |
 | `VOIE_RUNCRATE_KEY` | saved token | Runcrate key (`rc_live_...`), free weekly allowance |
+| `VOIE_PERPLEXITY_COOKIES` | none | Optional Cookie header from an anonymous perplexity.ai session; makes `pplx-turbo` reliable when anonymous access is throttled |
 
 Additional overrides: `VOIE_OPENCODE_GATEWAY_URL` (local gateway base URL), `KIRO_GATEWAY_DIR` (ACP bridge checkout), `VOIE_CLINE_FREE_FEED_URL` (free-model feed). ACP and third-party gateway providers accept `VOIE_<PROVIDER>_KEY` overrides as well (`VOIE_CODEBUDDY_KEY`, `VOIE_MINIMAX_CODE_KEY`, `VOIE_DEVIN_KEY`, `VOIE_QODER_KEY`, `VOIE_COPILOT_CLI_KEY`, `VOIE_CURSOR_KEY`, `VOIE_OMNIROUTE_KEY`, `VOIE_QODER2API_KEY`, `VOIE_WINDSURFAPI_KEY`, `VOIE_COPILOT_API_KEY`, `VOIE_CURSOR_API_PROXY_KEY`, `VOIE_CODEARTS2API_KEY`, `VOIE_CLI2API_KEY`, `VOIE_WORKBUDDY2API_KEY`); saved credentials take precedence when no override is set.
 
