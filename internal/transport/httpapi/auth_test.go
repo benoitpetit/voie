@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/app"
 )
 
 func TestBearerAuthenticationProtectsAllHTTPRoutes(t *testing.T) {
@@ -114,5 +115,53 @@ func TestCORSAllowsConversationDeletionFromSameOrigin(t *testing.T) {
 	}
 	if got := strings.ToLower(response.Header().Get("Access-Control-Allow-Headers")); !strings.Contains(got, "x-voie-conversation-scope") {
 		t.Fatalf("allow headers = %q, want conversation scope", got)
+	}
+}
+
+func TestScopeHeaderWithoutTokenIsValidatedAndApplied(t *testing.T) {
+	var seen string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = app.ConversationScope(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := bearerAuth("", false, next)
+
+	request := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	request.Header.Set("X-Voie-Conversation-Scope", "bad")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("invalid scope status = %d, want 400", response.Code)
+	}
+
+	for _, scope := range []string{strings.Repeat("a", 64), strings.Repeat("b", 64)} {
+		request := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		request.Header.Set("X-Voie-Conversation-Scope", scope)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || seen != scope {
+			t.Fatalf("scope %q: status %d, applied %q", scope[:4], response.Code, seen[:min(4, len(seen))])
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func TestBearerSchemeIsCaseInsensitiveAndTokenTrimmed(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute, APIToken: "secret"})
+	for _, value := range []string{"bearer secret", "Bearer  secret"} {
+		request := httptest.NewRequest(http.MethodGet, "/health", nil)
+		request.Header.Set("Authorization", value)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK {
+			t.Fatalf("Authorization %q status = %d, want 200", value, response.Code)
+		}
 	}
 }

@@ -11,24 +11,22 @@ import (
 )
 
 func bearerAuth(token string, requireConversationScope bool, next http.Handler) http.Handler {
-	if strings.TrimSpace(token) == "" {
-		if requireConversationScope {
-			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				writeError(w, http.StatusUnauthorized, "valid bearer token required")
-			})
-		}
-		return next
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		provided := ""
-		if value := r.Header.Get("Authorization"); strings.HasPrefix(value, "Bearer ") {
-			provided = strings.TrimPrefix(value, "Bearer ")
-		}
-		expectedHash := sha256.Sum256([]byte(token))
-		providedHash := sha256.Sum256([]byte(provided))
-		if subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) != 1 {
+		if requireConversationScope && strings.TrimSpace(token) == "" {
 			writeError(w, http.StatusUnauthorized, "valid bearer token required")
 			return
+		}
+		provided := ""
+		if value := r.Header.Get("Authorization"); len(value) >= 7 && strings.EqualFold(value[:7], "Bearer ") {
+			provided = strings.TrimSpace(value[7:])
+		}
+		if strings.TrimSpace(token) != "" {
+			expectedHash := sha256.Sum256([]byte(token))
+			providedHash := sha256.Sum256([]byte(provided))
+			if subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) != 1 {
+				writeError(w, http.StatusUnauthorized, "valid bearer token required")
+				return
+			}
 		}
 		scope := r.Header.Get("X-Voie-Conversation-Scope")
 		if scope != "" && !validConversationScope(scope) {
