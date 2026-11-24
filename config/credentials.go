@@ -30,11 +30,12 @@ func ProviderKeyEnv(provider string) string {
 // Credentials is an in-memory snapshot of the credential file.
 type Credentials struct {
 	Tokens map[string]string `json:"providers"`
+	States map[string]string `json:"states,omitempty"`
 }
 
 // LoadCredentials reads the credential file. A missing file is an empty store.
 func LoadCredentials() (*Credentials, error) {
-	store := &Credentials{Tokens: make(map[string]string)}
+	store := &Credentials{Tokens: make(map[string]string), States: make(map[string]string)}
 	path := CredentialsPath()
 	if path == "" {
 		return store, nil
@@ -55,6 +56,9 @@ func LoadCredentials() (*Credentials, error) {
 	if store.Tokens == nil {
 		store.Tokens = make(map[string]string)
 	}
+	if store.States == nil {
+		store.States = make(map[string]string)
+	}
 	return store, nil
 }
 
@@ -69,6 +73,27 @@ func (c *Credentials) Token(provider string) string {
 		return value
 	}
 	return strings.TrimSpace(c.Tokens[provider])
+}
+
+// State returns a non-standard provider state (for example "bridge error").
+func (c *Credentials) State(provider string) string {
+	if c == nil || c.States == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.States[provider])
+}
+
+// SetState records (or clears, with an empty value) a provider state.
+func (c *Credentials) SetState(provider, state string) error {
+	if c.States == nil {
+		c.States = make(map[string]string)
+	}
+	if strings.TrimSpace(state) == "" {
+		delete(c.States, provider)
+	} else {
+		c.States[provider] = strings.TrimSpace(state)
+	}
+	return c.write()
 }
 
 func (c *Credentials) write() error {

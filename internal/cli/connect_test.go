@@ -13,10 +13,6 @@ import (
 
 func runConnect(t *testing.T, args []string, stdin string, check func(string, string) error) (string, string, error) {
 	t.Helper()
-	previousCline, previousACP := startClineBridge, startACPBridge
-	startClineBridge = func(context.Context) error { return nil }
-	startACPBridge = func(context.Context, string) error { return nil }
-	t.Cleanup(func() { startClineBridge, startACPBridge = previousCline, previousACP })
 	var stdout, stderr bytes.Buffer
 	if check == nil {
 		check = func(string, string) error { return nil }
@@ -249,5 +245,89 @@ func TestInstallRejectsExtraArgs(t *testing.T) {
 	command.SetArgs([]string{"cline", "extra"})
 	if err := command.Execute(); err == nil {
 		t.Fatal("extra install argument was accepted")
+	}
+}
+
+func TestConnectRollsBackTokenOnInstallFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	previous := connectInstaller
+	connectInstaller = func(context.Context, string) (string, error) {
+		return "", errors.New("install failed")
+	}
+	t.Cleanup(func() { connectInstaller = previous })
+
+	stdout, _, err := runConnect(t, []string{"cline", "--token", "new-token"}, "", nil)
+	if err == nil {
+		t.Fatal("install failure was accepted")
+	}
+	if strings.Contains(stdout, "connected") {
+		t.Fatalf("stdout = %q, want no connected confirmation", stdout)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token := store.Token("cline"); token != "" {
+		t.Fatalf("token survived a failed connect: %q", token)
+	}
+}
+
+func TestConnectRestoresPreviousTokenOnFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("cline", "old-token"); err != nil {
+		t.Fatal(err)
+	}
+	previous := connectInstaller
+	connectInstaller = func(context.Context, string) (string, error) {
+		return "", errors.New("install failed")
+	}
+	t.Cleanup(func() { connectInstaller = previous })
+
+	if _, _, err := runConnect(t, []string{"cline", "--token", "new-token"}, "", nil); err == nil {
+		t.Fatal("install failure was accepted")
+	}
+	reloaded, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token := reloaded.Token("cline"); token != "old-token" {
+		t.Fatalf("token = %q, want the previous value restored", token)
+	}
+}
+
+func TestConnectBridgeFailureKeepsTokenAndMarksState(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	previous, previousInstaller := startClineBridge, connectInstaller
+	startClineBridge = func(context.Context) error { return errors.New("bridge failed") }
+	connectInstaller = func(context.Context, string) (string, error) { return "/usr/bin/cline", nil }
+	t.Cleanup(func() { startClineBridge, connectInstaller = previous, previousInstaller })
+
+	stdout, _, err := runConnect(t, []string{"cline", "--token", "valid-token"}, "", nil)
+	if err == nil {
+		t.Fatal("bridge failure was accepted")
+	}
+	if strings.Contains(stdout, "connected") {
+		t.Fatalf("stdout = %q, want no connected confirmation", stdout)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.Token("cline") != "valid-token" {
+		t.Fatalf("valid token was discarded: %q", store.Token("cline"))
+	}
+	if store.State("cline") != "bridge error" {
+		t.Fatalf("state = %q, want bridge error", store.State("cline"))
+	}
+	var list bytes.Buffer
+	if err := runConnectList(&list, store); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(list.String(), "bridge error") {
+		t.Fatalf("connect --list = %q, want bridge error", list.String())
 	}
 }

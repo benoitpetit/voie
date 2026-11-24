@@ -68,7 +68,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
   voie connect --list
   voie connect disconnect openrouter`,
 		Args: cobra.ArbitraryArgs,
-		RunE: func(command *cobra.Command, args []string) error {
+		RunE: func(command *cobra.Command, args []string) (err error) {
 			store, err := config.LoadCredentials()
 			if err != nil {
 				return fmt.Errorf("load credentials: %w", err)
@@ -152,11 +152,41 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 			}
 			// Save only once every field is known: a cancellation on the second
 			// field must not leave a half-configured provider behind.
+			previous := make(map[string]string, len(supplied))
+			for key := range supplied {
+				previous[key] = store.Raw(key)
+			}
+			saved := false
+			bridgeError := false
+			defer func() {
+				if err == nil {
+					if store.State(provider) != "" {
+						_ = store.SetState(provider, "")
+					}
+					return
+				}
+				if !saved {
+					return
+				}
+				if bridgeError {
+					// The token may still be valid; only the local bridge failed.
+					_ = store.SetState(provider, "bridge error")
+					return
+				}
+				for key, value := range previous {
+					if value == "" {
+						_ = store.Delete(key)
+					} else {
+						_ = store.Set(key, value)
+					}
+				}
+			}()
 			for key, value := range supplied {
 				if err := store.Set(key, value); err != nil {
 					return fmt.Errorf("save %s credential: %w", provider, err)
 				}
 			}
+			saved = true
 			if isGatewayProvider(provider) {
 				binary, err := connectInstaller(command.Context(), provider)
 				if err != nil {
@@ -172,10 +202,12 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 						return fmt.Errorf("%s auth: %w", provider, err)
 					}
 					if err := startACPBridge(command.Context(), provider); err != nil {
+						bridgeError = true
 						return fmt.Errorf("start %s ACP bridge: %w", provider, err)
 					}
 				} else if provider == "cline" {
 					if err := startClineBridge(command.Context()); err != nil {
+						bridgeError = true
 						return fmt.Errorf("start cline ACP bridge (did you run `cline auth`?): %w", err)
 					}
 				}
@@ -320,6 +352,9 @@ func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered,
 		state := "not connected"
 		if store.Token(name) != "" {
 			state = "connected"
+			if marked := store.State(name); marked != "" {
+				state = marked
+			}
 		} else if name == "opencode-zen" || name == "opencode-go" {
 			state = "available (anonymous / local key)"
 		} else if name == "vlm-run" {
