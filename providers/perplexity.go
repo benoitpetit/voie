@@ -49,7 +49,7 @@ var perplexityBlockUseCases = []string{
 
 // Only `turbo` answers anonymously with the current wire format; every other
 // advertised model returns a "Sign up and repeat your request" text block.
-var perplexityModels = []string{"turbo"}
+var perplexityModels = []string{"turbo", "sonar-pro", "sonar-reasoning"}
 
 var perplexityAliases = map[string]string{
 	"perplexity": "turbo",
@@ -65,6 +65,7 @@ func (p *Perplexity) GetInfo() ProviderInfo {
 		Working:            true,
 		DefaultModel:       "turbo",
 		SupportedModels:    perplexityModels,
+		FreeModels:         []string{"turbo"},
 		SupportsStream:     true,
 		NeedsAuth:          false,
 		Description:        "Perplexity AI - reverse-engineered, anonymous access to many frontier models",
