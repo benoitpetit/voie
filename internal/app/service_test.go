@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/benoitpetit/voie/internal/pricing"
 )
 
 func TestNormalizeRequestStrategyDefaultsToClassic(t *testing.T) {
@@ -397,5 +401,30 @@ func TestListModelsTiersAndFilters(t *testing.T) {
 	}
 	if got := service.ListModelsFiltered("missing", ""); len(got) != 0 {
 		t.Fatalf("unknown provider = %d, want 0", len(got))
+	}
+}
+
+func TestListModelsAddsPublicPriceWhenAvailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"foo/bar","pricing":{"prompt":"0.000001","completion":"0.000002"}}]}`))
+	}))
+	defer server.Close()
+	pricing.SetSource(server.URL)
+	t.Cleanup(func() { pricing.SetSource("") })
+	registry := NewRegistry()
+	registry.Register("openrouter", &testProvider{info: ProviderInfo{
+		Name: "openrouter", Working: true, SupportedModels: []string{"foo/bar"},
+		FreeModels: []string{"free-model"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := service.ListModelsFiltered("", "")
+	if len(models) != 1 || models[0].Price == nil {
+		t.Fatalf("models = %+v, want a price", models)
+	}
+	if models[0].Price.PromptPerToken != "0.000001" || models[0].Tier != TierPaid {
+		t.Fatalf("model = %+v", models[0])
 	}
 }

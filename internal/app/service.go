@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/benoitpetit/voie/internal/pricing"
 )
 
 type CompletionRequest struct {
@@ -541,12 +543,19 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 				continue
 			}
 			seen[publicID] = true
-			models = append(models, ModelInfo{
+			model := ModelInfo{
 				ID: publicID, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
 				Tier: modelTier, Group: ownerInfo.Label,
 				Permission: []interface{}{}, Root: id,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
-			})
+			}
+			if upstreamPrice, ok := pricing.Lookup(ownerName, id); ok {
+				model.Price = &ModelPrice{
+					PromptPerToken: upstreamPrice.Prompt, CompletionPerToken: upstreamPrice.Completion,
+					Currency: "USD",
+				}
+			}
+			models = append(models, model)
 		}
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
