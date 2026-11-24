@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -38,6 +39,32 @@ type LocalGatewaySpec struct {
 type LocalGateway struct {
 	spec        LocalGatewaySpec
 	HealthCheck func() bool // test seam; nil uses HTTP against BaseURL+HealthPath
+}
+
+// lockedBuffer collects a child process's stderr without racing the Wait
+// goroutine that reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.buf.Len() < 64<<10 {
+		return b.buf.Write(data)
+	}
+	return len(data), nil
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	text := b.buf.String()
+	if len(text) > 4<<10 {
+		text = text[len(text)-4<<10:]
+	}
+	return strings.TrimSpace(text)
 }
 
 type runningProcess struct {
@@ -168,7 +195,8 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	// A real *os.File avoids os/exec's copying goroutines: a grandchild that
 	// inherits the write end would keep Wait() blocked forever otherwise.
 	cmd.Stdout = devNull
-	cmd.Stderr = devNull
+	diagnostics := &lockedBuffer{}
+	cmd.Stderr = diagnostics
 	setProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
@@ -194,6 +222,14 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		}
 		gatewayMu.Unlock()
 	}()
+	fail := func(cause error) error {
+		_ = cmd.Process.Kill()
+		select {
+		case <-running.done:
+		case <-time.After(5 * time.Second):
+		}
+		return fmt.Errorf("gateway %s did not become healthy: %w: %s", g.spec.Name, cause, diagnostics.String())
+	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if g.healthy() {
@@ -201,16 +237,11 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fail(ctx.Err())
 		case <-time.After(200 * time.Millisecond):
 		}
 	}
-	_ = cmd.Process.Kill()
-	select {
-	case <-running.done:
-	case <-time.After(5 * time.Second):
-	}
-	return fmt.Errorf("gateway %s did not become healthy within 15s", g.spec.Name)
+	return fail(fmt.Errorf("timed out after 15s"))
 }
 
 func runningGateways() map[string]*exec.Cmd {

@@ -220,3 +220,19 @@ func TestEnsureDoesNotHoldGlobalLockWhilePolling(t *testing.T) {
 	default:
 	}
 }
+
+func TestEnsureIncludesChildDiagnostics(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "diagnostic-gateway")
+	script := "#!/bin/sh\necho GATEWAY_DIAGNOSTIC >&2\nexec sleep 30\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gateway := NewLocalGateway(LocalGatewaySpec{Name: "diagnostic", Binary: binary, BaseURL: "http://127.0.0.1:1", HealthPath: "/health"})
+	gateway.HealthCheck = func() bool { return false }
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	err := gateway.Ensure(ctx)
+	if err == nil || !strings.Contains(err.Error(), "GATEWAY_DIAGNOSTIC") {
+		t.Fatalf("Ensure error = %v, want the child's diagnostic output", err)
+	}
+}
