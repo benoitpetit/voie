@@ -14,15 +14,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// acpBridgeArgs returns the ACP invocation for one agent spec. Cline-only
+// flags are deliberately absent: other agents deny tools through ACP
+// permissions, not through Cline's CLI switches.
+func acpBridgeArgs(spec providers.ACPProviderSpec) []string {
+	args := append([]string(nil), spec.AgentArgs...)
+	if spec.Model != "" && spec.Model != "auto" {
+		args = append(args, "--model", spec.Model)
+	}
+	return args
+}
+
 // acpBridgeConfig builds the bridge configuration for one ACP agent spec.
 func acpBridgeConfig(spec providers.ACPProviderSpec, binary, scratch, key string) clinebridge.Config {
 	// Keep agentic side effects out of the user's workspace: no auto
 	// approval, a scratch cwd and a deny-all hook, as for Cline.
-	args := append([]string(nil), spec.AgentArgs...)
-	args = append(args, "--auto-approve", "false", "--cwd", scratch, "--hooks-dir", scratch)
-	if spec.Model != "" && spec.Model != "auto" {
-		args = append(args, "--model", spec.Model)
-	}
+	args := acpBridgeArgs(spec)
 	return clinebridge.Config{
 		Listen:       fmt.Sprintf("127.0.0.1:%d", spec.Port),
 		ClinePath:    binary,

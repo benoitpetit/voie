@@ -138,3 +138,43 @@ func TestPermissionRequestsAreDenied(t *testing.T) {
 		t.Errorf("hardcoded optionId leaked:\n%s", sent)
 	}
 }
+
+func TestSetModelSendsConfigOption(t *testing.T) {
+	agent := newFakeAgent()
+	client := NewClient(agent, agent)
+	agent.push(`{"jsonrpc":"2.0","id":1,"result":{}}`)
+	if err := client.SetModel(context.Background(), "s1", "other"); err != nil {
+		t.Fatal(err)
+	}
+	sent := agent.sent()
+	for _, want := range []string{"session/setConfigOption", `"configId":"model"`, `"value":"other"`} {
+		if !strings.Contains(sent, want) {
+			t.Errorf("SetModel request missing %q:\n%s", want, sent)
+		}
+	}
+}
+
+func TestResolveBridgeModel(t *testing.T) {
+	for _, tc := range []struct{ requested, configured, want string }{
+		{"", "cb-auto", "cb-auto"},
+		{"auto", "cb-auto", "cb-auto"},
+		{"other", "cb-auto", "other"},
+	} {
+		if got := resolveBridgeModel(tc.requested, tc.configured); got != tc.want {
+			t.Errorf("resolveBridgeModel(%q,%q) = %q, want %q", tc.requested, tc.configured, got, tc.want)
+		}
+	}
+}
+
+func TestBridgeUsesRequestedModel(t *testing.T) {
+	agent := newFakeAgent()
+	client := NewClient(agent, agent)
+	agent.push(`{"jsonrpc":"2.0","id":1,"result":{}}`)
+	if err := resolveAndSetModel(context.Background(), client, "s1", "other", "cb-auto"); err != nil {
+		t.Fatal(err)
+	}
+	sent := agent.sent()
+	if !strings.Contains(sent, `"value":"other"`) || strings.Contains(sent, `"value":"cb-auto"`) {
+		t.Fatalf("requested model was not applied:\n%s", sent)
+	}
+}

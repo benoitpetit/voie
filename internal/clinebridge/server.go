@@ -26,6 +26,19 @@ var denyHook = []byte(`export default {
 };
 `)
 
+// resolveBridgeModel prefers the per-request model, falling back to the
+// model pinned when the bridge started.
+func resolveBridgeModel(requested, configured string) string {
+	if requested == "" || requested == "auto" {
+		return configured
+	}
+	return requested
+}
+
+func resolveAndSetModel(ctx context.Context, client *Client, sessionID, requested, configured string) error {
+	return client.SetModel(ctx, sessionID, resolveBridgeModel(requested, configured))
+}
+
 // Run starts the ACP child and the OpenAI-compatible HTTP endpoint.
 func Run(ctx context.Context, cfg Config) error {
 	currentFreeFeedURL = cfg.FreeFeedURL
@@ -118,6 +131,10 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<20)).Decode(&request); err != nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if err := resolveAndSetModel(r.Context(), client, sessionID, request.Model, cfg.Model); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		prompt := flattenMessages(request.Messages)

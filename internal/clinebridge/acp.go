@@ -141,17 +141,23 @@ func (c *Client) Handshake(ctx context.Context, cwd, model string) (string, erro
 	if sessionID == "" {
 		return "", fmt.Errorf("ACP session/new returned no sessionId")
 	}
-	if model != "" && model != "auto" {
-		// Not every ACP agent implements session/setConfigOption (Cline 3.0.x
-		// returns -32601). The model is also passed as a CLI flag; a missing
-		// optional method must not break the handshake.
-		_, _ = c.call(ctx, "session/setConfigOption", map[string]any{
-			"sessionId": sessionID,
-			"configId":  "model",
-			"value":     model,
-		})
-	}
+	// A missing optional method must not break the handshake.
+	_ = c.SetModel(ctx, sessionID, model)
 	return sessionID, nil
+}
+
+// SetModel pins the ACP session to a model. Not every agent implements this
+// optional method; callers decide whether to tolerate the error.
+func (c *Client) SetModel(ctx context.Context, sessionID, model string) error {
+	if model == "" || model == "auto" {
+		return nil
+	}
+	_, err := c.call(ctx, "session/setConfigOption", map[string]any{
+		"sessionId": sessionID,
+		"configId":  "model",
+		"value":     model,
+	})
+	return err
 }
 
 // Prompt sends one turn and collects agent message chunks until the turn ends.
