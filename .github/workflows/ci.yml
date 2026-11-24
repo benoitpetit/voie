@@ -47,4 +47,4 @@ jobs:
         run: GOOS=windows GOARCH=amd64 go build ./...
 
       - name: Test Windows replacement helpers
-        run: go test ./internal/update -run TestReplace
+        run: go test ./internal/update -run TestReplaceExecutableWindows

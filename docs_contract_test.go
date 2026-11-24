@@ -158,6 +158,7 @@ func TestCIRunsNpmTestsRaceAndWindowsBuild(t *testing.T) {
 	assertContains(t, "ci.yml", workflow, "go test -race ./...")
 	assertContains(t, "ci.yml", workflow, "windows-latest")
 	assertContains(t, "ci.yml", workflow, "GOOS=windows")
+	assertContains(t, "ci.yml", workflow, "TestReplaceExecutableWindows")
 }
 
 func TestDocsAndSkillMatchSurfaces(t *testing.T) {
