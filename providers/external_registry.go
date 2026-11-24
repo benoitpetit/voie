@@ -43,6 +43,7 @@ type ExternalGatewaySpec struct {
 	GeneratedEnv    []string          // secrets generated once and reused via EnvFile
 	Stop            []string          // command that stops the gateway's own daemon
 	StopKillBinary  string            // optional binary to force-kill after Stop (daemonizing tools only)
+	FreeModels      []string          // upstream IDs verified free; nil keeps the whole lane, empty keeps none
 	SetupHint       string            // account configuration required before inference
 	AccountRequired string            // "none", "upstream", "dashboard+upstream"
 	AccountKind     string            // which account exactly
@@ -68,6 +69,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 	{
 		Name: "qoder2api", Label: "Qoder2API Hub", Repo: "https://github.com/shuishuipingan/qoder2api-hub",
 		Port: 8790, Alias: "qoder2-free", Upstream: "auto", HealthPath: "/health",
+		FreeModels:      []string{"Auto"},
 		Deps:            [][]string{{"bash", "-c", "chmod +x *.sh"}},
 		SetupHint:       "open the dashboard (default password admin) and add your Qoder account",
 		AccountRequired: "upstream",
@@ -154,7 +156,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 	},
 	{
 		Name: "free-llm-router", Label: "Free LLM Proxy Router", Repo: "https://github.com/kaiser-data/free-llm-proxy-router",
-		Port: 8082, Alias: "router-free", Upstream: "auto", HealthPath: "/health",
+		Port: 8082, Alias: "flr-free", Upstream: "auto", HealthPath: "/health",
 		Install:         []string{"sh", "-c", "curl -fsSL https://raw.githubusercontent.com/kaiser-data/free-llm-proxy-router/main/scripts/install.sh | sh"},
 		SetupHint:       "official free-tier API keys only; no OAuth or session reuse",
 		AccountRequired: "upstream", AccountKind: "official free API key (Groq, Gemini, OpenRouter, ...)",
@@ -163,7 +165,8 @@ var ExternalGateways = []ExternalGatewaySpec{
 	},
 	{
 		Name: "trae2api", Label: "Trae2API Hub", Repo: "https://github.com/shuishuipingan/trae2api-hub",
-		Port: 8791, Alias: "trae2-free", Upstream: "auto", HealthPath: "/health",
+		Port: 8791, Alias: "te-free", Upstream: "auto", HealthPath: "/health",
+		FreeModels:      []string{"Auto"},
 		Deps:            [][]string{{"bash", "-c", "chmod +x *.sh"}},
 		SetupHint:       "consumer-subscription reverse proxy: link your own Trae account in the dashboard; ToS risk",
 		AccountRequired: "upstream", AccountKind: "Trae personal account (CN or INTL)",
@@ -212,6 +215,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		Start:          []string{"9routerx"},
 		Stop:           []string{"9routerx", "stop"},
 		StopKillBinary: "9routerx",
+		FreeModels:     []string{},
 	},
 	{
 		Name: "freellmapi", Label: "FreeLLMAPI", Repo: "https://github.com/tashfeenahmed/freellmapi",
@@ -321,17 +325,25 @@ func writeGatewayModelsCache(entries map[string]gatewayModelCacheEntry) {
 	}
 }
 
-// filterGatewayModels keeps only lanes usable without a linked account. Some
-// gateways expose hundreds of OAuth/web models that would all fail for a
-// fresh voie install.
+// filterGatewayModels keeps only the models a fresh install can actually use
+// for free. Gateways whose whole lane is keyless/local leave the list intact;
+// others declare an explicit allowlist of verified free upstream IDs.
 func filterGatewayModels(name string, models map[string]string) map[string]string {
-	if name != "9routerx" {
+	spec, ok := ExternalGatewayByName(name)
+	if !ok || spec.FreeModels == nil {
 		return models
 	}
-	// Verified on a fresh install: only the static `oc/big-pickle` alias answers;
-	// the hundreds of catalog entries (ocz/ocg/ag/web lanes) all fail with
-	// 400/502 until their upstream account is configured. Do not advertise them.
-	return map[string]string{}
+	allowed := make(map[string]bool, len(spec.FreeModels))
+	for _, id := range spec.FreeModels {
+		allowed[id] = true
+	}
+	result := make(map[string]string)
+	for alias, upstream := range models {
+		if allowed[upstream] {
+			result[alias] = upstream
+		}
+	}
+	return result
 }
 
 // fetchGatewayModels reads a gateway's live /v1/models list. A successful
