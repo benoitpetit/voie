@@ -280,7 +280,7 @@ func (h *apiHandler) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "ok", "timestamp": time.Now().Unix(), "version": brand.Version,
 		"providers_total": len(providers), "providers_working": len(working),
-		"working_providers": working, "total_models": modelCount,
+		"working_providers": working, "disabled_providers": disabled, "total_models": modelCount,
 	})
 }
 

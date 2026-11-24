@@ -72,9 +72,16 @@ func TestUnconfiguredProviderHiddenFromDiscovery(t *testing.T) {
 	if len(providers) != 1 || providers[0].Name != "visible" {
 		t.Errorf("ListProviders = %+v", providers)
 	}
+	// Metadata reports every registered provider with its Working flag so
+	// /health can count disabled providers; only ListProviders hides them.
 	metadata := service.ListProviderMetadata()
-	if len(metadata) != 1 || metadata[0].Name != "visible" {
-		t.Errorf("ListProviderMetadata = %+v", metadata)
+	if len(metadata) != 2 {
+		t.Fatalf("ListProviderMetadata = %+v, want both providers", metadata)
+	}
+	for _, info := range metadata {
+		if info.Name == "hidden" && info.Working {
+			t.Error("hidden provider reported as working")
+		}
 	}
 }
 

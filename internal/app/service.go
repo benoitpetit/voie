@@ -543,7 +543,7 @@ func (s *Service) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
 
 // ListProviderMetadata returns the catalogue without probing external URLs.
 func (s *Service) ListProviderMetadata() []ProviderInfo {
-	names := s.workingProviderNames()
+	names := s.registry.GetProviderNames()
 	providers := make([]ProviderInfo, 0, len(names))
 	for _, name := range names {
 		providers = append(providers, s.registry.Get(name).GetInfo())

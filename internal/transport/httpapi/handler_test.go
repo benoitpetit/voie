@@ -952,3 +952,53 @@ func TestConversationListRespectsLimitAndOffset(t *testing.T) {
 		}
 	}
 }
+
+func TestHealthReportsDisabledProviders(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("active", &httpTestProvider{})
+	registry.Register("down", &disabledTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
+	var payload struct {
+		ProvidersTotal    int      `json:"providers_total"`
+		ProvidersWorking  int      `json:"providers_working"`
+		DisabledProviders []string `json:"disabled_providers"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.ProvidersTotal != 2 || payload.ProvidersWorking != 1 {
+		t.Fatalf("counts = %d/%d, want 2/1", payload.ProvidersTotal, payload.ProvidersWorking)
+	}
+	if len(payload.DisabledProviders) != 1 || payload.DisabledProviders[0] != "down" {
+		t.Fatalf("disabled = %v, want [down]", payload.DisabledProviders)
+	}
+}
+
+type disabledTestProvider struct{}
+
+func (*disabledTestProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "down", Working: false, SupportedModels: []string{"down-model"}}
+}
+func (*disabledTestProvider) SupportsModel(string) bool { return false }
+func (*disabledTestProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return nil, app.ErrProviderDisabled
+}
+func (*disabledTestProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return app.ErrProviderDisabled
+}
+
+func TestProvidersJSONOmitsReadyForNonGateways(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/providers", nil))
+	if strings.Contains(recorder.Body.String(), `"ready"`) {
+		t.Fatalf("ready emitted for a non-gateway provider: %s", recorder.Body.String())
+	}
+}

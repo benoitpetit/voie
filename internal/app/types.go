@@ -103,7 +103,7 @@ type ProviderInfo struct {
 	URL                string   `json:"url"`
 	Working            bool     `json:"working"`
 	Alive              bool     `json:"alive"`
-	Ready              bool     `json:"ready"`
+	Ready              bool     `json:"ready,omitempty"`
 	SupportedModels    []string `json:"supported_models"`
 	DefaultModel       string   `json:"default_model"`
 	SupportsStream     bool     `json:"supports_stream"`
