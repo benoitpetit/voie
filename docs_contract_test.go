@@ -180,3 +180,17 @@ func TestAPIRefDocumentsOpenAISubset(t *testing.T) {
 	assertContains(t, "api-reference.md", api, "tool_calls")
 	assertContains(t, "api-reference.md", api, "completion choice is supported")
 }
+
+func TestDocsDescribeModelTiers(t *testing.T) {
+	cli := readDoc(t, "docs/cli.md")
+	for _, flag := range []string{"--free", "--paid", "--provider", "TIER"} {
+		assertContains(t, "docs/cli.md", cli, flag)
+	}
+	mcp := readDoc(t, "docs/mcp.md")
+	assertContains(t, "docs/mcp.md", mcp, "tier")
+	assertContains(t, "docs/mcp.md", mcp, "price unknown")
+	api := readDoc(t, "api-reference.md")
+	assertContains(t, "api-reference.md", api, "tier")
+	assertContains(t, "api-reference.md", api, "price unknown")
+	assertContains(t, "README.md", readDoc(t, "README.md"), "TIER")
+}

@@ -184,6 +184,10 @@ The Cobra help shows every command and its available flags. Commands are `serve`
 
 Automatic strategies are opt-in. `auto` picks the first eligible model from a routing profile in deterministic order; a profile can opt into `ROUTER_MODEL`. Profiles and capability labels are defined in `routing.json`. `ensemble` supports independent answers, a sequential review chain, and a multi-round debate before synthesis. Configure defaults in `routing.json`; per request, `--candidate-count` chooses 2–5 agents and repeatable `--ensemble-model` flags select their exact models. Examples: `voie chat --strategy auto --task coding "Review this function"`, `voie chat --strategy ensemble --ensemble-mode chain --candidate-count 3 "Review this proposal"`, and `voie chat --strategy ensemble --ensemble-mode debate --debate-turns 2 "Compare these approaches"`. A conversation can be resumed with `--conversation ID`; create/list/show/delete sessions with `voie conversations`. Requests sent to `auto` or `ensemble` providers disclose the prompt to those providers. See [routing and conversations](docs/architecture.md#routing-and-conversations).
 
+## Free and paid models
+
+`voie models` lists every callable model from connected providers, gateways and local bridges, with a `TIER` column (`free` or `paid`) and a `PRICE` column. `--free`, `--paid` and `--provider NAME` narrow the catalogue; `--all` is the default. A paid model is one that is not in the provider's verified free list — voie forwards the request and the upstream decides whether it succeeds. Public per-token prices are shown when available (currently from OpenRouter); otherwise paid models show `price unknown`.
+
 ## Use MCP
 
 Configure your MCP client to launch the same executable with the `mcp` argument. Example client configuration:

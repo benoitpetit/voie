@@ -266,3 +266,8 @@ Non-streaming responses include `message.tool_calls` when the upstream returns
 them. Streamed responses emit additional `chat.completion.chunk` events with
 `delta.tool_calls` before the `finish_reason` chunk. Token counts remain
 estimates unless the upstream reports them.
+
+
+### GET /v1/models filters
+
+`GET /v1/models` accepts `?tier=free|paid` and `?provider=NAME`. An invalid `tier` returns `400`. Each model in `data` has a `tier` field (`free` or `paid`) and an optional `price` object with `currency`, `prompt_per_token` and `completion_per_token` when a public price is known; paid models with no public price display `price unknown` in human-facing surfaces.

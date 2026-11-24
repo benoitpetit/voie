@@ -115,3 +115,6 @@ Pass a returned ID as `conversation_id` to `chat_completion` to resume the conve
 - If completion fails upstream, call `list_providers` for reachability context and try another listed model.
 - Duck.ai chat requires Chrome or Chromium on the machine running `voie`.
 - Do not treat `alive: true` as proof that a provider can complete a model request.
+
+
+`list_models` accepts optional `tier` (`free` or `paid`) and `provider` arguments. Each model result carries `tier` and, for paid models, a `price` string with public per-token prices when available or `price unknown` when not. A grouped text summary is also returned.
