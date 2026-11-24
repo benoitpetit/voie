@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -286,84 +287,63 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	return nil
 }
 
-type connectEntry struct {
-	Name  string
-	Type  string
-	State string
-}
+// connectPicker prints the same flat provider list for `connect --list` and
+// for the interactive selector. The selector adds a leading number column.
+func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered bool) []string {
+	typeByName := make(map[string]string)
+	typeByName["openrouter"] = "token"
+	typeByName["orcarouter"] = "token"
+	for _, name := range providers.TokenProviderNames() {
+		typeByName[name] = "token"
+	}
+	for _, name := range []string{"opencode-zen", "opencode-go", "antigravity", "kiro", "cline", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor"} {
+		typeByName[name] = "cli"
+	}
+	for _, spec := range providers.ACPProviders {
+		typeByName[spec.Name] = "cli"
+	}
+	for _, spec := range providers.ExternalGateways {
+		typeByName[spec.Name] = providers.ExternalGatewayType(spec)
+	}
 
-type connectSection struct {
-	Title   string
-	Entries []connectEntry
-}
-
-func connectSections(store *config.Credentials) []connectSection {
-	tokenProviders := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
-	cliProviders := []string{
-		"opencode-zen", "opencode-go", "antigravity", "kiro", "cline",
-		"codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor",
+	names := append([]string(nil), connectableProviders...)
+	sort.Strings(names)
+	if numbered {
+		fmt.Fprintln(table, "#\tNAME\tTYPE\tSTATE")
+	} else {
+		fmt.Fprintln(table, "NAME\tTYPE\tSTATE")
 	}
-	sections := []connectSection{
-		{Title: "API TOKEN (create a key with the provider)"},
-		{Title: "CLI / LOCAL GATEWAY (sign in with the official tool)"},
-	}
-	for _, name := range tokenProviders {
-		state := "not connected"
-		if store.Token(name) != "" {
-			state = "connected"
-		} else if name == "vlm-run" {
-			state = "available (anonymous bearer)"
-		}
-		sections[0].Entries = append(sections[0].Entries, connectEntry{Name: name, Type: "token", State: state})
-	}
-	for _, name := range cliProviders {
+	for index, name := range names {
 		state := "not connected"
 		if store.Token(name) != "" {
 			state = "connected"
 		} else if name == "opencode-zen" || name == "opencode-go" {
 			state = "available (anonymous / local key)"
-		}
-		sections[1].Entries = append(sections[1].Entries, connectEntry{Name: name, Type: "cli", State: state})
-	}
-	gateways := connectSection{Title: "REVERSE-ENGINEERED GATEWAYS (ToS risk, opt-in)"}
-	for _, spec := range providers.ExternalGateways {
-		installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
-		account, _ := providers.ExternalGatewayAccount(spec.Name)
-		state := "not installed (voie install " + spec.Name + ")"
-		if installed {
-			state = "installed — account: " + account.Required
-		}
-		gateways.Entries = append(gateways.Entries, connectEntry{
-			Name: spec.Name, Type: providers.ExternalGatewayType(spec), State: state,
-		})
-	}
-	return append(sections, gateways)
-}
-
-func printConnectSections(table *tabwriter.Writer, sections []connectSection, numbered bool) []string {
-	var names []string
-	for _, section := range sections {
-		fmt.Fprintf(table, "\n%s\n", section.Title)
-		if numbered {
-			fmt.Fprintln(table, "#\tNAME\tTYPE\tSTATE")
-		} else {
-			fmt.Fprintln(table, "NAME\tTYPE\tSTATE")
-		}
-		for _, entry := range section.Entries {
-			names = append(names, entry.Name)
-			if numbered {
-				fmt.Fprintf(table, "%d\t%s\t%s\t%s\n", len(names), entry.Name, entry.Type, entry.State)
-			} else {
-				fmt.Fprintf(table, "%s\t%s\t%s\n", entry.Name, entry.Type, entry.State)
+		} else if name == "vlm-run" {
+			state = "available (anonymous bearer)"
+		} else if _, ok := providers.ExternalGatewayByName(name); ok {
+			installed, _, _ := providers.ExternalGatewayStatus(name)
+			account, _ := providers.ExternalGatewayAccount(name)
+			state = "not installed (voie install " + name + ")"
+			if installed {
+				state = "installed — account: " + account.Required
 			}
 		}
+		if numbered {
+			fmt.Fprintf(table, "%d\t%s\t%s\t%s\n", index+1, name, typeByName[name], state)
+		} else {
+			fmt.Fprintf(table, "%s\t%s\t%s\n", name, typeByName[name], state)
+		}
+	}
+	if numbered {
+		fmt.Fprintln(table, "0\tCancel\t\t")
 	}
 	return names
 }
 
 func runConnectList(out io.Writer, store *config.Credentials) error {
 	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	printConnectSections(table, connectSections(store), false)
+	connectPicker(table, store, false)
 	return table.Flush()
 }
 
@@ -440,8 +420,7 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 	}
 	fmt.Fprintln(command.ErrOrStderr(), "Available providers:")
 	table := tabwriter.NewWriter(command.ErrOrStderr(), 0, 0, 2, ' ', 0)
-	ordered := printConnectSections(table, connectSections(store), true)
-	fmt.Fprintln(table, "\n0\tCancel\t\t")
+	names := connectPicker(table, store, true)
 	table.Flush()
 	answer, err := readLine(command, input, "Provider number: ", false)
 	if err != nil {
@@ -452,10 +431,10 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 		return "", errConnectCanceled
 	}
 	var index int
-	if _, err := fmt.Sscanf(answer, "%d", &index); err != nil || index < 1 || index > len(ordered) {
+	if _, err := fmt.Sscanf(answer, "%d", &index); err != nil || index < 1 || index > len(names) {
 		return "", fmt.Errorf("invalid provider selection %q", answer)
 	}
-	return ordered[index-1], nil
+	return names[index-1], nil
 }
 
 type lineResult struct {
