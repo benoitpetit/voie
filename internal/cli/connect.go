@@ -74,6 +74,9 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				return fmt.Errorf("load credentials: %w", err)
 			}
 			if list {
+				if len(args) != 0 {
+					return fmt.Errorf("voie connect --list takes no provider")
+				}
 				return runConnectList(command.OutOrStdout(), store)
 			}
 			if len(args) == 1 && args[0] == "disconnect" {
@@ -142,6 +145,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				}
 				supplied[field.Key] = value
 			}
+			if check != nil {
+				if err := check(provider, supplied[provider]); err != nil {
+					return fmt.Errorf("validate %s token: %w", provider, err)
+				}
+			}
 			// Save only once every field is known: a cancellation on the second
 			// field must not leave a half-configured provider behind.
 			for key, value := range supplied {
@@ -170,11 +178,6 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					if err := startClineBridge(command.Context()); err != nil {
 						return fmt.Errorf("start cline ACP bridge (did you run `cline auth`?): %w", err)
 					}
-				}
-			}
-			if check != nil {
-				if err := check(provider, supplied[provider]); err != nil {
-					return fmt.Errorf("validate %s token: %w", provider, err)
 				}
 			}
 			fmt.Fprintf(command.OutOrStdout(), "%s connected\n", provider)

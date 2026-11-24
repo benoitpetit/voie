@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -212,5 +213,41 @@ func TestConnectOpencodeUsesLocalKey(t *testing.T) {
 	}
 	if gotProvider != "opencode-zen" || gotToken != "voie-local" {
 		t.Errorf("check called with (%q, %q)", gotProvider, gotToken)
+	}
+}
+
+func TestConnectDoesNotPersistRejectedToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_, _, err := runConnect(t, []string{"openrouter", "--token", "bad"}, "", func(string, string) error {
+		return errors.New("rejected")
+	})
+	if err == nil {
+		t.Fatal("rejected token was accepted")
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token := store.Token("openrouter"); token != "" {
+		t.Fatalf("rejected token was persisted: %q", token)
+	}
+}
+
+func TestConnectListRejectsArgs(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	_, _, err := runConnect(t, []string{"--list", "junk"}, "", nil)
+	if err == nil {
+		t.Fatal("--list with a positional argument was accepted")
+	}
+}
+
+func TestInstallRejectsExtraArgs(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := newInstallCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{"cline", "extra"})
+	if err := command.Execute(); err == nil {
+		t.Fatal("extra install argument was accepted")
 	}
 }

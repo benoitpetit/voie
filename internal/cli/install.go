@@ -19,7 +19,7 @@ func newInstallCommand() *cobra.Command {
 		Short:        "List or install optional provider toolchains and third-party gateways",
 		Long:         "Without an argument, lists everything voie can install. Passing a name installs it: coding-agent CLIs are installed via npm, third-party gateways via git clone plus their dependencies. Third-party gateways use reverse-engineered endpoints and carry ToS/account risk.",
 		Example:      "  voie install\n  voie install omniroute\n  voie install cline",
-		Args:         cobra.ArbitraryArgs,
+		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
 			if list || len(args) == 0 {
