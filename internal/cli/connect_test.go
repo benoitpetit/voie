@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -330,4 +332,50 @@ func TestConnectBridgeFailureKeepsTokenAndMarksState(t *testing.T) {
 	if !strings.Contains(list.String(), "bridge error") {
 		t.Fatalf("connect --list = %q, want bridge error", list.String())
 	}
+}
+
+func TestConnectMarksGatewayConnected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	previous := connectInstaller
+	connectInstaller = func(context.Context, string) (string, error) { return "/usr/bin/agent", nil }
+	t.Cleanup(func() { connectInstaller = previous })
+	stdout, stderr, err := runConnect(t, []string{"qoder2api", "--token", "x"}, "", nil)
+	if err != nil {
+		t.Fatalf("err=%v stdout=%q stderr=%q", err, stdout, stderr)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.State("qoder2api") != "connected" {
+		t.Fatalf("gateway state = %q, want connected", store.State("qoder2api"))
+	}
+}
+
+func TestConnectListShowsGatewayNeedsConnect(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "voie", "gateways", "qoder2api")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("qoder2api", "token"); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, err := runConnect(t, []string{"--list"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.Contains(line, "qoder2api") {
+			if !strings.Contains(line, "installed — account: upstream") {
+				t.Fatalf("gateway line = %q, want installed/account state", line)
+			}
+			return
+		}
+	}
+	t.Fatal("qoder2api missing from connect --list")
 }

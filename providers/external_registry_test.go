@@ -4,8 +4,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/benoitpetit/voie/config"
 	"time"
 )
 
@@ -198,5 +201,29 @@ func TestGatewayDiscoveryKeepsPaidModels(t *testing.T) {
 	free := gatewayFreeModels(spec.Name, models)
 	if len(free) != 1 || !free["q2-Auto"] {
 		t.Fatalf("free models = %v, want only q2-Auto", free)
+	}
+}
+
+func TestGatewayRequiresConnectBeforeListed(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	spec, ok := ExternalGatewayByName("qoder2api")
+	if !ok {
+		t.Fatal("qoder2api spec missing")
+	}
+	if err := os.MkdirAll(gatewayDir(spec), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if NewExternalGateway(spec).GetInfo().Working {
+		t.Fatal("installed but unconnected gateway reported as callable")
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetState(spec.Name, "connected"); err != nil {
+		t.Fatal(err)
+	}
+	if !NewExternalGateway(spec).GetInfo().Working {
+		t.Fatal("connected gateway should be callable")
 	}
 }

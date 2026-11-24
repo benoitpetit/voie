@@ -664,8 +664,21 @@ func (p *ExternalGateway) working() bool {
 	return err == nil
 }
 
+// callable adds the account/connect requirement on top of the install state.
+// An installed gateway whose upstream account has not been connected cannot
+// serve inference and must stay out of the model catalogue.
+func (p *ExternalGateway) callable() bool {
+	if p.spec.AccountRequired != "none" {
+		store, err := config.LoadCredentials()
+		if err != nil || !strings.EqualFold(store.State(p.spec.Name), "connected") {
+			return false
+		}
+	}
+	return p.working()
+}
+
 func (p *ExternalGateway) SupportsModel(model string) bool {
-	return p.working() && p.openAIKeylessProvider.SupportsModel(model)
+	return p.callable() && p.openAIKeylessProvider.SupportsModel(model)
 }
 
 func (p *ExternalGateway) GetInfo() app.ProviderInfo {
@@ -676,7 +689,7 @@ func (p *ExternalGateway) GetInfo() app.ProviderInfo {
 		info.FreeModels = append(info.FreeModels, alias)
 	}
 	sort.Strings(info.FreeModels)
-	info.Working = p.working()
+	info.Working = p.callable()
 	// A gateway that is installed and passes its check is ready even when its
 	// loopback listener is stopped: gateways start on demand on the first call.
 	info.Ready = p.working()

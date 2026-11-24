@@ -89,6 +89,9 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				if err := store.Delete(args[1]); err != nil {
 					return fmt.Errorf("disconnect %s: %w", args[1], err)
 				}
+				if err := store.SetState(args[1], ""); err != nil {
+					return fmt.Errorf("disconnect %s state: %w", args[1], err)
+				}
 				fmt.Fprintf(command.OutOrStdout(), "%s disconnected\n", args[1])
 				return nil
 			}
@@ -160,7 +163,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 			bridgeError := false
 			defer func() {
 				if err == nil {
-					if store.State(provider) != "" {
+					if store.State(provider) == "bridge error" {
 						_ = store.SetState(provider, "")
 					}
 					return
@@ -210,6 +213,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 						bridgeError = true
 						return fmt.Errorf("start cline ACP bridge (did you run `cline auth`?): %w", err)
 					}
+				}
+			}
+			if isGatewayProvider(provider) {
+				if err := store.SetState(provider, "connected"); err != nil {
+					return fmt.Errorf("record %s connection: %w", provider, err)
 				}
 			}
 			fmt.Fprintf(command.OutOrStdout(), "%s connected\n", provider)
@@ -317,6 +325,13 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 			fmt.Fprintln(command.OutOrStdout(), "Non-interactive session: the gateway will stop when this command exits.")
 		}
 	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		return fmt.Errorf("load credentials: %w", err)
+	}
+	if err := store.SetState(spec.Name, "connected"); err != nil {
+		return fmt.Errorf("record %s connection: %w", spec.Name, err)
+	}
 	account, _ := providers.ExternalGatewayAccount(spec.Name)
 	fmt.Fprintf(command.OutOrStdout(), "%s ready (account: %s, model: %s)\n", spec.Name, account.Required, spec.Alias)
 	return nil
@@ -352,7 +367,13 @@ func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered,
 		state := "not connected"
 		if store.Token(name) != "" {
 			state = "connected"
-			if marked := store.State(name); marked != "" {
+			if _, ok := providers.ExternalGatewayByName(name); ok {
+				account, _ := providers.ExternalGatewayAccount(name)
+				if account.Required != "none" && !strings.EqualFold(store.State(name), "connected") {
+					state = "installed — account: " + account.Required
+				}
+			}
+			if marked := store.State(name); marked != "" && marked != "connected" {
 				state = marked
 			}
 		} else if name == "opencode-zen" || name == "opencode-go" {
