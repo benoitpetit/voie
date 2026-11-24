@@ -784,3 +784,35 @@ func StartExternalGateway(name string) error {
 	}
 	return gateway.Ensure(context.Background())
 }
+
+// ExternalGatewayUninstall returns the local directory to delete and, when the
+// installer used a global npm/uv package, the command to uninstall it. An
+// empty command means only the cloned directory needs removing.
+func ExternalGatewayUninstall(name string) (string, []string) {
+	spec, ok := ExternalGatewayByName(name)
+	if !ok {
+		return "", nil
+	}
+	dir := gatewayDir(spec)
+	if len(spec.Install) == 0 {
+		return dir, nil
+	}
+	switch spec.Install[0] {
+	case "npm":
+		if len(spec.Install) < 4 {
+			return dir, nil
+		}
+		pkg := spec.Install[3]
+		if index := strings.LastIndex(pkg, "@"); index > 0 {
+			pkg = pkg[:index]
+		}
+		return dir, []string{"npm", "uninstall", "-g", pkg}
+	case "uv":
+		if len(spec.Install) < 4 {
+			return dir, nil
+		}
+		return dir, []string{"uv", "tool", "uninstall", spec.Install[3]}
+	default:
+		return dir, nil
+	}
+}

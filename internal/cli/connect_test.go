@@ -11,6 +11,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/providers"
+	"github.com/spf13/cobra"
 )
 
 func runConnect(t *testing.T, args []string, stdin string, check func(string, string) error) (string, string, error) {
@@ -378,4 +379,104 @@ func TestConnectListShowsGatewayNeedsConnect(t *testing.T) {
 		}
 	}
 	t.Fatal("qoder2api missing from connect --list")
+}
+
+func TestDisconnectAsksBeforeRemovingGateway(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir, command := providers.ExternalGatewayUninstall("qoder2api")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "marker"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("qoder2api", "token"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetState("qoder2api", "connected"); err != nil {
+		t.Fatal(err)
+	}
+	previousConfirm := confirmRemoveApp
+	confirmRemoveApp = func(*cobra.Command, string) bool { return true }
+	t.Cleanup(func() { confirmRemoveApp = previousConfirm })
+	var calls []string
+	previousRunner := uninstallRunner
+	uninstallRunner = func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return nil
+	}
+	t.Cleanup(func() { uninstallRunner = previousRunner })
+
+	stdout, _, err := runConnect(t, []string{"disconnect", "qoder2api"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout, "the saved key has been removed") {
+		t.Fatalf("output = %q, want key removal notice", stdout)
+	}
+	reloaded, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Token("qoder2api") != "" || reloaded.State("qoder2api") != "" {
+		t.Fatalf("credentials not cleared: %+v", reloaded)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "marker")); !os.IsNotExist(err) {
+		t.Fatalf("gateway directory not removed: %v", err)
+	}
+	if len(calls) != len(command) || (len(command) > 0 && calls[0] != strings.Join(command, " ")) {
+		t.Fatalf("uninstall calls = %v, want %v", calls, command)
+	}
+}
+
+func TestDisconnectKeepsAppWhenDeclined(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir, _ := providers.ExternalGatewayUninstall("trae2api")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	previousConfirm := confirmRemoveApp
+	confirmRemoveApp = func(*cobra.Command, string) bool { return false }
+	t.Cleanup(func() { confirmRemoveApp = previousConfirm })
+	called := false
+	previousRunner := uninstallRunner
+	uninstallRunner = func(string, ...string) error { called = true; return nil }
+	t.Cleanup(func() { uninstallRunner = previousRunner })
+
+	if _, _, err := runConnect(t, []string{"disconnect", "trae2api"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("uninstall ran after the user declined")
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("gateway directory should remain: %v", err)
+	}
+}
+
+func TestDisconnectRemoveAppFlagSkipsPrompt(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir, _ := providers.ExternalGatewayUninstall("qoder2api")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	previousConfirm := confirmRemoveApp
+	confirmRemoveApp = func(*cobra.Command, string) bool {
+		t.Fatal("prompt must not be shown with --remove-app")
+		return false
+	}
+	t.Cleanup(func() { confirmRemoveApp = previousConfirm })
+	previousRunner := uninstallRunner
+	uninstallRunner = func(string, ...string) error { return nil }
+	t.Cleanup(func() { uninstallRunner = previousRunner })
+	if _, _, err := runConnect(t, []string{"disconnect", "qoder2api", "--remove-app"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("gateway directory not removed: %v", err)
+	}
 }

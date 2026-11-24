@@ -132,3 +132,6 @@ The MCP transport writes protocol messages to stdout. `voie mcp` sends applicati
 - If a provider is unavailable, try another model from the runtime catalogue. Provider URL reachability does not confirm inference availability.
 - Duck.ai chat requires Chrome or Chromium installed on the host.
 - If `serve` rejects a public bind, set a nonempty `API_TOKEN` before starting it.
+
+
+`voie connect disconnect <provider>` removes the saved key and its connection state, so the provider's models disappear from `voie models`. For CLI agents and local gateways, voie asks whether to also delete the installed npm/uv package or the cloned gateway directory; answering no keeps the files. `--remove-app` removes them without a prompt (for scripts), and `--keep-app` keeps them without prompting.

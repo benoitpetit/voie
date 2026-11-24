@@ -227,3 +227,24 @@ func TestGatewayRequiresConnectBeforeListed(t *testing.T) {
 		t.Fatal("connected gateway should be callable")
 	}
 }
+
+func TestExternalGatewayUninstallTargets(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		dir  bool
+		cmd  string
+	}{
+		{name: "qoder2api", dir: true},
+		{name: "omniroute", dir: true, cmd: "npm uninstall -g omniroute"},
+		{name: "workbuddy2api", dir: true, cmd: "uv tool uninstall workbuddy2api"},
+	} {
+		dir, command := ExternalGatewayUninstall(tc.name)
+		if (dir != "") != tc.dir {
+			t.Errorf("%s: dir = %q", tc.name, dir)
+		}
+		got := strings.Join(command, " ")
+		if got != tc.cmd {
+			t.Errorf("%s: command = %q, want %q", tc.name, got, tc.cmd)
+		}
+	}
+}

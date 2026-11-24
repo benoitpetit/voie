@@ -194,3 +194,12 @@ func TestDocsDescribeModelTiers(t *testing.T) {
 	assertContains(t, "api-reference.md", api, "price unknown")
 	assertContains(t, "README.md", readDoc(t, "README.md"), "TIER")
 }
+
+func TestDocsDescribeDisconnectCleanup(t *testing.T) {
+	cli := readDoc(t, "docs/cli.md")
+	assertContains(t, "docs/cli.md", cli, "--remove-app")
+	assertContains(t, "docs/cli.md", cli, "saved key")
+	assertContains(t, "docs/cli.md", cli, "disconnect")
+	readme := readDoc(t, "README.md")
+	assertContains(t, "README.md", readme, "--remove-app")
+}

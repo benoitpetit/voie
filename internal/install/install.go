@@ -314,3 +314,55 @@ func downloadBinary(ctx context.Context, dir, binary, url, expectedSHA256 string
 	}
 	return "", fmt.Errorf("binary %q not found in release archive", binary)
 }
+
+// cliPackages maps voie provider names to the npm package installed by Install.
+var cliPackages = map[string]string{
+	"cline":        "cline",
+	"codebuddy":    "@tencent-ai/codebuddy-code",
+	"minimax-code": "@minimax-ai/code",
+	"devin":        "@cognition-ai/devin",
+	"qoder":        "@qoder/cli",
+	"copilot-cli":  "@github/copilot-cli",
+	"cursor":       "@cursor/agent",
+	"kiro":         "kiro-cli",
+}
+
+// Uninstall removes the CLI package and binary that Install provisioned. It is
+// only called after the user explicitly confirms removal.
+func Uninstall(ctx context.Context, provider string, runner Runner) error {
+	dir := BinaryDir()
+	if dir == "" {
+		return fmt.Errorf("cannot resolve user config directory")
+	}
+	if runner == nil {
+		runner = func(name string, args ...string) error {
+			cmd := exec.CommandContext(ctx, name, args...)
+			cmd.Stdout = io.Discard
+			cmd.Stderr = io.Discard
+			return cmd.Run()
+		}
+	}
+	if provider == "antigravity" {
+		binary := filepath.Join(dir, "CLIProxyAPI")
+		if err := os.Remove(binary); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	pkg, ok := cliPackages[provider]
+	if !ok {
+		return nil
+	}
+	if err := runner("npm", "uninstall", "--prefix", dir, pkg); err != nil {
+		return fmt.Errorf("uninstall %s: %w", pkg, err)
+	}
+	if name := binaryName(provider); name != "" {
+		_ = os.Remove(filepath.Join(dir, "node_modules", ".bin", name))
+	}
+	if provider == "kiro" {
+		if bridgeDir := KiroBridgeDir(); bridgeDir != "" {
+			_ = os.RemoveAll(bridgeDir)
+		}
+	}
+	return nil
+}

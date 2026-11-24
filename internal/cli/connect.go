@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,19 @@ func buildConnectableProviders() []string {
 	return names
 }
 
+var uninstallRunner install.Runner
+
+// confirmRemoveApp asks before deleting local CLI packages or cloned gateways.
+// Without a terminal it defaults to keeping the files.
+var confirmRemoveApp = func(command *cobra.Command, provider string) bool {
+	file, ok := command.InOrStdin().(*os.File)
+	if !ok || !term.IsTerminal(int(file.Fd())) {
+		return false
+	}
+	answer, err := readLine(command, bufio.NewReader(command.InOrStdin()), "Also remove the local CLI/gateway files for "+provider+"? [y/N]: ", false)
+	return err == nil && (strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes"))
+}
+
 var connectInstaller = install.Ensure
 
 var startClineBridge = providers.StartClineBridge
@@ -59,10 +73,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 	var token string
 	var fields []string
 	var list bool
+	var removeApp, keepApp bool
 	command := &cobra.Command{
 		Use:   "connect [provider]",
 		Short: "Connect a provider with its token",
-		Long:  "Connect stores one token per provider in the user config directory (0600). Environment variables override saved tokens. The two opencode providers use the local gateway key, which defaults to voie-local.",
+		Long:  "Connect stores one token per provider in the user config directory (0600). Environment variables override saved tokens. Disconnecting removes the saved key, and can also remove local CLI/gateway files after confirmation. The two opencode providers use the local gateway key, which defaults to voie-local.",
 		Example: `  voie connect
   voie connect openrouter --token sk-or-v1-...
   voie connect --list
@@ -92,7 +107,13 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				if err := store.SetState(args[1], ""); err != nil {
 					return fmt.Errorf("disconnect %s state: %w", args[1], err)
 				}
-				fmt.Fprintf(command.OutOrStdout(), "%s disconnected\n", args[1])
+				fmt.Fprintf(command.OutOrStdout(), "%s disconnected; the saved key has been removed.\n", args[1])
+				if hasLocalApp(args[1]) && (removeApp || (!keepApp && confirmRemoveApp(command, args[1]))) {
+					if err := removeProviderFiles(args[1]); err != nil {
+						return fmt.Errorf("remove %s local files: %w", args[1], err)
+					}
+					fmt.Fprintf(command.OutOrStdout(), "%s local CLI/gateway files removed\n", args[1])
+				}
 				return nil
 			}
 			if len(args) > 1 {
@@ -227,7 +248,39 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 	command.Flags().StringVar(&token, "token", "", "provider token (non-interactive)")
 	command.Flags().StringArrayVar(&fields, "field", nil, "additional credential as key=value (repeatable)")
 	command.Flags().BoolVar(&list, "list", false, "list connectable providers and their state")
+	command.Flags().BoolVar(&removeApp, "remove-app", false, "also remove local CLI/gateway files (no prompt)")
+	command.Flags().BoolVar(&keepApp, "keep-app", false, "keep local CLI/gateway files (default)")
 	return command
+}
+
+func hasLocalApp(provider string) bool {
+	if _, ok := providers.ExternalGatewayByName(provider); ok {
+		return true
+	}
+	if _, ok := providers.ACPProviderSpecByName(provider); ok {
+		return true
+	}
+	return provider == "antigravity" || provider == "kiro" || provider == "cline"
+}
+
+func removeProviderFiles(provider string) error {
+	if dir, command := providers.ExternalGatewayUninstall(provider); dir != "" {
+		if len(command) > 0 {
+			if uninstallRunner != nil {
+				if err := uninstallRunner(command[0], command[1:]...); err != nil {
+					return err
+				}
+			} else {
+				cmd := exec.Command(command[0], command[1:]...)
+				cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+				if err := cmd.Run(); err != nil {
+					return err
+				}
+			}
+		}
+		return os.RemoveAll(dir)
+	}
+	return install.Uninstall(context.Background(), provider, uninstallRunner)
 }
 
 func validateToken(provider, token string) error {
