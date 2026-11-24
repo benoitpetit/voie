@@ -1156,3 +1156,38 @@ func TestHTTPStreamingPropagatesToolCalls(t *testing.T) {
 		t.Fatalf("SSE stream has no tool calls: %s", body)
 	}
 }
+
+func TestStreamingUsageChunkCarriesConversationAndRouting(t *testing.T) {
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	registry := app.NewRegistry()
+	registry.Register("test", &httpTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute, Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := service.CreateConversation(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	body := `{"stream":true,"model":"model","conversation_id":"` + conversation.ID + `","stream_options":{"include_usage":true},"messages":[{"role":"user","content":"hi"}]}`
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	for _, chunk := range sseChatChunks(recorder.Body.String()) {
+		if chunk["usage"] == nil {
+			continue
+		}
+		if chunk["conversation_id"] != conversation.ID {
+			t.Fatalf("usage chunk conversation_id = %v", chunk["conversation_id"])
+		}
+		if chunk["routing"] == nil {
+			t.Fatalf("usage chunk has no routing: %v", chunk)
+		}
+		return
+	}
+	t.Fatal("no usage chunk found")
+}

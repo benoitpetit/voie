@@ -206,8 +206,9 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		}
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(),
-			Model: resolvedModel, Choices: []app.StreamChoice{},
-			Usage: &app.Usage{PromptTokens: promptTokens, CompletionTokens: completionTokens, TotalTokens: promptTokens + completionTokens},
+			Model: resolvedModel, ConversationID: request.ConversationID, Routing: finalRouting,
+			Choices: []app.StreamChoice{},
+			Usage:   &app.Usage{PromptTokens: promptTokens, CompletionTokens: completionTokens, TotalTokens: promptTokens + completionTokens},
 		})
 	}
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
