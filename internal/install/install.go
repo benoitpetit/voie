@@ -4,8 +4,11 @@ package install
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +20,10 @@ import (
 	"strings"
 )
 
-// githubAPIBase is overridable in tests.
+// githubAPIBase and maxArchiveBytes are overridable in tests.
 var githubAPIBase = "https://api.github.com"
+
+var maxArchiveBytes = 128 << 20
 
 // Runner executes an external command. Injected in tests.
 type Runner func(name string, args ...string) error
@@ -180,6 +185,44 @@ func Install(ctx context.Context, provider string, runner Runner) (string, error
 	}
 }
 
+func parseChecksums(data []byte) map[string]string {
+	result := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			result[fields[1]] = strings.ToLower(fields[0])
+		}
+	}
+	return result
+}
+
+func fetchChecksums(ctx context.Context, rel release) (map[string]string, error) {
+	var url string
+	for _, asset := range rel.Assets {
+		if strings.ToLower(asset.Name) == "checksums.txt" {
+			url = asset.BrowserDownloadURL
+			break
+		}
+	}
+	if url == "" {
+		return nil, fmt.Errorf("release is missing checksums.txt; refusing to install an unverified binary")
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("checksums.txt: HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	return parseChecksums(data), nil
+}
+
 func installGitHubRelease(ctx context.Context, dir, repo, binary string) (string, error) {
 	url := githubAPIBase + "/repos/" + repo + "/releases/latest"
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -196,18 +239,26 @@ func installGitHubRelease(ctx context.Context, dir, repo, binary string) (string
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
 		return "", err
 	}
+	checksums, err := fetchChecksums(ctx, rel)
+	if err != nil {
+		return "", err
+	}
 	targetOS, targetArch := runtime.GOOS, runtime.GOARCH
 	for _, asset := range rel.Assets {
 		name := strings.ToLower(asset.Name)
 		if !strings.Contains(name, targetOS) || !strings.Contains(name, targetArch) || !strings.HasSuffix(name, ".tar.gz") {
 			continue
 		}
-		return downloadBinary(ctx, dir, binary, asset.BrowserDownloadURL)
+		expected := checksums[asset.Name]
+		if expected == "" {
+			return "", fmt.Errorf("no checksum for release asset %q", asset.Name)
+		}
+		return downloadBinary(ctx, dir, binary, asset.BrowserDownloadURL, expected)
 	}
 	return "", fmt.Errorf("no release asset for %s/%s", runtime.GOOS, runtime.GOARCH)
 }
 
-func downloadBinary(ctx context.Context, dir, binary, url string) (string, error) {
+func downloadBinary(ctx context.Context, dir, binary, url, expectedSHA256 string) (string, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -217,7 +268,20 @@ func downloadBinary(ctx context.Context, dir, binary, url string) (string, error
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("download %s: HTTP %d", url, resp.StatusCode)
 	}
-	gz, err := gzip.NewReader(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(maxArchiveBytes)+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) > maxArchiveBytes {
+		return "", fmt.Errorf("download %s exceeds the %d byte limit", url, maxArchiveBytes)
+	}
+	if expectedSHA256 != "" {
+		sum := sha256.Sum256(data)
+		if hex.EncodeToString(sum[:]) != strings.ToLower(expectedSHA256) {
+			return "", fmt.Errorf("SHA-256 mismatch for %s", url)
+		}
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return "", err
 	}

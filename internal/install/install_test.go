@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -40,8 +42,12 @@ func TestInstallGitHubRelease(t *testing.T) {
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/router-for-me/CLIProxyAPI/releases/latest":
-			_, _ = fmt.Fprintf(w, `{"tag_name":"v1","assets":[{"name":"CLIProxyAPI_v1_%s_%s.tar.gz","browser_download_url":%q}]}`,
-				runtime.GOOS, runtime.GOARCH, server.URL+"/asset")
+			assetName := fmt.Sprintf("CLIProxyAPI_v1_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
+			_, _ = fmt.Fprintf(w, `{"tag_name":"v1","assets":[{"name":%q,"browser_download_url":%q},{"name":"checksums.txt","browser_download_url":%q}]}`,
+				assetName, server.URL+"/asset", server.URL+"/checksums")
+		case "/checksums":
+			sum := sha256.Sum256(archive)
+			_, _ = fmt.Fprintf(w, "%s  CLIProxyAPI_v1_%s_%s.tar.gz\n", hex.EncodeToString(sum[:]), runtime.GOOS, runtime.GOARCH)
 		case "/asset":
 			_, _ = w.Write(archive)
 		default:
@@ -99,5 +105,63 @@ func TestInstallUsesPackageManagerForCLIs(t *testing.T) {
 func TestInstallRejectsUnknownProvider(t *testing.T) {
 	if _, err := Install(context.Background(), "nope", nil); err == nil {
 		t.Fatal("expected an error for an unknown provider")
+	}
+}
+
+func TestInstallGitHubReleaseRejectsChecksumMismatch(t *testing.T) {
+	archive := releaseArchive(t, "CLIProxyAPI", "#!/bin/sh\necho bad\n")
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/router-for-me/CLIProxyAPI/releases/latest":
+			_, _ = fmt.Fprintf(w, `{"tag_name":"v1","assets":[{"name":"CLIProxyAPI_v1_%s_%s.tar.gz","browser_download_url":%q},{"name":"checksums.txt","browser_download_url":%q}]}`,
+				runtime.GOOS, runtime.GOARCH, server.URL+"/asset", server.URL+"/checksums")
+		case "/checksums":
+			_, _ = fmt.Fprintf(w, "%064d  CLIProxyAPI_v1_%s_%s.tar.gz\n", 0, runtime.GOOS, runtime.GOARCH)
+		case "/asset":
+			_, _ = w.Write(archive)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	oldBase := githubAPIBase
+	githubAPIBase = server.URL
+	defer func() { githubAPIBase = oldBase }()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if _, err := Install(context.Background(), "antigravity", nil); err == nil {
+		t.Fatal("mismatched checksum was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(BinaryDir(), "CLIProxyAPI")); err == nil {
+		t.Fatal("unverified binary was written")
+	}
+}
+
+func TestInstallGitHubReleaseRejectsMissingChecksums(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"tag_name":"v1","assets":[{"name":"CLIProxyAPI_v1_%s_%s.tar.gz","browser_download_url":%q}]}`,
+			runtime.GOOS, runtime.GOARCH, server.URL+"/asset")
+	}))
+	defer server.Close()
+	oldBase := githubAPIBase
+	githubAPIBase = server.URL
+	defer func() { githubAPIBase = oldBase }()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if _, err := Install(context.Background(), "antigravity", nil); err == nil {
+		t.Fatal("release without checksums.txt was accepted")
+	}
+}
+
+func TestDownloadBinaryRejectsOversizedArchive(t *testing.T) {
+	oldMax := maxArchiveBytes
+	maxArchiveBytes = 16
+	defer func() { maxArchiveBytes = oldMax }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(make([]byte, 32))
+	}))
+	defer server.Close()
+	if _, err := downloadBinary(context.Background(), t.TempDir(), "CLIProxyAPI", server.URL, ""); err == nil {
+		t.Fatal("oversized archive was accepted")
 	}
 }
