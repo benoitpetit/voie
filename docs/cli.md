@@ -8,12 +8,15 @@ To build the single executable from source, run this from the repository root:
 go build -o voie .
 ```
 
-The monochrome ASCII wordmark appears in `voie --help`. Command output stays free of branding so chat text and JSON remain easy to pipe into other tools.
+The monochrome Unicode wordmark appears in `voie --help`. Command output stays free of branding so chat text and JSON remain easy to pipe into other tools.
 
 ## Commands
 
 ```text
 voie serve [--host HOST] [--port PORT]
+voie connect [provider] [--token TOKEN] [--field KEY=VALUE] [--list]
+voie install [provider] [--list]
+voie keys [provider]
 voie chat --model MODEL [--provider PROVIDER] [--fallback-model ID]... [PROMPT...]
 voie chat --strategy auto [--task TASK] [--conversation ID] [--fallback-model ID]... [PROMPT...]
 voie chat --strategy ensemble [--candidate-count N] [--ensemble-model ID]... [--task PROFILE] [--ensemble-mode MODE] [--chain-agents N] [--debate-turns N] [--conversation ID] [PROMPT...]
@@ -85,7 +88,7 @@ voie conversations delete "$ID"
 
 Explicit `--ensemble-model` values (or legacy `--models`) are the ensemble candidates; do not include the configured synthesis model in that list.
 
-`models` lists the runtime catalogue in a table with model, owner, and provider columns, or as JSON with `--json`. `providers` lists provider metadata and performs HTTP URL reachability checks in a table with provider, label, status, and model-count columns; its JSON mode returns an object with `data`, `count`, and `timestamp`. A provider marked `alive` has responded to an HTTP GET; this does not guarantee inference works.
+`models` lists the runtime catalogue in a table with provider and model columns, or as JSON with `--json`. `providers` lists provider metadata and performs HTTP URL reachability checks in a table with provider, label, status, and model-count columns; its JSON mode returns an object with `data`, `count`, and `timestamp`. A provider marked `alive` has responded to an HTTP GET; this does not guarantee inference works.
 
 `mcp` runs the MCP stdio server. Use this command in an MCP client configuration rather than starting it as an interactive shell command.
 

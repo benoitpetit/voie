@@ -66,3 +66,33 @@ func TestSubcommandHelpShowsOwnFlagsWithoutInitializingRuntime(t *testing.T) {
 		})
 	}
 }
+
+func TestErrorsDoNotWriteUsageToStdout(t *testing.T) {
+	for _, args := range [][]string{
+		{"serve", "extra"},
+		{"chat"},
+		{"models", "extra"},
+		{"version", "extra"},
+		{"update", "extra"},
+	} {
+		var stdout, stderr bytes.Buffer
+		err := Execute(context.Background(), args, strings.NewReader(""), &stdout, &stderr, nil)
+		if err == nil {
+			t.Errorf("%v: expected an error", args)
+			continue
+		}
+		if stdout.Len() != 0 {
+			t.Errorf("%v: stdout = %q, want empty", args, stdout.String())
+		}
+		// main.go prints returned errors to stderr; Execute itself stays silent.
+	}
+}
+
+func TestRootExamplesUseConsistentIndent(t *testing.T) {
+	root := NewRootCommand(context.Background(), strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, nil)
+	for _, line := range strings.Split(root.Example, "\n") {
+		if line != "" && !strings.HasPrefix(line, "  ") {
+			t.Errorf("example line has a different indent: %q", line)
+		}
+	}
+}

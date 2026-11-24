@@ -29,13 +29,14 @@ func NewRootCommand(ctx context.Context, stdin io.Reader, stdout, stderr io.Writ
 		Short: "A free AI API for discovering and calling models",
 		Long:  brand.Banner() + "\n\n" + brand.Name + " provides an OpenAI-compatible HTTP API, a local CLI, and an MCP server over stdio for one shared model catalogue. Commands that run application services load runtime configuration when run; help does not initialize the runtime.",
 		Example: `  voie --help
-	  voie version
-	  voie models
+  voie version
+  voie models
   voie chat --model MODEL_ID "Summarize this text"
   cat prompt.txt | voie chat --model MODEL_ID
   voie serve --host 127.0.0.1 --port 8080
   MCP client: {"command":"/absolute/path/to/voie","args":["mcp"]}`,
 		SilenceErrors: true,
+		SilenceUsage:  true,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if showVersion {
 				return writeVersion(command.OutOrStdout())

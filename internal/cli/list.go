@@ -17,7 +17,7 @@ func newModelsCommand(getService func() (*app.Service, error)) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "models",
 		Short: "List supported model IDs",
-		Long:  "List supported model IDs and their owners and providers. Runtime configuration is loaded when the command runs; use --json for machine-readable output.",
+		Long:  "List supported model IDs and their providers. Runtime configuration is loaded when the command runs; use --json for machine-readable output.",
 		Example: `  voie models
   voie models --json`,
 		Args: cobra.NoArgs,
