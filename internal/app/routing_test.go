@@ -383,3 +383,37 @@ func (p *routingStub) callCount() int {
 	defer p.mu.Unlock()
 	return len(p.calls)
 }
+
+func TestRoutingHonorsPrefixedModelIDsFromCatalogue(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("duckai", &testProvider{info: ProviderInfo{
+		Name: "duckai", Working: true, SupportedModels: []string{"gpt-6-luna"},
+	}})
+	service, err := NewService(registry, ServiceOptions{
+		RoutingPolicy: RoutingPolicy{
+			Models: map[string]ModelDescriptor{
+				"dk-gpt-6-luna": {Description: "coding model", Capabilities: []string{"coding"}},
+			},
+			Tasks: map[string]TaskRule{
+				"coding": {RequiredCapabilities: []string{"coding"}, PreferredModels: []string{"dk-gpt-6-luna"}},
+			},
+			DefaultProfile: "coding",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, _, err := service.selectAutomatic(context.Background(), CompletionRequest{Task: "coding"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candidate.Model != "gpt-6-luna" || candidate.Provider != "duckai" {
+		t.Fatalf("candidate = %+v, want the duckai model", candidate)
+	}
+	if !reflect.DeepEqual(candidate.Capabilities, []string{"coding"}) {
+		t.Fatalf("capabilities = %v, want [coding]", candidate.Capabilities)
+	}
+	if candidate.Description != "coding model" {
+		t.Fatalf("description = %q, want the prefixed descriptor", candidate.Description)
+	}
+}

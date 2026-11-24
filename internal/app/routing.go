@@ -275,7 +275,7 @@ func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, ex
 	}
 	preferred := make(map[string]int, len(rule.PreferredModels))
 	for i, model := range rule.PreferredModels {
-		preferred[strings.ToLower(strings.TrimSpace(model))] = i
+		preferred[canonicalModelID(model)] = i
 	}
 	seen := make(map[string]struct{})
 	candidates := make([]ModelCandidate, 0)
@@ -318,8 +318,8 @@ func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, ex
 		}
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		left, leftOK := preferred[strings.ToLower(candidates[i].Model)]
-		right, rightOK := preferred[strings.ToLower(candidates[j].Model)]
+		left, leftOK := preferred[canonicalModelID(candidates[i].Model)]
+		right, rightOK := preferred[canonicalModelID(candidates[j].Model)]
 		if leftOK != rightOK {
 			return leftOK
 		}
@@ -331,9 +331,15 @@ func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, ex
 	return candidates, nil
 }
 
+// canonicalModelID maps public prefixed IDs and raw upstream IDs to one
+// comparison key, so routing.json can use the IDs shown by `voie models`.
+func canonicalModelID(id string) string {
+	return strings.ToLower(strings.TrimSpace(NormalizeModelID(id)))
+}
+
 func (s *Service) modelDescriptor(model string) ModelDescriptor {
 	for id, descriptor := range s.options.RoutingPolicy.Models {
-		if strings.EqualFold(id, model) {
+		if canonicalModelID(id) == canonicalModelID(model) {
 			return descriptor
 		}
 	}
