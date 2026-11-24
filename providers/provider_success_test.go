@@ -226,3 +226,22 @@ func TestPPLXProxySignUpAnswerBecomesActionableError(t *testing.T) {
 		t.Fatalf("error = %v, want actionable cookie error", err)
 	}
 }
+
+func TestPPLXProxyOmitsUnsupportedMaxTokens(t *testing.T) {
+	var captured map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`)
+	}))
+	defer server.Close()
+	provider := newOpenAIKeylessProvider(openAIKeylessConfig{
+		Name: "pplx-proxy", CompletionsURL: server.URL, DefaultModel: "auto",
+		ModelIDs: map[string]string{"auto": "auto"}, OmitDefaultMaxTokens: true,
+	}, server.Client())
+	if _, err := provider.ChatCompletion(context.Background(), []Message{{Role: "user", Content: "hi"}}, "auto"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := captured["max_tokens"]; ok {
+		t.Fatalf("max_tokens must be omitted for pplx-proxy: %#v", captured)
+	}
+}

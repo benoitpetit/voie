@@ -640,7 +640,13 @@ func (s *Service) selectProvider(request CompletionRequest) (Provider, string, e
 		if s.options.DefaultProvider != "" {
 			provider = s.registry.Get(s.options.DefaultProvider)
 		} else {
-			provider = s.registry.Get("perplexity")
+			for _, name := range s.registry.GetProviderNames() {
+				candidate := s.registry.Get(name)
+				if candidate.GetInfo().Working {
+					provider = candidate
+					break
+				}
+			}
 		}
 	} else {
 		provider = s.registry.GetForModel(requestedModel)

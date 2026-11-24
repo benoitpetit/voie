@@ -403,6 +403,9 @@ func TestConnectPPLXProxyCapturesCookie(t *testing.T) {
 	if !strings.Contains(string(data), "PPLX_COOKIE=session-token") {
 		t.Fatalf(".env = %q, want captured cookie", data)
 	}
+	if !strings.Contains(string(data), "PPLX_PROXY_API_KEY=voie-local") {
+		t.Fatalf(".env = %q, want the loopback key voie sends", data)
+	}
 }
 
 func TestInstallListIsCompact(t *testing.T) {
@@ -460,4 +463,28 @@ func TestPreflightAcceptsGeneratedRelativeBinary(t *testing.T) {
 	if err := preflightInstallStep([]string{"definitely-missing-tool"}, dir); err == nil {
 		t.Fatal("missing tool accepted")
 	}
+}
+
+func TestConnectListShowsGatewayConnectedWithoutToken(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetState("pplx-proxy", "connected"); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, err := runConnect(t, []string{"--list"}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.Contains(line, "pplx-proxy") {
+			if !strings.Contains(line, "connected") || strings.Contains(line, "not connected") {
+				t.Fatalf("gateway line = %q, want connected", line)
+			}
+			return
+		}
+	}
+	t.Fatal("pplx-proxy missing from connect --list")
 }

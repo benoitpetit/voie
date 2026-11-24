@@ -11,7 +11,7 @@ import (
 
 func TestRegistryRoutesOnlySupportedModels(t *testing.T) {
 	registry := providers.NewRegistry()
-	for _, model := range []string{"gpt-5.6-luna", "claude-3-haiku", "turbo"} {
+	for _, model := range []string{"gpt-5.6-luna", "claude-3-haiku", "or-nvidia-nemotron-3-ultra-550b-a55b-free"} {
 		if got := registry.GetForModel(model); got == nil {
 			t.Errorf("GetForModel(%q) = nil, want registered provider", model)
 		}
@@ -27,7 +27,7 @@ func TestRegistryProviderNamesAreStable(t *testing.T) {
 	if !sort.StringsAreSorted(got) {
 		t.Fatalf("GetProviderNames() is not sorted: %v", got)
 	}
-	for _, want := range []string{"perplexity", "duckai", "opencode-zen", "orcarouter", "groq", "codebuddy", "omniroute"} {
+	for _, want := range []string{"duckai", "opencode-zen", "orcarouter", "groq", "codebuddy", "omniroute"} {
 		found := false
 		for _, name := range got {
 			if name == want {
