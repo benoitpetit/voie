@@ -194,3 +194,11 @@ func TestDocsDescribeModelTiers(t *testing.T) {
 	assertContains(t, "api-reference.md", api, "price unknown")
 	assertContains(t, "README.md", readDoc(t, "README.md"), "TIER")
 }
+
+func TestDocsDescribePPLXProxyGateway(t *testing.T) {
+	for _, file := range []string{"README.md", "docs/cli.md"} {
+		content := readDoc(t, file)
+		assertContains(t, file, content, "pplx-proxy")
+		assertContains(t, file, content, "cookie")
+	}
+}

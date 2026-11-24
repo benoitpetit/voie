@@ -187,6 +187,23 @@ var ExternalGateways = []ExternalGatewaySpec{
 		Start: []string{"bash", "start-trae2api-hub.sh"},
 	},
 	{
+		Name: "pplx-proxy", Label: "Perplexity (pplx-proxy)", Repo: "https://github.com/jamie950315/pplx-proxy.git",
+		Port: 8892, Alias: "pplx-auto", Upstream: "auto", HealthPath: "/health",
+		Deps: [][]string{
+			{"python3", "-m", "venv", "venv"},
+			{"venv/bin/pip", "install", "-r", "requirements.txt"},
+		},
+		Start:           []string{"venv/bin/uvicorn", "server:app", "--host", "127.0.0.1", "--port", "8892"},
+		Check:           []string{"test", "-x", "server.py"},
+		Env:             map[string]string{"ACCOUNT_TYPE": "free"},
+		GeneratedEnv:    []string{"PPLX_PROXY_API_KEY"},
+		AccountRequired: "upstream",
+		AccountKind:     "Perplexity session cookie (captured by voie connect)",
+		AccountURL:      "https://www.perplexity.ai",
+		SetupHint:       "voie captures the Perplexity session cookie in a browser during connect; keep this account logged in",
+		KeyRequired:     "optional loopback key (PPLX_PROXY_API_KEY)",
+	},
+	{
 		Name: "ollama", Label: "Ollama", Repo: "https://ollama.com",
 		Port: 11434, Alias: "ollama-local", Upstream: "qwen3.5:4b", HealthPath: "/api/tags",
 		Install:         []string{"sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"},
@@ -446,6 +463,30 @@ func RefreshGatewayModels(name string) {
 
 // ProvisionGatewayEnv creates the generated secrets once and reuses them on
 // every start, so the gateway works without manual environment setup.
+// SetGatewayEnvValue writes one key to a gateway's .env, preserving other
+// entries and keeping the file private.
+func SetGatewayEnvValue(name, key, value string) error {
+	dir := gatewayDirFor(name)
+	if dir == "" {
+		return fmt.Errorf("cannot resolve gateway directory")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, ".env")
+	lines := []string{}
+	if data, err := os.ReadFile(path); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
+				continue
+			}
+			lines = append(lines, line)
+		}
+	}
+	lines = append(lines, key+"="+value)
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+}
+
 func ProvisionGatewayEnv(spec ExternalGatewaySpec) error {
 	dir := gatewayDir(spec)
 	// The gateway process uses this directory as its working directory; create
@@ -622,6 +663,14 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 			return fetchGatewayModels(spec.Name, "http://127.0.0.1:"+itoa(spec.Port), tokenSupplier())
 		},
 		Ensure: gateway.Ensure,
+	}
+	if spec.Name == "pplx-proxy" {
+		cfg.ResponseHint = func(content string) error {
+			if strings.Contains(content, "Sign up and repeat your request.") {
+				return fmt.Errorf("Perplexity cookie expired or invalid; run `voie connect pplx-proxy`")
+			}
+			return nil
+		}
 	}
 	return &ExternalGateway{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec, gateway: gateway}
 }

@@ -35,6 +35,10 @@ func buildConnectableProviders() []string {
 	return names
 }
 
+var installExternalGatewayFn = installExternalGateway
+var capturePerplexityCookie = providers.CapturePerplexityCookie
+var startExternalGateway = providers.StartExternalGateway
+
 var connectInstaller = install.Ensure
 
 var startClineBridge = providers.StartClineBridge
@@ -274,7 +278,7 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	printKeyHelp(command, spec.Name)
 	installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
 	if !installed {
-		if err := installExternalGateway(command, spec); err != nil {
+		if err := installExternalGatewayFn(command, spec); err != nil {
 			return err
 		}
 	}
@@ -302,7 +306,17 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 			fmt.Fprintf(command.OutOrStdout(), "Set up an account first with: %s\n", setup)
 		}
 	}
-	if err := providers.StartExternalGateway(spec.Name); err != nil {
+	if spec.Name == "pplx-proxy" {
+		fmt.Fprintln(command.OutOrStdout(), "Sign in to Perplexity in the browser window that opens; voie will capture the session cookie.")
+		cookie, err := capturePerplexityCookie(command.Context())
+		if err != nil {
+			return fmt.Errorf("capture Perplexity cookie: %w", err)
+		}
+		if err := providers.SetGatewayEnvValue(spec.Name, "PPLX_COOKIE", cookie); err != nil {
+			return fmt.Errorf("save Perplexity cookie: %w", err)
+		}
+	}
+	if err := startExternalGateway(spec.Name); err != nil {
 		return fmt.Errorf("start %s gateway: %w", spec.Name, err)
 	}
 	if err := providers.ProvisionGatewayKey(spec); err != nil {

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Optional `pplx-proxy` gateway for Perplexity with automatic session-cookie capture during `voie connect` and an actionable error when the cookie expires.
+
 - Free/paid model tiers: `voie models` shows `TIER` and `PRICE` columns with `--free`, `--paid`, `--all` and `--provider` filters; `GET /v1/models?tier=&provider=` and MCP `list_models` carry the same fields.
 - Hidden paid models from gateway allowlists, the free-model catalogue and Perplexity are now callable and listed as `paid`. Public per-token prices are fetched from OpenRouter when available; otherwise paid models show `price unknown`.
 
@@ -18,7 +20,7 @@
 ### Added
 
 - 16 token-based OpenAI-compatible providers (OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run, Runcrate) declared in one catalogue.
-- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for 16 opt-in third-party gateways.
+- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for 17 opt-in third-party gateways.
 - Model IDs carry a provider prefix and list their provider in `voie models`, `GET /v1/models` and MCP `list_models`.
 
 - `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing. Connecting Antigravity, Kiro or Cline installs their missing toolchain automatically; `voie install <provider>` does the same explicitly.

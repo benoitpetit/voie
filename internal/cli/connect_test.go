@@ -11,6 +11,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/providers"
+	"github.com/spf13/cobra"
 )
 
 func runConnect(t *testing.T, args []string, stdin string, check func(string, string) error) (string, string, error) {
@@ -378,4 +379,28 @@ func TestConnectListShowsGatewayNeedsConnect(t *testing.T) {
 		}
 	}
 	t.Fatal("qoder2api missing from connect --list")
+}
+
+func TestConnectPPLXProxyCapturesCookie(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	previousInstaller, previousCapture, previousStart := connectInstaller, capturePerplexityCookie, startExternalGateway
+	previousGatewayInstaller := installExternalGatewayFn
+	installExternalGatewayFn = func(*cobra.Command, providers.ExternalGatewaySpec) error { return nil }
+	t.Cleanup(func() { installExternalGatewayFn = previousGatewayInstaller })
+	connectInstaller = func(context.Context, string) (string, error) { return "/usr/bin/uvicorn", nil }
+	capturePerplexityCookie = func(context.Context) (string, error) { return "session-token", nil }
+	startExternalGateway = func(string) error { return nil }
+	t.Cleanup(func() {
+		connectInstaller, capturePerplexityCookie, startExternalGateway = previousInstaller, previousCapture, previousStart
+	})
+	if _, _, err := runConnect(t, []string{"pplx-proxy"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "voie", "gateways", "pplx-proxy", ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "PPLX_COOKIE=session-token") {
+		t.Fatalf(".env = %q, want captured cookie", data)
+	}
 }

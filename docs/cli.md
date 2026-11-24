@@ -132,3 +132,6 @@ The MCP transport writes protocol messages to stdout. `voie mcp` sends applicati
 - If a provider is unavailable, try another model from the runtime catalogue. Provider URL reachability does not confirm inference availability.
 - Duck.ai chat requires Chrome or Chromium installed on the host.
 - If `serve` rejects a public bind, set a nonempty `API_TOKEN` before starting it.
+
+
+`voie connect pplx-proxy` installs the optional pplx-proxy gateway, opens a browser for Perplexity sign-in, captures the session cookie into `~/.config/voie/gateways/pplx-proxy/.env` (0600) and starts the gateway. Perplexity models then appear in `voie models`. An expired or invalid cookie produces an error asking to rerun `voie connect pplx-proxy`; the cookie value is never logged.

@@ -37,6 +37,7 @@ type openAIKeylessConfig struct {
 	Headers                map[string]string           // optional extra headers (e.g. a loopback gateway key)
 	TokenSupplier          func() string               // resolves the bearer token per request
 	BodyHint               func(int, []byte) string    // optional upstream-specific error detail
+	ResponseHint           func(string) error          // optional answer validation (e.g. expired session)
 	Ensure                 func(context.Context) error // optional lazy gateway startup
 }
 
@@ -207,6 +208,11 @@ func (p *openAIKeylessProvider) decodeCompletion(body io.Reader, messages []Mess
 	message := parsed.Choices[0].Message
 	if message.Content == "" && message.ToolCalls == nil {
 		return nil, fmt.Errorf("%s: empty response", p.cfg.Name)
+	}
+	if p.cfg.ResponseHint != nil {
+		if err := p.cfg.ResponseHint(message.Content); err != nil {
+			return nil, err
+		}
 	}
 	response := CreateResponse("chatcmpl-"+uuid.New().String(), model, message.Content, EstimatePromptTokens(messages))
 	if message.ToolCalls != nil {

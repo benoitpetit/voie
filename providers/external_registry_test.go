@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -225,5 +226,35 @@ func TestGatewayRequiresConnectBeforeListed(t *testing.T) {
 	}
 	if !NewExternalGateway(spec).GetInfo().Working {
 		t.Fatal("connected gateway should be callable")
+	}
+}
+
+func TestPPLXProxyGatewaySpec(t *testing.T) {
+	spec, ok := ExternalGatewayByName("pplx-proxy")
+	if !ok {
+		t.Fatal("pplx-proxy gateway is not registered")
+	}
+	if spec.Port != 8892 || spec.HealthPath != "/health" {
+		t.Fatalf("spec = %+v", spec)
+	}
+	if spec.AccountRequired != "upstream" {
+		t.Fatalf("AccountRequired = %q, want upstream", spec.AccountRequired)
+	}
+}
+
+func TestSetGatewayEnvValue(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := SetGatewayEnvValue("pplx-proxy", "PPLX_COOKIE", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetGatewayEnvValue("pplx-proxy", "PPLX_COOKIE", "second"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(gatewayDirFor("pplx-proxy"), ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(data), "PPLX_COOKIE=") != 1 || !strings.Contains(string(data), "PPLX_COOKIE=second") {
+		t.Fatalf(".env = %q", data)
 	}
 }

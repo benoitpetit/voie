@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -202,5 +203,26 @@ func TestKeylessStreamPropagatesToolCallDeltas(t *testing.T) {
 	}
 	if len(toolCalls) != 2 {
 		t.Fatalf("tool call deltas = %d, want 2", len(toolCalls))
+	}
+}
+
+func TestPPLXProxySignUpAnswerBecomesActionableError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"Sign up and repeat your request."}}]}`)
+	}))
+	defer server.Close()
+	provider := newOpenAIKeylessProvider(openAIKeylessConfig{
+		Name: "pplx-proxy", CompletionsURL: server.URL, DefaultModel: "auto",
+		ModelIDs: map[string]string{"auto": "auto"},
+		ResponseHint: func(content string) error {
+			if strings.Contains(content, "Sign up and repeat your request.") {
+				return errors.New("Perplexity cookie expired; run `voie connect pplx-proxy`")
+			}
+			return nil
+		},
+	}, server.Client())
+	_, err := provider.ChatCompletion(context.Background(), []Message{{Role: "user", Content: "hi"}}, "auto")
+	if err == nil || !strings.Contains(err.Error(), "voie connect pplx-proxy") {
+		t.Fatalf("error = %v, want actionable cookie error", err)
 	}
 }
