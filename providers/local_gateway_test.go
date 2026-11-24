@@ -131,3 +131,31 @@ func TestGatewayShutdownTerminatesProcess(t *testing.T) {
 		t.Errorf("running gateways after shutdown = %d", len(runningGateways()))
 	}
 }
+
+func TestHealthyRejectsForeignServerOnBridgePort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer server.Close()
+	gateway := NewLocalGateway(LocalGatewaySpec{
+		Name: "bridge", BaseURL: server.URL, HealthPath: "/health",
+		HealthBody: `"service":"voie-bridge"`,
+	})
+	if gateway.healthy() {
+		t.Fatal("foreign server on the bridge port was reported healthy")
+	}
+}
+
+func TestHealthyAcceptsOwnBridgeHealth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok","service":"voie-bridge"}`))
+	}))
+	defer server.Close()
+	gateway := NewLocalGateway(LocalGatewaySpec{
+		Name: "bridge", BaseURL: server.URL, HealthPath: "/health",
+		HealthBody: `"service":"voie-bridge"`,
+	})
+	if !gateway.healthy() {
+		t.Fatal("own bridge health response was rejected")
+	}
+}

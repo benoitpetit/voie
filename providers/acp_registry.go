@@ -63,6 +63,7 @@ func NewACPProvider(spec ACPProviderSpec) *ACPProvider {
 		Args:       []string{"acp-bridge", "--provider", spec.Name},
 		BaseURL:    "http://127.0.0.1:" + itoa(spec.Port),
 		HealthPath: "/health",
+		HealthBody: `"service":"voie-bridge"`,
 		KeyEnv:     "VOIE_" + spec.Name + "_KEY",
 		Port:       spec.Port,
 	})

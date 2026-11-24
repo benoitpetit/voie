@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -27,6 +28,7 @@ type LocalGatewaySpec struct {
 	ConfigBody []byte
 	BaseURL    string
 	HealthPath string
+	HealthBody string // required substring in a healthy response; guards loopback ports
 	KeyEnv     string
 	Port       int
 	Env        map[string]string
@@ -94,8 +96,15 @@ func (g *LocalGateway) healthy() bool {
 		return false
 	}
 	defer resp.Body.Close()
-	// A responding port means the gateway is up. Several upstreams require
-	// their own login on /v1/models and would answer 401 to our local key.
+	if g.spec.HealthBody != "" {
+		if resp.StatusCode != http.StatusOK {
+			return false
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+		if err != nil || !strings.Contains(string(body), g.spec.HealthBody) {
+			return false
+		}
+	}
 	return true
 }
 

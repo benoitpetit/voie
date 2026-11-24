@@ -30,6 +30,7 @@ func clineGatewaySpec() LocalGatewaySpec {
 		ConfigPath: "",
 		BaseURL:    "http://127.0.0.1:8092",
 		HealthPath: "/health",
+		HealthBody: `"service":"voie-bridge"`,
 		KeyEnv:     "VOIE_CLINE_KEY",
 		Port:       8092,
 	}

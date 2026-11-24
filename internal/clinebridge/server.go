@@ -99,7 +99,7 @@ func Run(ctx context.Context, cfg Config) error {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		_, _ = io.WriteString(w, `{"status":"ok"}`)
+		_, _ = io.WriteString(w, `{"status":"ok","service":"voie-bridge"}`)
 	})
 	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
 		if cfg.LocalKey != "" && r.Header.Get("Authorization") != "Bearer "+cfg.LocalKey {
