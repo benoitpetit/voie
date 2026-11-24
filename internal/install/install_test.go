@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -163,5 +164,31 @@ func TestDownloadBinaryRejectsOversizedArchive(t *testing.T) {
 	defer server.Close()
 	if _, err := downloadBinary(context.Background(), t.TempDir(), "CLIProxyAPI", server.URL, ""); err == nil {
 		t.Fatal("oversized archive was accepted")
+	}
+}
+
+func TestUninstallRemovesCliPackageAndBinary(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := BinaryDir()
+	if err := os.MkdirAll(filepath.Join(dir, "node_modules", ".bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(dir, "node_modules", ".bin", "codebuddy")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	runner := func(name string, args ...string) error {
+		calls = append(calls, name+" "+strings.Join(args, " "))
+		return nil
+	}
+	if err := Uninstall(context.Background(), "codebuddy", runner); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 || calls[0] != "npm uninstall --prefix "+dir+" @tencent-ai/codebuddy-code" {
+		t.Fatalf("calls = %v", calls)
+	}
+	if _, err := os.Stat(binary); !os.IsNotExist(err) {
+		t.Fatalf("binary still present: %v", err)
 	}
 }

@@ -207,4 +207,14 @@ func TestDocsDescribeCompactInstallList(t *testing.T) {
 	content := readDoc(t, "docs/cli.md")
 	assertContains(t, "docs/cli.md", content, "--verbose")
 	assertContains(t, "docs/cli.md", content, "NEXT")
+
+}
+
+func TestDocsDescribeDisconnectCleanup(t *testing.T) {
+	cli := readDoc(t, "docs/cli.md")
+	assertContains(t, "docs/cli.md", cli, "--remove-app")
+	assertContains(t, "docs/cli.md", cli, "saved key")
+	assertContains(t, "docs/cli.md", cli, "disconnect")
+	readme := readDoc(t, "README.md")
+	assertContains(t, "README.md", readme, "--remove-app")
 }
