@@ -58,7 +58,24 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 2"); err != nil {
+	var version int
+	if err := tx.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	if version < 3 {
+		for _, statement := range []string{
+			`ALTER TABLE conversation_tombstones RENAME TO conversation_tombstones_old`,
+			`CREATE TABLE conversation_tombstones (id TEXT NOT NULL, tenant_id TEXT NOT NULL DEFAULT '', expires_at INTEGER NOT NULL, PRIMARY KEY (tenant_id, id))`,
+			`CREATE INDEX conversation_tombstones_expiry ON conversation_tombstones(expires_at)`,
+			`INSERT OR IGNORE INTO conversation_tombstones(id, tenant_id, expires_at) SELECT id, tenant_id, expires_at FROM conversation_tombstones_old`,
+			`DROP TABLE conversation_tombstones_old`,
+		} {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 3"); err != nil {
 		return err
 	}
 	return tx.Commit()

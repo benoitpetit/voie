@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,4 +223,71 @@ func hasColumn(t *testing.T, db *sql.DB, table, column string) bool {
 		}
 	}
 	return false
+}
+
+func TestTombstonesAreScopedByTenant(t *testing.T) {
+	ctx := context.Background()
+	store, err := NewSQLiteStore(filepath.Join(t.TempDir(), "scoped.db"), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	db, release, err := store.open(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	for _, tenant := range []string{"scope-a", "scope-b"} {
+		if _, err := db.Exec(`INSERT INTO conversation_tombstones(id, tenant_id, expires_at) VALUES(?,?,?)`,
+			"same-id", tenant, time.Now().Add(time.Hour).UnixNano()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := db.Query(`SELECT tenant_id FROM conversation_tombstones WHERE id='same-id'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	found := map[string]bool{}
+	for rows.Next() {
+		var tenant string
+		if err := rows.Scan(&tenant); err != nil {
+			t.Fatal(err)
+		}
+		found[tenant] = true
+	}
+	if len(found) != 2 || !found["scope-a"] || !found["scope-b"] {
+		t.Fatalf("tombstones = %v, want one per scope", found)
+	}
+}
+
+func TestCloseWaitsForInFlightOperations(t *testing.T) {
+	store, err := NewSQLiteStore(filepath.Join(t.TempDir(), "close.db"), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.ops.Add(1)
+	done := make(chan struct{})
+	go func() {
+		_ = store.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatal("Close returned while an operation was in flight")
+	case <-time.After(50 * time.Millisecond):
+	}
+	store.ops.Done()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Close did not return after the operation finished")
+	}
+}
+
+func TestStoreErrorsDoNotLeakSQL(t *testing.T) {
+	err := storeErr(errors.New("SELECT * FROM conversations: syntax error"))
+	if strings.Contains(err.Error(), "SELECT") || strings.Contains(err.Error(), "conversations") {
+		t.Fatalf("store error leaks SQL: %v", err)
+	}
 }
