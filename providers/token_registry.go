@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/benoitpetit/voie/config"
@@ -154,7 +155,7 @@ func NewTokenProvider(spec TokenProviderSpec) *TokenProvider {
 			return value
 		},
 	}
-	cfg.ModelsSupplier = func() map[string]string { return catalog.Models(spec.Name) }
+	cfg.ModelsSupplier = func() map[string]string { return catalog.AllModels(spec.Name) }
 	if spec.Name == "cloudflare-ai" {
 		cfg.URLSupplier = func() string { return cloudflareURL("models") }
 		cfg.CompletionsURLSupplier = func() string { return cloudflareURL("chat/completions") }
@@ -177,8 +178,18 @@ func (p *TokenProvider) SupportsModel(model string) bool {
 
 func (p *TokenProvider) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
+	info.FreeModels = sortedKeys(catalog.Models(p.spec.Name))
 	info.Working = p.token() != ""
 	return info
+}
+
+func sortedKeys(models map[string]string) []string {
+	names := make([]string, 0, len(models))
+	for name := range models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // TokenProviderNames lists every declarative token provider.

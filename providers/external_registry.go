@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -339,36 +340,36 @@ func writeGatewayModelsCache(entries map[string]gatewayModelCacheEntry) {
 	}
 }
 
-// filterGatewayModels keeps only the models a fresh install can actually use
-// for free. Gateways whose whole lane is keyless/local leave the list intact;
-// others declare an explicit allowlist of verified free upstream IDs.
-func filterGatewayModels(name string, models map[string]string) map[string]string {
+// gatewayFreeModels returns the discovered aliases that are verified free for
+// this gateway. nil FreeModels means the whole lane is free; an empty list
+// means none of the discovered models are free.
+func gatewayFreeModels(name string, models map[string]string) map[string]bool {
 	spec, ok := ExternalGatewayByName(name)
+	free := make(map[string]bool, len(models))
 	if !ok || spec.FreeModels == nil {
-		return models
+		for alias := range models {
+			free[alias] = true
+		}
+		return free
 	}
 	allowed := make(map[string]bool, len(spec.FreeModels))
 	for _, id := range spec.FreeModels {
 		allowed[id] = true
 	}
-	result := make(map[string]string)
 	for alias, upstream := range models {
 		if allowed[upstream] {
-			result[alias] = upstream
+			free[alias] = true
 		}
 	}
-	return result
+	return free
 }
 
-// fetchGatewayModels reads a gateway's live /v1/models list. A successful
-// discovery is persisted so the catalogue stays visible after the gateway
-// stops; failures are short-lived so a stopped gateway never slows discovery.
 func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	gatewayModelsMu.Lock()
 	entry, ok := gatewayModelCaches[name]
 	gatewayModelsMu.Unlock()
 	if ok && time.Since(entry.At) < 10*time.Minute {
-		return filterGatewayModels(name, entry.Models)
+		return entry.Models
 	}
 
 	gatewayModelsMu.Lock()
@@ -378,7 +379,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 		gatewayModelsMu.Lock()
 		gatewayModelCaches[name] = saved
 		gatewayModelsMu.Unlock()
-		return filterGatewayModels(name, saved.Models)
+		return saved.Models
 	}
 
 	models := make(map[string]string)
@@ -412,7 +413,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 		writeGatewayModelsCache(onDisk)
 	}
 	gatewayModelsMu.Unlock()
-	return filterGatewayModels(name, models)
+	return models
 }
 
 // gatewayBaseURL is a seam for tests that point a gateway at an httptest
@@ -669,6 +670,12 @@ func (p *ExternalGateway) SupportsModel(model string) bool {
 
 func (p *ExternalGateway) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
+	free := gatewayFreeModels(p.spec.Name, p.modelIDs())
+	info.FreeModels = make([]string, 0, len(free))
+	for alias := range free {
+		info.FreeModels = append(info.FreeModels, alias)
+	}
+	sort.Strings(info.FreeModels)
 	info.Working = p.working()
 	// A gateway that is installed and passes its check is ready even when its
 	// loopback listener is stopped: gateways start on demand on the first call.

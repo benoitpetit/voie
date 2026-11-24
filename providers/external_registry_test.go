@@ -173,3 +173,30 @@ func TestRefreshGatewayModelsRefetchesLiveCatalogue(t *testing.T) {
 		t.Fatalf("disk cache was not refreshed: %v", saved.Models)
 	}
 }
+
+func TestGatewayDiscoveryKeepsPaidModels(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"Auto"},{"id":"paid-model"}]}`))
+	}))
+	defer server.Close()
+	previous := gatewayBaseURL
+	gatewayBaseURL = func(spec ExternalGatewaySpec) string { return server.URL }
+	defer func() { gatewayBaseURL = previous }()
+	gatewayModelsMu.Lock()
+	gatewayModelCaches = make(map[string]gatewayModelCacheEntry)
+	gatewayModelsMu.Unlock()
+
+	spec, ok := ExternalGatewayByName("qoder2api")
+	if !ok {
+		t.Fatal("qoder2api spec missing")
+	}
+	models := fetchGatewayModels(spec.Name, server.URL, "")
+	if len(models) != 2 {
+		t.Fatalf("discovered models = %v, want both free and paid", models)
+	}
+	free := gatewayFreeModels(spec.Name, models)
+	if len(free) != 1 || !free["q2-Auto"] {
+		t.Fatalf("free models = %v, want only q2-Auto", free)
+	}
+}

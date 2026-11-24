@@ -75,3 +75,32 @@ func TestOrcaRouterEmbeddedIDsUseOrcPrefix(t *testing.T) {
 		}
 	}
 }
+
+const testRegistryWithExcluded = `entries:
+  - id: vlm-run-gateway
+    api:
+      model_ids:
+        - vlm-qwen-qwen3-8-27b
+        - qwen/qwen3.5-0.8b
+`
+
+func TestAllModelsIncludesExcludedModelsAsPaid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(testRegistryWithExcluded))
+	}))
+	defer server.Close()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	SetSource(server.URL)
+	t.Cleanup(func() { SetSource("") })
+	all := AllModels("vlm-run")
+	free := Models("vlm-run")
+	if len(all) != 3 {
+		t.Fatalf("AllModels = %v, want all three models", all)
+	}
+	if len(free) != 2 {
+		t.Fatalf("free Models = %v, want only the two verified free ones", free)
+	}
+	if _, ok := all["vlm-vlm-qwen-qwen3-8-27b"]; !ok {
+		t.Fatalf("excluded model missing from AllModels: %v", all)
+	}
+}

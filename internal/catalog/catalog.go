@@ -100,19 +100,39 @@ var excludedModels = map[string]bool{
 	"vlm-qwen-qwen3-8-27b": true, // 401: "requires an API key" on anonymous access
 }
 
+func excluded(alias, upstream string) bool {
+	return excludedModels[alias] || excludedModels[upstream]
+}
+
+// AllModels returns every catalogue alias for a provider, including entries
+// excluded from the verified free list. Those entries are exposed as paid.
+func AllModels(provider string) map[string]string {
+	snap := load()
+	result := make(map[string]string)
+	for alias, upstream := range embeddedModels[provider] {
+		result[alias] = upstream
+	}
+	if snap != nil {
+		for alias, upstream := range snap.Models[provider] {
+			result[alias] = upstream
+		}
+	}
+	return result
+}
+
 // Models returns the free-model aliases for a provider, refreshing the
 // catalogue from the registry when the cached snapshot is stale.
 func Models(provider string) map[string]string {
 	snap := load()
 	result := make(map[string]string)
 	for alias, upstream := range embeddedModels[provider] {
-		if !excludedModels[alias] {
+		if !excluded(alias, upstream) {
 			result[alias] = upstream
 		}
 	}
 	if snap != nil {
 		for alias, upstream := range snap.Models[provider] {
-			if !excludedModels[alias] {
+			if !excluded(alias, upstream) {
 				result[alias] = upstream
 			}
 		}
