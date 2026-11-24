@@ -139,10 +139,7 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 		return nil, "", nil, appError(ErrInvalidInput, fmt.Sprintf("ensemble supports at most %d models", maxEnsembleAgents), nil)
 	}
 	if len(models) > 0 {
-		synthesisModel := strings.TrimSpace(s.options.SynthesisModel)
-		if synthesisModel == "" {
-			synthesisModel = strings.TrimSpace(s.options.RouterModel)
-		}
+		synthesisModel := s.synthesisModel()
 		seen := map[string]bool{}
 		candidates := make([]ModelCandidate, 0, len(models))
 		for _, model := range models {
@@ -180,10 +177,7 @@ func (s *Service) selectEnsembleCandidates(ctx context.Context, request Completi
 		task, _, err := s.resolveProfile(request.Task)
 		return candidates, task, nil, err
 	}
-	excluded := strings.TrimSpace(s.options.SynthesisModel)
-	if excluded == "" {
-		excluded = strings.TrimSpace(s.options.RouterModel)
-	}
+	excluded := s.synthesisModel()
 	candidates, decision, err := s.selectCandidatesExcluding(ctx, request, limit, excluded)
 	if err != nil {
 		return nil, "", nil, err
@@ -238,6 +232,26 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	return response, nil
 }
 
+// synthesisModel returns the first configured synthesizer that can actually
+// serve a request. A configured-but-unavailable SYNTHESIS_MODEL falls back to
+// ROUTER_MODEL, as documented.
+func (s *Service) synthesisModel() string {
+	for _, configured := range []string{s.options.SynthesisModel, s.options.RouterModel} {
+		id := strings.TrimSpace(configured)
+		if id == "" {
+			continue
+		}
+		provider := s.registry.GetForModel(id)
+		if provider == nil {
+			provider = s.registry.Get(id)
+		}
+		if provider != nil && provider.GetInfo().Working {
+			return id
+		}
+	}
+	return ""
+}
+
 func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) (*ensembleRun, error) {
 	policy, err := s.resolvePolicy(request)
 	if err != nil {
@@ -250,14 +264,11 @@ func (s *Service) runEnsemble(ctx context.Context, request CompletionRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	synthesisModel := strings.TrimSpace(s.options.SynthesisModel)
+	synthesisModel := s.synthesisModel()
 	if synthesisModel == "" {
-		synthesisModel = strings.TrimSpace(s.options.RouterModel)
-	}
-	synthesizer := s.registry.GetForModel(synthesisModel)
-	if synthesisModel == "" || synthesizer == nil || !synthesizer.GetInfo().Working {
 		return nil, appError(ErrRouting, "a working SYNTHESIS_MODEL or ROUTER_MODEL is required for ensemble", nil)
 	}
+	synthesizer := s.registry.GetForModel(synthesisModel)
 	request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selecting ensemble candidates", Status: "started"})
 	candidates, task, selectionAttempts, err := s.selectEnsembleCandidates(ctx, request, options)
 	if err != nil {
@@ -673,7 +684,16 @@ func (s *Service) ensembleSynthesisFallbacks(request CompletionRequest, policy F
 			return false
 		}
 		provider := s.registry.GetForModel(key)
-		return provider != nil && provider.GetInfo().Working
+		if provider == nil || !provider.GetInfo().Working {
+			return false
+		}
+		if pin := strings.ToLower(strings.TrimSpace(request.Provider)); pin != "" {
+			pinned := s.registry.Get(pin)
+			if pinned == nil || !strings.EqualFold(pinned.GetInfo().Name, provider.GetInfo().Name) || !supportsModel(pinned, key) {
+				return false
+			}
+		}
+		return true
 	}
 	out := make([]string, 0, 1)
 	seen := make(map[string]bool, 1)

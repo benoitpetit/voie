@@ -209,3 +209,50 @@ func TestEnsembleSynthesisRetriesAndFallsBackOnce(t *testing.T) {
 		t.Fatalf("calls synth2=%v, want one synthesis fallback call", synth2.calls)
 	}
 }
+
+func TestSynthesisFallsBackToRouterModelWhenUnavailable(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("synth", &testProvider{info: ProviderInfo{Name: "synth", Working: false, SupportedModels: []string{"synth-model"}}})
+	registry.Register("router", &testProvider{info: ProviderInfo{Name: "router", Working: true, DefaultModel: "router-model", SupportedModels: []string{"router-model"}}})
+	registry.Register("a", &testProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}})
+	registry.Register("b", &testProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}})
+	service, err := NewService(registry, ServiceOptions{SynthesisModel: "synth-model", RouterModel: "router-model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := service.runEnsemble(context.Background(), CompletionRequest{
+		Strategy: StrategyEnsemble,
+		Ensemble: &EnsembleRequestOptions{Mode: EnsembleIndependent, Models: []string{"a-model", "b-model"}},
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.model != "router-model" {
+		t.Fatalf("synthesis model = %q, want the working router model", run.model)
+	}
+}
+
+func TestSynthesisFallbackRespectsProviderPin(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("router", &testProvider{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}})
+	registry.Register("a", &testProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}})
+	service, err := NewService(registry, ServiceOptions{
+		SynthesisModel: "router-model",
+		Fallback:       &FallbackPolicy{Enabled: true, MaxFallbackModels: 1, Models: map[string][]string{"router-model": {"a-model"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := service.ensembleSynthesisFallbacks(CompletionRequest{
+		Provider: "router",
+		Fallback: &FallbackOverride{Models: []string{"a-model"}},
+	}, service.FallbackPolicy(), "router-model", nil)
+	if len(pinned) != 0 {
+		t.Fatalf("fallbacks = %v, want none when the provider is pinned", pinned)
+	}
+	unpinned := service.ensembleSynthesisFallbacks(CompletionRequest{}, service.FallbackPolicy(), "router-model", nil)
+	if len(unpinned) == 0 {
+		t.Fatal("explicit fallback list was ignored without a provider pin")
+	}
+}
