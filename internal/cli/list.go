@@ -86,7 +86,9 @@ func runProviders(ctx context.Context, stdout io.Writer, service *app.Service, j
 	}
 	for _, provider := range providers {
 		state := "offline"
-		if provider.Alive {
+		if provider.Ready {
+			state = "ready"
+		} else if provider.Alive {
 			state = "alive"
 		}
 		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\t%d\n", provider.Name, provider.Label, state, len(provider.SupportedModels)); err != nil {

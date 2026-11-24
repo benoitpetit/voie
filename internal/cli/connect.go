@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/benoitpetit/voie/config"
@@ -294,13 +295,15 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 	}
 	sections := []struct {
 		title string
+		kind  string
 		names []string
 	}{
-		{"API TOKEN (create a key with the provider)", tokenProviders},
-		{"CLI / LOCAL GATEWAY (sign in with the official tool)", cliProviders},
+		{"API TOKEN (create a key with the provider)", "token", tokenProviders},
+		{"CLI / LOCAL GATEWAY (sign in with the official tool)", "cli", cliProviders},
 	}
+	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, section := range sections {
-		if _, err := fmt.Fprintf(out, "\n%s\n", section.title); err != nil {
+		if _, err := fmt.Fprintf(table, "\n%s\nNAME\tTYPE\tSTATE\n", section.title); err != nil {
 			return err
 		}
 		for _, name := range section.names {
@@ -312,12 +315,12 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 			} else if name == "vlm-run" {
 				state = "available (anonymous bearer)"
 			}
-			if _, err := fmt.Fprintf(out, "  %-18s %s\n", name, state); err != nil {
+			if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", name, section.kind, state); err != nil {
 				return err
 			}
 		}
 	}
-	if _, err := fmt.Fprintln(out, "\nREVERSE-ENGINEERED GATEWAYS (ToS risk, opt-in)"); err != nil {
+	if _, err := fmt.Fprintln(table, "\nREVERSE-ENGINEERED GATEWAYS (ToS risk, opt-in)\nNAME\tTYPE\tSTATE"); err != nil {
 		return err
 	}
 	for _, spec := range providers.ExternalGateways {
@@ -327,11 +330,11 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 		if installed {
 			state = "installed — account: " + account.Required
 		}
-		if _, err := fmt.Fprintf(out, "  %-18s %s\n", spec.Name, state); err != nil {
+		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", spec.Name, providers.ExternalGatewayType(spec), state); err != nil {
 			return err
 		}
 	}
-	return nil
+	return table.Flush()
 }
 
 func printKeyHelp(command *cobra.Command, provider string) {

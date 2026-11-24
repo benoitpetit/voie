@@ -655,7 +655,24 @@ func (p *ExternalGateway) SupportsModel(model string) bool {
 func (p *ExternalGateway) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
 	info.Working = p.working()
+	// A gateway that is installed and passes its check is ready even when its
+	// loopback listener is stopped: gateways start on demand on the first call.
+	info.Ready = p.working()
 	return info
+}
+
+// ExternalGatewayType returns the short provider kind shown by connect --list.
+func ExternalGatewayType(spec ExternalGatewaySpec) string {
+	switch {
+	case spec.ManualInstall != "":
+		return "local runtime"
+	case spec.AccountRequired == "none":
+		return "keyless gateway"
+	case spec.DashboardURL != "":
+		return "dashboard gateway"
+	default:
+		return "byok gateway"
+	}
 }
 
 // InstallCommand returns the exact command a user must run to install a gateway.
