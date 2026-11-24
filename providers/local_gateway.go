@@ -8,10 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/benoitpetit/voie/config"
@@ -171,7 +169,7 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	// inherits the write end would keep Wait() blocked forever otherwise.
 	cmd.Stdout = devNull
 	cmd.Stderr = devNull
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -225,28 +223,6 @@ func runningGateways() map[string]*exec.Cmd {
 	return copy
 }
 
-func killProcessesByBinary(binary string) {
-	want := filepath.Base(binary)
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if _, err := strconv.Atoi(entry.Name()); err != nil {
-			continue
-		}
-		target, err := os.Readlink(filepath.Join("/proc", entry.Name(), "exe"))
-		if err != nil {
-			continue
-		}
-		if !strings.Contains(filepath.Base(strings.TrimSuffix(target, " (deleted)")), want) {
-			continue
-		}
-		pid, _ := strconv.Atoi(entry.Name())
-		_ = syscall.Kill(pid, syscall.SIGKILL)
-	}
-}
-
 // ShutdownGateways terminates every gateway started by this process.
 func ShutdownGateways() {
 	gatewayMu.Lock()
@@ -287,7 +263,7 @@ func ShutdownGateways() {
 		select {
 		case <-running.done:
 		case <-time.After(500 * time.Millisecond):
-			_ = syscall.Kill(-running.cmd.Process.Pid, syscall.SIGKILL)
+			killProcessGroup(running.cmd.Process.Pid)
 			<-running.done
 		}
 	}
