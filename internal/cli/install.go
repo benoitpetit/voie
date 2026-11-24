@@ -5,15 +5,17 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"text/tabwriter"
 
+	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/install"
 	"github.com/benoitpetit/voie/providers"
 	"github.com/spf13/cobra"
 )
 
 func newInstallCommand() *cobra.Command {
-	var list bool
+	var list, verbose bool
 	command := &cobra.Command{
 		Use:          "install [provider]",
 		Short:        "List or install optional provider toolchains and third-party gateways",
@@ -23,7 +25,7 @@ func newInstallCommand() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, args []string) error {
 			if list || len(args) == 0 {
-				return runInstallList(command.OutOrStdout())
+				return runInstallList(command.OutOrStdout(), verbose)
 			}
 			if spec, ok := providers.ExternalGatewayByName(args[0]); ok {
 				return installExternalGateway(command, spec)
@@ -48,36 +50,89 @@ func newInstallCommand() *cobra.Command {
 		},
 	}
 	command.Flags().BoolVar(&list, "list", false, "list available installers")
+	command.Flags().BoolVar(&verbose, "verbose", false, "show install commands and setup hints")
 	return command
 }
 
-func runInstallList(out io.Writer) error {
+func runInstallList(out io.Writer, verbose bool) error {
+	store, err := config.LoadCredentials()
+	if err != nil {
+		return fmt.Errorf("load credentials: %w", err)
+	}
 	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	if _, err := fmt.Fprintln(table, "NAME\tTYPE\tLABEL\tPORT\tSTATUS\tACCOUNT\tINSTALL\tSETUP REQUIRED"); err != nil {
+	if verbose {
+		if _, err := fmt.Fprintln(table, "NAME\tTYPE\tLABEL\tPORT\tSTATUS\tACCOUNT\tINSTALL\tSETUP REQUIRED"); err != nil {
+			return err
+		}
+	} else {
+		if _, err := fmt.Fprintln(table, "NAME\tTYPE\tSTATUS\tACCOUNT\tNEXT"); err != nil {
+			return err
+		}
+	}
+	write := func(name, kind, label string, port int, status, account, command, hint string) error {
+		if verbose {
+			return writeInstallRow(table, name, kind, label, port, status, account, command, hint)
+		}
+		next := "voie install " + name
+		if status == "connected" {
+			next = "-"
+		} else if kind == "api" {
+			next = "voie connect " + name
+		} else if strings.HasPrefix(status, "installed") {
+			next = "voie connect " + name
+		}
+		_, err := fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n", name, kind, status, account, next)
 		return err
 	}
 	for _, spec := range providers.ExternalGateways {
 		installed, command, _ := providers.ExternalGatewayStatus(spec.Name)
-		state := "not installed"
+		status := "not installed"
 		if installed {
-			state = "installed"
+			status = "installed"
+			if strings.EqualFold(store.State(spec.Name), "connected") {
+				status = "connected"
+			}
 		}
-		hint := providers.ExternalGatewaySetupHint(spec.Name)
 		account, _ := providers.ExternalGatewayAccount(spec.Name)
-		if _, err := fmt.Fprintf(table, "%s\tgateway\t%s\t%d\t%s\t%s\t%s\t%s\n", spec.Name, spec.Label, spec.Port, state, account.Required, command, hint); err != nil {
+		if err := write(spec.Name, "gateway", spec.Label, spec.Port, status, account.Required, command, providers.ExternalGatewaySetupHint(spec.Name)); err != nil {
 			return err
 		}
 	}
 	for _, name := range []string{"cline", "kiro", "antigravity", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor"} {
-		if _, err := fmt.Fprintf(table, "%s\tcli\t%s\t-\t%s\t-\tvoie install %s\t-\n", name, name, cliState(name), name); err != nil {
+		status := cliState(name)
+		if status == "installed" && strings.EqualFold(store.State(name), "connected") {
+			status = "connected"
+		}
+		if err := write(name, "cli", name, 0, status, "-", "voie install "+name, "-"); err != nil {
+			return err
+		}
+	}
+	names := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
+	for _, name := range names {
+		status := "not connected"
+		if store.Token(name) != "" {
+			status = "connected"
+		}
+		if err := write(name, "api", name, 0, status, "-", "voie connect "+name, "-"); err != nil {
 			return err
 		}
 	}
 	if err := table.Flush(); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "\nAPI token providers are not installed: run `voie keys` for their key URLs, then `voie connect <name>`.")
+	if !verbose {
+		fmt.Fprintln(out, "\nRun `voie install --verbose` for install commands and setup hints.")
+	}
 	return nil
+}
+
+func writeInstallRow(table *tabwriter.Writer, name, kind, label string, port int, status, account, command, hint string) error {
+	portText := "-"
+	if port > 0 {
+		portText = fmt.Sprint(port)
+	}
+	_, err := fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, kind, label, portText, status, account, command, hint)
+	return err
 }
 
 // lookPath is a seam for tests that simulate installed agent CLIs.

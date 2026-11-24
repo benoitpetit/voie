@@ -202,3 +202,9 @@ func TestDocsDescribePPLXProxyGateway(t *testing.T) {
 		assertContains(t, file, content, "cookie")
 	}
 }
+
+func TestDocsDescribeCompactInstallList(t *testing.T) {
+	content := readDoc(t, "docs/cli.md")
+	assertContains(t, "docs/cli.md", content, "--verbose")
+	assertContains(t, "docs/cli.md", content, "NEXT")
+}

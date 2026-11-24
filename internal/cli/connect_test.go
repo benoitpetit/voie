@@ -404,3 +404,44 @@ func TestConnectPPLXProxyCapturesCookie(t *testing.T) {
 		t.Fatalf(".env = %q, want captured cookie", data)
 	}
 }
+
+func TestInstallListIsCompact(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	command := newInstallCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs(nil)
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	output := stdout.String()
+	for _, unwanted := range []string{"git clone", "npm install -g", "SETUP REQUIRED", t.TempDir()} {
+		if strings.Contains(output, unwanted) {
+			t.Errorf("compact list contains %q:\n%s", unwanted, output)
+		}
+	}
+	if strings.Contains(output, os.Getenv("XDG_CONFIG_HOME")) {
+		t.Errorf("compact list contains absolute config path:\n%s", output)
+	}
+	for _, want := range []string{"NAME", "TYPE", "STATUS", "NEXT", "voie install qoder2api", "voie connect beatapi", "api"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("compact list missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestInstallListVerboseShowsCommands(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	command := newInstallCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{"--verbose"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "git clone") {
+		t.Fatalf("verbose list missing install commands:\n%s", stdout.String())
+	}
+}

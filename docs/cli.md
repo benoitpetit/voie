@@ -15,7 +15,7 @@ The monochrome Unicode wordmark appears in `voie --help`. Command output stays f
 ```text
 voie serve [--host HOST] [--port PORT]
 voie connect [provider] [--token TOKEN] [--field KEY=VALUE] [--list]
-voie install [provider] [--list]
+voie install [provider] [--list] [--verbose]
 voie keys [provider]
 voie chat --model MODEL [--provider PROVIDER] [--fallback-model ID]... [PROMPT...]
 voie chat --strategy auto [--task TASK] [--conversation ID] [--fallback-model ID]... [PROMPT...]
@@ -135,3 +135,6 @@ The MCP transport writes protocol messages to stdout. `voie mcp` sends applicati
 
 
 `voie connect pplx-proxy` installs the optional pplx-proxy gateway, opens a browser for Perplexity sign-in, captures the session cookie into `~/.config/voie/gateways/pplx-proxy/.env` (0600) and starts the gateway. Perplexity models then appear in `voie models`. An expired or invalid cookie produces an error asking to rerun `voie connect pplx-proxy`; the cookie value is never logged.
+
+
+`voie install` without arguments prints a compact `NAME / TYPE / STATUS / ACCOUNT / NEXT` table: `NEXT` is the single command to run (`voie install <name>`, `voie connect <name>`, or `-` when already connected). Long install commands, ports, labels and setup hints are available with `voie install --verbose` and are always printed when actually installing a provider.
