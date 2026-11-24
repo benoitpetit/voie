@@ -256,3 +256,147 @@ func TestSynthesisFallbackRespectsProviderPin(t *testing.T) {
 		t.Fatal("explicit fallback list was ignored without a provider pin")
 	}
 }
+
+type recordingProvider struct {
+	info     ProviderInfo
+	response *ChatCompletionResponse
+	segments [][]Message
+	calls    int
+	failFrom int
+	delay    time.Duration
+}
+
+func (p *recordingProvider) GetInfo() ProviderInfo { return p.info }
+func (p *recordingProvider) SupportsModel(model string) bool {
+	for _, supported := range p.info.SupportedModels {
+		if supported == model {
+			return true
+		}
+	}
+	return false
+}
+func (p *recordingProvider) ChatCompletion(_ context.Context, _ []Message, model string) (*ChatCompletionResponse, error) {
+	p.calls++
+	if p.delay > 0 {
+		time.Sleep(p.delay)
+	}
+	if p.failFrom > 0 && p.calls >= p.failFrom {
+		return nil, NewProviderFailure(FailurePermanent, p.info.Name, model, 400, errors.New("failed"))
+	}
+	return p.response, nil
+}
+func (p *recordingProvider) ChatCompletionStream(_ context.Context, messages []Message, _ string, _ func(string)) error {
+	_, err := p.ChatCompletion(context.Background(), messages, "")
+	return err
+}
+
+func TestChainModeRunsSequentialReviews(t *testing.T) {
+	registry := NewRegistry()
+	a := &recordingProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "ANSWER-A"}}}}}
+	b := &recordingProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "ANSWER-B"}}}}}
+	synth := &recordingProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "FINAL"}}}}}
+	registry.Register("a", a)
+	registry.Register("b", b)
+	registry.Register("synth", synth)
+	service, err := NewService(registry, ServiceOptions{SynthesisModel: "synth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.runEnsemble(context.Background(), CompletionRequest{
+		Strategy: StrategyEnsemble,
+		Ensemble: &EnsembleRequestOptions{Mode: EnsembleChain, Models: []string{"a", "b"}},
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.segments) > 0 {
+		t.Fatal("segments should be recorded by ChatCompletion")
+	}
+	if a.calls != 1 || b.calls != 1 {
+		t.Fatalf("calls a=%d b=%d, want one each", a.calls, b.calls)
+	}
+}
+
+func TestDebateModeRunsRounds(t *testing.T) {
+	registry := NewRegistry()
+	a := &recordingProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "A"}}}}}
+	b := &recordingProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "B"}}}}}
+	synth := &recordingProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "FINAL"}}}}}
+	registry.Register("a", a)
+	registry.Register("b", b)
+	registry.Register("synth", synth)
+	service, err := NewService(registry, ServiceOptions{SynthesisModel: "synth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turns := 2
+	if _, err := service.runEnsemble(context.Background(), CompletionRequest{
+		Strategy: StrategyEnsemble,
+		Ensemble: &EnsembleRequestOptions{Mode: EnsembleDebate, Models: []string{"a", "b"}, DebateTurns: &turns},
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if a.calls != 3 || b.calls != 3 {
+		t.Fatalf("calls a=%d b=%d, want 3 each (initial + 2 rounds)", a.calls, b.calls)
+	}
+}
+
+func TestFailedDebateRevisionKeepsPreviousDuration(t *testing.T) {
+	registry := NewRegistry()
+	a := &recordingProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "A"}}}}, delay: 5 * time.Millisecond, failFrom: 2}
+	b := &recordingProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "B"}}}}, delay: 5 * time.Millisecond, failFrom: 2}
+	synth := &recordingProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}, response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "FINAL"}}}}}
+	registry.Register("a", a)
+	registry.Register("b", b)
+	registry.Register("synth", synth)
+	service, err := NewService(registry, ServiceOptions{SynthesisModel: "synth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turns := 1
+	state, err := service.runEnsemble(context.Background(), CompletionRequest{
+		Strategy: StrategyEnsemble,
+		Ensemble: &EnsembleRequestOptions{Mode: EnsembleDebate, Models: []string{"a", "b"}, DebateTurns: &turns},
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, route := range state.routing.Models {
+		if route.DurationMillis < 5 {
+			t.Errorf("route %s duration = %d, want the retained initial duration", route.Model, route.DurationMillis)
+		}
+	}
+}
+
+func TestBudgetNotConsumedByInvalidCandidate(t *testing.T) {
+	registry := NewRegistry()
+	success := func(name string) *recordingProvider {
+		return &recordingProvider{info: ProviderInfo{Name: name, Working: true, SupportedModels: []string{name + "-model"}},
+			response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: name}}}}}
+	}
+	registry.Register("a", success("a"))
+	registry.Register("c", success("c"))
+	registry.Register("b", &recordingProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}, failFrom: 1})
+	registry.Register("d", success("d"))
+	policy := FallbackPolicy{Enabled: true, MaxFallbackModels: 1, Models: map[string][]string{"b-model": {"d-model"}}}
+	service, err := NewService(registry, ServiceOptions{Fallback: &policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates := []ModelCandidate{
+		{Model: "a-model", Provider: "a"}, {Model: "c-model", Provider: "c"}, {Model: "b-model", Provider: "b"},
+	}
+	state, err := service.runChain(context.Background(), CompletionRequest{
+		Provider: "a", Strategy: StrategyEnsemble,
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	}, candidates, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.budget != 1 {
+		t.Fatalf("budget = %d, want 1 (pinned-out candidate must not consume budget)", state.budget)
+	}
+}
+
