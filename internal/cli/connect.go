@@ -243,6 +243,7 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	if err := providers.ProvisionGatewayKey(spec); err != nil {
 		return fmt.Errorf("provision %s key: %w", spec.Name, err)
 	}
+	providers.RefreshGatewayModels(spec.Name)
 	account, _ := providers.ExternalGatewayAccount(spec.Name)
 	fmt.Fprintf(command.OutOrStdout(), "%s ready (account: %s, model: %s)\n", spec.Name, account.Required, spec.Alias)
 	return nil

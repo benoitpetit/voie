@@ -142,7 +142,6 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountURL:      "http://127.0.0.1:8787/admin",
 		KeyRequired:     "none: placeholder accepted",
 		Start:           []string{"workbuddy2api", "--port", "8787"},
-		Check:           []string{"workbuddy2api", "--help"},
 	},
 	{
 		Name: "freellmpool", Label: "FreeLLM Pool", Repo: "https://github.com/0xzr/freellmpool",
@@ -390,6 +389,19 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	return filterGatewayModels(name, models)
 }
 
+// RefreshGatewayModels discovers the live catalogue while a gateway is up and
+// persists it, so `voie models` keeps showing the real models after shutdown.
+func RefreshGatewayModels(name string) {
+	spec, ok := ExternalGatewayByName(name)
+	if !ok {
+		return
+	}
+	gatewayModelsMu.Lock()
+	delete(gatewayModelCaches, name)
+	gatewayModelsMu.Unlock()
+	fetchGatewayModels(spec.Name, "http://127.0.0.1:"+itoa(spec.Port), gatewayTokenSupplier(spec)())
+}
+
 // ProvisionGatewayEnv creates the generated secrets once and reuses them on
 // every start, so the gateway works without manual environment setup.
 func ProvisionGatewayEnv(spec ExternalGatewaySpec) error {
@@ -548,7 +560,9 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 
 func (p *ExternalGateway) working() bool {
 	if len(p.spec.Check) > 0 {
-		cmd := exec.Command(p.spec.Check[0], p.spec.Check[1:]...)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, p.spec.Check[0], p.spec.Check[1:]...)
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
 		return cmd.Run() == nil
