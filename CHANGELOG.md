@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Free/paid model tiers: `voie models` shows `TIER` and `PRICE` columns with `--free`, `--paid`, `--all` and `--provider` filters; `GET /v1/models?tier=&provider=` and MCP `list_models` carry the same fields.
+- Hidden paid models from gateway allowlists, the free-model catalogue and Perplexity are now callable and listed as `paid`. Public per-token prices are fetched from OpenRouter when available; otherwise paid models show `price unknown`.
+
 ### Fixed
 
 - HTTP: unmatched routes return 404, root/health reject non-GET, and the scope header is validated and applied in every auth mode.
