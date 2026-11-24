@@ -381,12 +381,30 @@ func gatewayFreeModels(name string, models map[string]string) map[string]bool {
 	return free
 }
 
+// filterGatewayCatalogue removes concrete provider/model IDs that the
+// gateway advertises but can no longer serve. FreeLLM Pool's reliable entries
+// are its routing aliases (auto, fast, ..., kilo); concrete upstream IDs are
+// frequently stale and return 404 or a cooldown error.
+func filterGatewayCatalogue(name string, models map[string]string) map[string]string {
+	if name != "freellmpool" {
+		return models
+	}
+	filtered := make(map[string]string, len(models))
+	for alias, upstream := range models {
+		if strings.Contains(upstream, "/") {
+			continue
+		}
+		filtered[alias] = upstream
+	}
+	return filtered
+}
+
 func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	gatewayModelsMu.Lock()
 	entry, ok := gatewayModelCaches[name]
 	gatewayModelsMu.Unlock()
 	if ok && time.Since(entry.At) < 10*time.Minute {
-		return entry.Models
+		return filterGatewayCatalogue(name, entry.Models)
 	}
 
 	gatewayModelsMu.Lock()
@@ -396,7 +414,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 		gatewayModelsMu.Lock()
 		gatewayModelCaches[name] = saved
 		gatewayModelsMu.Unlock()
-		return saved.Models
+		return filterGatewayCatalogue(name, saved.Models)
 	}
 
 	models := make(map[string]string)
@@ -422,6 +440,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 			resp.Body.Close()
 		}
 	}
+	models = filterGatewayCatalogue(name, models)
 	fresh := gatewayModelCacheEntry{At: time.Now(), Models: models}
 	gatewayModelsMu.Lock()
 	gatewayModelCaches[name] = fresh

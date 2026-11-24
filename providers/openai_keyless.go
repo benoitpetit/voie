@@ -123,13 +123,23 @@ func (p *openAIKeylessProvider) GetInfo() ProviderInfo {
 	}
 }
 
+func (p *openAIKeylessProvider) lookupModelID(model string) (string, bool) {
+	key := strings.ToLower(strings.TrimSpace(model))
+	for id, upstream := range p.modelIDs() {
+		if strings.EqualFold(id, key) {
+			return upstream, true
+		}
+	}
+	return "", false
+}
+
 func (p *openAIKeylessProvider) SupportsModel(model string) bool {
-	_, ok := p.modelIDs()[strings.ToLower(strings.TrimSpace(model))]
+	_, ok := p.lookupModelID(model)
 	return ok
 }
 
 func (p *openAIKeylessProvider) resolve(model string) (string, error) {
-	upstream, ok := p.modelIDs()[strings.ToLower(strings.TrimSpace(model))]
+	upstream, ok := p.lookupModelID(model)
 	if !ok {
 		return "", fmt.Errorf("%s: unsupported model %q", p.cfg.Name, model)
 	}

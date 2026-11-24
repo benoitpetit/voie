@@ -300,3 +300,19 @@ func TestExternalGatewayUninstallTargets(t *testing.T) {
 		}
 	}
 }
+
+func TestFreellmpoolCatalogueKeepsOnlyRoutingAliases(t *testing.T) {
+	models := map[string]string{
+		"pool-auto":                             "auto",
+		"pool-fast":                             "fast",
+		"pool-kilo/stepfun/step-3.7-flash:free": "kilo/stepfun/step-3.7-flash:free",
+		"pool-ovh/Meta-Llama-3_3-70B-Instruct":  "ovh/Meta-Llama-3_3-70B-Instruct",
+	}
+	filtered := filterGatewayCatalogue("freellmpool", models)
+	if len(filtered) != 2 || filtered["pool-auto"] == "" || filtered["pool-fast"] == "" {
+		t.Fatalf("filtered = %v, want only routing aliases", filtered)
+	}
+	if got := filterGatewayCatalogue("omniroute", models); len(got) != len(models) {
+		t.Fatalf("non-pool gateway was filtered: %v", got)
+	}
+}

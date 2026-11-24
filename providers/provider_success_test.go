@@ -245,3 +245,17 @@ func TestPPLXProxyOmitsUnsupportedMaxTokens(t *testing.T) {
 		t.Fatalf("max_tokens must be omitted for pplx-proxy: %#v", captured)
 	}
 }
+
+func TestGatewayModelIDsMatchCaseInsensitively(t *testing.T) {
+	provider := newOpenAIKeylessProvider(openAIKeylessConfig{
+		Name: "freellmpool", DefaultModel: "pool-ovh/Meta-Llama-3_3-70B-Instruct",
+		ModelIDs: map[string]string{"pool-ovh/Meta-Llama-3_3-70B-Instruct": "ovh/Meta-Llama-3_3-70B-Instruct"},
+	}, nil)
+	if !provider.SupportsModel("pool-ovh/Meta-Llama-3_3-70B-Instruct") {
+		t.Fatal("mixed-case model ID is not supported")
+	}
+	resolved, err := provider.resolve("pool-ovh/Meta-Llama-3_3-70B-Instruct")
+	if err != nil || resolved != "ovh/Meta-Llama-3_3-70B-Instruct" {
+		t.Fatalf("resolve = %q, %v", resolved, err)
+	}
+}

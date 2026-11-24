@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- FreeLLM Pool listings now expose only routing aliases: concrete upstream IDs advertised by the gateway were frequently stale (HTTP 404 or cooldown). Mixed-case gateway model IDs also resolve correctly.
+
 - HTTP: unmatched routes return 404, root/health reject non-GET, and the scope header is validated and applied in every auth mode.
 - Streaming: the resolved upstream model and the final `routing.attempts` are now emitted; `stream_options.include_usage` adds an estimated usage chunk.
 - ACP bridges: each agent uses its own catalogue, no Cline-only flags, per-request model pinning, trailing chunks are kept, loopback ports are identity-checked, and cancellation is prompt.
