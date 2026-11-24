@@ -7,6 +7,7 @@ import "strings"
 // reused so the public catalogue does not change for those providers.
 var modelPrefixes = map[string]string{
 	"perplexity":       "pplx",
+	"pplx-proxy":       "pplx",
 	"duckai":           "dk",
 	"deepai":           "dp",
 	"quillbot":         "qb",

@@ -70,3 +70,12 @@ func TestLegacyAliasesRemainUnprefixed(t *testing.T) {
 		}
 	}
 }
+
+func TestPPLXProxyModelIDsAreNamespaced(t *testing.T) {
+	if got := app.PrefixModelID("pplx-proxy", "auto"); got != "pplx-auto" {
+		t.Fatalf("PrefixModelID = %q, want pplx-auto", got)
+	}
+	if got := app.PrefixModelID("pplx-proxy", "pplx-gpt"); got != "pplx-gpt" {
+		t.Fatalf("already-prefixed ID changed: %q", got)
+	}
+}

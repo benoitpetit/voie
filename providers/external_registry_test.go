@@ -324,3 +324,14 @@ func TestPPLXProxyOnlyAutoIsFree(t *testing.T) {
 		t.Fatalf("free models = %v, want only auto", free)
 	}
 }
+
+func TestGatewayCacheKeysGainProviderPrefix(t *testing.T) {
+	models := map[string]string{"auto": "auto", "gpt": "gpt"}
+	got := normalizeGatewayModelKeys("pplx-proxy", models)
+	if _, ok := got["pplx-auto"]; !ok {
+		t.Fatalf("keys = %v, want pplx-auto", got)
+	}
+	if _, ok := got["pplx-gpt"]; !ok {
+		t.Fatalf("keys = %v, want pplx-gpt", got)
+	}
+}
