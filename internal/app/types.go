@@ -30,8 +30,9 @@ type Choice struct {
 }
 
 type Delta struct {
-	Role    string `json:"role,omitempty"`
-	Content string `json:"content,omitempty"`
+	Role      string      `json:"role,omitempty"`
+	Content   string      `json:"content,omitempty"`
+	ToolCalls interface{} `json:"tool_calls,omitempty"`
 }
 
 type Usage struct {

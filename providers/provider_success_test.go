@@ -182,3 +182,25 @@ func TestKeylessProviderForwardsOptionsAndDecodesToolCalls(t *testing.T) {
 		t.Fatalf("tool calls were not decoded: %+v", response.Choices)
 	}
 }
+
+func TestKeylessStreamPropagatesToolCallDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"index\":0,\"id\":\"call1\",\"type\":\"function\",\"function\":{\"name\":\"f\",\"arguments\":\"{\"}}]}}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]}}]}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+	provider := newOpenAIKeylessProvider(openAIKeylessConfig{
+		Name: "test", CompletionsURL: server.URL, DefaultModel: "model", SupportsStream: true,
+		ModelIDs: map[string]string{"model": "model"},
+	}, server.Client())
+	var toolCalls []any
+	ctx := app.WithToolCallSink(context.Background(), func(value any) { toolCalls = append(toolCalls, value) })
+	if err := provider.ChatCompletionStream(ctx, []Message{{Role: "user", Content: "hi"}}, "model", func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if len(toolCalls) != 2 {
+		t.Fatalf("tool call deltas = %d, want 2", len(toolCalls))
+	}
+}

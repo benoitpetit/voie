@@ -119,6 +119,7 @@ func writeChatDecodeError(w http.ResponseWriter, err error) {
 func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, request app.CompletionRequest) {
 	started := false
 	var streamed strings.Builder
+	var toolChunks []any
 	var finalRouting *app.RoutingInfo
 	completionID := "chatcmpl-" + randomID()
 	resolvedModel := request.Model
@@ -148,7 +149,8 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 			Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{Role: "assistant"}}},
 		})
 	}
-	err := h.service.CompleteStreamWithInfo(r.Context(), request, func(chunk string, routing *app.RoutingInfo) {
+	streamCtx := app.WithToolCallSink(r.Context(), func(value any) { toolChunks = append(toolChunks, value) })
+	err := h.service.CompleteStreamWithInfo(streamCtx, request, func(chunk string, routing *app.RoutingInfo) {
 		if routing != nil {
 			finalRouting = routing
 		}
@@ -179,6 +181,13 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
 	} else {
+		for _, calls := range toolChunks {
+			writeSSE(w, app.StreamChunk{
+				ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(),
+				Model: resolvedModel, ConversationID: request.ConversationID,
+				Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{ToolCalls: calls}}},
+			})
+		}
 		finishReason := "stop"
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,

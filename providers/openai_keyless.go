@@ -74,7 +74,8 @@ type openAIKeylessCompletion struct {
 			ToolCalls interface{} `json:"tool_calls,omitempty"`
 		} `json:"message"`
 		Delta struct {
-			Content string `json:"content"`
+			Content   string      `json:"content"`
+			ToolCalls interface{} `json:"tool_calls,omitempty"`
 		} `json:"delta"`
 	} `json:"choices"`
 }
@@ -214,10 +215,11 @@ func (p *openAIKeylessProvider) decodeCompletion(body io.Reader, messages []Mess
 	return response, nil
 }
 
-func (p *openAIKeylessProvider) decodeStream(body io.Reader, callback func(string)) error {
+func (p *openAIKeylessProvider) decodeStream(ctx context.Context, body io.Reader, callback func(string)) error {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var content strings.Builder
+	sawToolCalls := false
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if !strings.HasPrefix(line, "data:") {
@@ -234,17 +236,26 @@ func (p *openAIKeylessProvider) decodeStream(body io.Reader, callback func(strin
 		if err := json.Unmarshal([]byte(data), &parsed); err != nil {
 			continue
 		}
-		if len(parsed.Choices) == 0 || parsed.Choices[0].Delta.Content == "" {
+		if len(parsed.Choices) == 0 {
 			continue
 		}
-		delta := parsed.Choices[0].Delta.Content
-		content.WriteString(delta)
-		callback(delta)
+		delta := parsed.Choices[0].Delta
+		if calls := delta.ToolCalls; calls != nil {
+			sawToolCalls = true
+			if sink := app.ToolCallSinkFrom(ctx); sink != nil {
+				sink(calls)
+			}
+		}
+		if delta.Content == "" {
+			continue
+		}
+		content.WriteString(delta.Content)
+		callback(delta.Content)
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("%s: read stream: %w", p.cfg.Name, err)
 	}
-	if content.Len() == 0 {
+	if content.Len() == 0 && !sawToolCalls {
 		return fmt.Errorf("%s: empty response", p.cfg.Name)
 	}
 	return nil
@@ -281,5 +292,5 @@ func (p *openAIKeylessProvider) ChatCompletionStream(ctx context.Context, messag
 		return err
 	}
 	defer resp.Body.Close()
-	return p.decodeStream(resp.Body, callback)
+	return p.decodeStream(ctx, resp.Body, callback)
 }

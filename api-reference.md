@@ -252,3 +252,17 @@ Routing and conversation configuration: `ROUTER_MODEL` is used only by profiles 
 
 
 When `stream_options.include_usage` is true, a final SSE chunk carries an estimated `usage` object (token counts are computed from character counts, not reported by the upstream provider).
+
+## Supported OpenAI request subset
+
+The chat endpoint accepts `model`, `messages`, `stream`, `provider`, `strategy`,
+`task`, `ensemble`, `fallback`, and `conversation_id`. It also forwards these
+OpenAI-compatible fields when the selected provider is OpenAI-compatible:
+`temperature`, `max_tokens`, `top_p`, `stop`, `tools`, `tool_choice`, and
+`stream_options`. Providers that do not implement a field ignore it. Only one
+completion choice is supported: `n` greater than 1 is rejected with `400`.
+
+Non-streaming responses include `message.tool_calls` when the upstream returns
+them. Streamed responses emit additional `chat.completion.chunk` events with
+`delta.tool_calls` before the `finish_reason` chunk. Token counts remain
+estimates unless the upstream reports them.

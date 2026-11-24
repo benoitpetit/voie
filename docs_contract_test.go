@@ -173,3 +173,10 @@ func TestDocsAndSkillMatchSurfaces(t *testing.T) {
 	cli := readDoc(t, "docs/cli.md")
 	assertOmits(t, "docs/cli.md", cli, "owner column")
 }
+
+func TestAPIRefDocumentsOpenAISubset(t *testing.T) {
+	api := readDoc(t, "api-reference.md")
+	assertContains(t, "api-reference.md", api, "temperature")
+	assertContains(t, "api-reference.md", api, "tool_calls")
+	assertContains(t, "api-reference.md", api, "only one completion choice")
+}

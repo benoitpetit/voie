@@ -1123,3 +1123,36 @@ func TestStreamingFallbackReportsFinalModel(t *testing.T) {
 		t.Fatalf("backup calls = %v", backup.calls)
 	}
 }
+
+type toolCallProvider struct{}
+
+func (*toolCallProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "test", Working: true, SupportsStream: true, DefaultModel: "model", SupportedModels: []string{"model"}}
+}
+func (*toolCallProvider) SupportsModel(model string) bool { return model == "model" }
+func (*toolCallProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "ok"}}}}, nil
+}
+func (*toolCallProvider) ChatCompletionStream(ctx context.Context, _ []app.Message, _ string, callback func(string)) error {
+	if sink := app.ToolCallSinkFrom(ctx); sink != nil {
+		sink([]any{map[string]any{"index": 0, "id": "call1", "type": "function"}})
+	}
+	return nil
+}
+
+func TestHTTPStreamingPropagatesToolCalls(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &toolCallProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions",
+		strings.NewReader(`{"model":"model","stream":true,"messages":[{"role":"user","content":"hi"}]}`)))
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"tool_calls"`) || !strings.Contains(body, "call1") {
+		t.Fatalf("SSE stream has no tool calls: %s", body)
+	}
+}
