@@ -421,7 +421,7 @@ func TestRoutingHonorsPrefixedModelIDsFromCatalogue(t *testing.T) {
 func TestRouterFailureAppearsInRoutingAttempts(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register("router", &testProvider{
-		info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}},
+		info:     ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}},
 		response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "not json"}}}},
 	})
 	registry.Register("w", &testProvider{info: ProviderInfo{Name: "w", Working: true, SupportedModels: []string{"model-w", "model-w2"}}})
