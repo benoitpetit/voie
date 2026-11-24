@@ -83,12 +83,29 @@ func (c *Credentials) write() error {
 	if err != nil {
 		return err
 	}
-	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, append(data, '\n'), 0o600); err != nil {
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".credentials-*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(temporary, path); err != nil {
-		_ = os.Remove(temporary)
+	temporaryPath := temporary.Name()
+	remove := func() {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+	}
+	if err := temporary.Chmod(0o600); err != nil {
+		remove()
+		return err
+	}
+	if _, err := temporary.Write(append(data, '\n')); err != nil {
+		remove()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		_ = os.Remove(temporaryPath)
+		return err
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		_ = os.Remove(temporaryPath)
 		return err
 	}
 	return os.Chmod(path, 0o600)

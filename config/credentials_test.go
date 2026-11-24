@@ -119,7 +119,7 @@ func TestCredentialsWriteIsAtomicAndKeeps0600(t *testing.T) {
 		t.Fatal(err)
 	} else {
 		for _, entry := range entries {
-			if strings.HasSuffix(entry.Name(), ".tmp") {
+			if strings.HasPrefix(entry.Name(), ".credentials-") && entry.Name() != filepath.Base(path) {
 				t.Fatalf("temporary credential file left behind: %s", entry.Name())
 			}
 		}
