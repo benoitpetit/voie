@@ -8,7 +8,13 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"time"
 )
+
+// trailingUpdateGrace is how long Prompt keeps collecting agent updates after
+// the prompt RPC responds. Some agents emit their final message chunk just
+// after the response; without this grace window that text is lost.
+const trailingUpdateGrace = 100 * time.Millisecond
 
 // Client is a minimal JSON-RPC 2.0 client for an ACP agent over NDJSON.
 type Client struct {
@@ -189,11 +195,20 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, onChunk fun
 	for {
 		select {
 		case res := <-result:
+			timer := time.NewTimer(trailingUpdateGrace)
+			defer timer.Stop()
 			for {
 				select {
 				case params := <-c.updates:
 					handle(params)
-				default:
+					if !timer.Stop() {
+						select {
+						case <-timer.C:
+						default:
+						}
+					}
+					timer.Reset(trailingUpdateGrace)
+				case <-timer.C:
 					return res.reason, res.err
 				}
 			}

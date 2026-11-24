@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type fakeAgent struct {
@@ -176,5 +177,24 @@ func TestBridgeUsesRequestedModel(t *testing.T) {
 	sent := agent.sent()
 	if !strings.Contains(sent, `"value":"other"`) || strings.Contains(sent, `"value":"cb-auto"`) {
 		t.Fatalf("requested model was not applied:\n%s", sent)
+	}
+}
+
+func TestPromptCollectsChunksAfterResponse(t *testing.T) {
+	agent := newFakeAgent()
+	client := NewClient(agent, agent)
+	agent.push(`{"jsonrpc":"2.0","id":1,"result":{"stopReason":"end_turn"}}`)
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		agent.pushNow(`{"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_message_chunk","content":{"text":"TAIL"}}}}`)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var text string
+	if _, err := client.Prompt(ctx, "s1", "hi", func(token string) { text += token }); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text, "TAIL") {
+		t.Fatalf("Prompt text = %q, want the trailing agent chunk", text)
 	}
 }
