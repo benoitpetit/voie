@@ -69,6 +69,12 @@ func cors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Max-Age", "86400")
 		}
 		if r.Method == http.MethodOptions {
+			requested := strings.ToUpper(strings.TrimSpace(r.Header.Get("Access-Control-Request-Method")))
+			allowed := requested == "GET" || requested == "POST" || requested == "DELETE" || requested == "OPTIONS"
+			if origin == "" || !allowed {
+				next.ServeHTTP(w, r)
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}

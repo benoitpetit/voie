@@ -165,3 +165,31 @@ func TestBearerSchemeIsCaseInsensitiveAndTokenTrimmed(t *testing.T) {
 		}
 	}
 }
+
+func TestPreflightRequiresOriginAndRequestedMethod(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute})
+	for _, tc := range []struct {
+		name, origin, method string
+		want                 int
+	}{
+		{name: "no origin", want: http.StatusMethodNotAllowed},
+		{name: "no requested method", origin: "http://127.0.0.1:8080", want: http.StatusMethodNotAllowed},
+		{name: "disallowed method", origin: "http://127.0.0.1:8080", method: "TRACE", want: http.StatusMethodNotAllowed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodOptions, "http://127.0.0.1:8080/v1/models", nil)
+			if tc.origin != "" {
+				request.Header.Set("Origin", tc.origin)
+			}
+			if tc.method != "" {
+				request.Header.Set("Access-Control-Request-Method", tc.method)
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != tc.want {
+				t.Fatalf("status = %d, want %d", response.Code, tc.want)
+			}
+		})
+	}
+}
