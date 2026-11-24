@@ -1,5 +1,7 @@
 package providers
 
+import "github.com/benoitpetit/voie/internal/app"
+
 // KeyHelp returns the exact steps to obtain credentials for a provider.
 // URLs and flag names are checked against provider documentation; nothing is
 // fetched at runtime.
@@ -54,8 +56,6 @@ func KeyHelp(name string) []string {
 		return []string{"Claim the free quota at https://xinghuo.xfyun.cn/sparkapi.", "Get the APIPassword at https://console.xfyun.cn/ (different password per model version).", "Real-name verification with national ID and phone is required; overseas review can take 3 business days.", "Only the `lite` model is free and it has no tool calling."}
 	case "runcrate":
 		return []string{"Sign in with GitHub at https://www.runcrate.ai/dashboard/api-keys and create a key (rc_live_...).", "GitHub accounts older than 30 days get a weekly free allowance with no card.", "Free capacity can be exhausted; five free models are listed."}
-	case "llm7":
-		return []string{"No key is needed: voie uses the documented placeholder 'unused'.", "For higher limits, get a free token at https://token.llm7.io/.", "Anonymous access is shared and often returns 429 quota_exceeded; treat it as a fallback."}
 	case "vlm-run":
 		return []string{"No key is needed: voie uses the documented anonymous `Bearer vlmrun`.", "For higher limits, create a free key at https://app.vlm.run/dashboard/settings/api-keys.", "Anonymous limits: 10/min, 30/hour, 100/day per IP.", "Only small chat models work anonymously; the tool-capable model requires a key."}
 	case "opencode-zen", "opencode-go":
@@ -88,7 +88,7 @@ func KeyHelp(name string) []string {
 			"Account setup: " + account.URL,
 			"Client key: " + account.Key,
 			spec.SetupHint,
-			"Then call the model with: voie chat --model " + spec.Alias,
+			"Then call the model with: voie chat --model " + app.PrefixModelID(spec.Name, spec.Alias),
 		}
 	}
 	return []string{"No credential instructions are registered for " + name + "."}
@@ -96,9 +96,22 @@ func KeyHelp(name string) []string {
 
 // KeyHelpProviders lists every provider with registered credential instructions.
 func KeyHelpProviders() []string {
-	names := append([]string(nil), connectableNames()...)
+	seen := map[string]bool{}
+	names := make([]string, 0)
+	add := func(name string) {
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	for _, name := range connectableNames() {
+		add(name)
+	}
+	for _, spec := range TokenProviders {
+		add(spec.Name)
+	}
 	for _, spec := range ExternalGateways {
-		names = append(names, spec.Name)
+		add(spec.Name)
 	}
 	return names
 }
