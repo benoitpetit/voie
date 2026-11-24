@@ -42,6 +42,7 @@ type ExternalGatewaySpec struct {
 	Env             map[string]string // safe defaults forwarded to install and start commands
 	GeneratedEnv    []string          // secrets generated once and reused via EnvFile
 	Stop            []string          // command that stops the gateway's own daemon
+	StopKillBinary  string            // optional binary to force-kill after Stop (daemonizing tools only)
 	SetupHint       string            // account configuration required before inference
 	AccountRequired string            // "none", "upstream", "dashboard+upstream"
 	AccountKind     string            // which account exactly
@@ -209,8 +210,9 @@ var ExternalGateways = []ExternalGatewaySpec{
 		SetupHint:       "secrets are generated automatically; web-cookie lanes are off by default — never use /browser-login or /import-chrome",
 		AccountRequired: "none", AccountKind: "anonymous OpenCode lane (oc/big-pickle) or official API keys",
 		AccountURL: "https://github.com/yanstd888/9routerx", KeyRequired: "local sk- key created in dashboard",
-		Start: []string{"9routerx"},
-		Stop:  []string{"9routerx", "stop"},
+		Start:          []string{"9routerx"},
+		Stop:           []string{"9routerx", "stop"},
+		StopKillBinary: "9routerx",
 	},
 	{
 		Name: "freellmapi", Label: "FreeLLMAPI", Repo: "https://github.com/tashfeenahmed/freellmapi",
@@ -227,6 +229,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream", AccountKind: "official free API keys added in the dashboard",
 		AccountURL: "https://github.com/tashfeenahmed/freellmapi", KeyRequired: "unified key from the dashboard",
 		Start: []string{"docker", "compose", "up", "-d"},
+		Stop:  []string{"docker", "compose", "down"},
 	},
 }
 

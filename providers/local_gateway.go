@@ -244,15 +244,22 @@ func ShutdownGateways() {
 				continue
 			}
 			stop := exec.Command(spec.Stop[0], spec.Stop[1:]...)
+			stop.Dir = gatewayDir(spec)
 			stop.Env = os.Environ()
 			_ = stop.Run()
-			killProcessesByBinary(spec.Start[0])
+			if spec.StopKillBinary != "" {
+				killProcessesByBinary(spec.StopKillBinary)
+			}
 		}
+	}
+	for name := range gatewayStarted {
+		delete(gatewayStarted, name)
 	}
 	gatewayMu.Unlock()
 	for _, running := range processes {
 		if len(running.spec.Stop) > 0 {
 			stop := exec.Command(running.spec.Stop[0], running.spec.Stop[1:]...)
+			stop.Dir = running.spec.Dir
 			stop.Env = os.Environ()
 			_ = stop.Run()
 		}
