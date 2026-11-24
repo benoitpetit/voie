@@ -236,3 +236,23 @@ func TestEnsureIncludesChildDiagnostics(t *testing.T) {
 		t.Fatalf("Ensure error = %v, want the child's diagnostic output", err)
 	}
 }
+
+func TestGatewayRelativeBinaryResolvesInsideGatewayDir(t *testing.T) {
+	dir := t.TempDir()
+	gateway := NewLocalGateway(LocalGatewaySpec{
+		Name: "relative", Binary: "venv/bin/uvicorn", Dir: dir,
+		BaseURL: "http://127.0.0.1:1", HealthPath: "/health",
+	})
+	if gateway.Available() {
+		t.Fatal("missing relative binary reported available")
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "venv", "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "venv", "bin", "uvicorn"), []byte(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !gateway.Available() {
+		t.Fatal("relative binary in gateway dir not reported available")
+	}
+}

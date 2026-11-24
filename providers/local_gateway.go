@@ -95,8 +95,11 @@ func (g *LocalGateway) localKey() string {
 }
 
 func (g *LocalGateway) resolveBinary() string {
-	if strings.HasPrefix(g.spec.Binary, "./") && g.spec.Dir != "" {
-		return filepath.Join(g.spec.Dir, strings.TrimPrefix(g.spec.Binary, "./"))
+	// Installers drop binaries inside the gateway directory (for example
+	// venv/bin/uvicorn). Any relative path with a separator resolves there,
+	// not against voie's own working directory.
+	if g.spec.Dir != "" && !filepath.IsAbs(g.spec.Binary) && strings.ContainsRune(g.spec.Binary, os.PathSeparator) {
+		return filepath.Join(g.spec.Dir, g.spec.Binary)
 	}
 	return g.spec.Binary
 }
