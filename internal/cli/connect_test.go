@@ -445,3 +445,19 @@ func TestInstallListVerboseShowsCommands(t *testing.T) {
 		t.Fatalf("verbose list missing install commands:\n%s", stdout.String())
 	}
 }
+
+func TestPreflightAcceptsGeneratedRelativeBinary(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "venv", "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "venv", "bin", "pip"), []byte(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := preflightInstallStep([]string{"venv/bin/pip", "install", "-r", "requirements.txt"}, dir); err != nil {
+		t.Fatalf("generated binary rejected: %v", err)
+	}
+	if err := preflightInstallStep([]string{"definitely-missing-tool"}, dir); err == nil {
+		t.Fatal("missing tool accepted")
+	}
+}

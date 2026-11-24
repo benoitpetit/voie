@@ -258,3 +258,24 @@ func TestSetGatewayEnvValue(t *testing.T) {
 		t.Fatalf(".env = %q", data)
 	}
 }
+
+func TestGatewayCheckRunsInsideGatewayDir(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	spec, ok := ExternalGatewayByName("pplx-proxy")
+	if !ok {
+		t.Fatal("pplx-proxy spec missing")
+	}
+	dir := gatewayDir(spec)
+	if NewExternalGateway(spec).working() {
+		t.Fatal("gateway reported installed without server.py")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "server.py"), []byte(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !NewExternalGateway(spec).working() {
+		t.Fatal("gateway not reported installed despite server.py in its directory")
+	}
+}

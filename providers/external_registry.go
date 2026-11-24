@@ -194,7 +194,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 			{"venv/bin/pip", "install", "-r", "requirements.txt"},
 		},
 		Start:           []string{"venv/bin/uvicorn", "server:app", "--host", "127.0.0.1", "--port", "8892"},
-		Check:           []string{"test", "-x", "server.py"},
+		Check:           []string{"test", "-f", "server.py"},
 		Env:             map[string]string{"ACCOUNT_TYPE": "free"},
 		GeneratedEnv:    []string{"PPLX_PROXY_API_KEY"},
 		AccountRequired: "upstream",
@@ -680,6 +680,7 @@ func (p *ExternalGateway) working() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, p.spec.Check[0], p.spec.Check[1:]...)
+		cmd.Dir = gatewayDir(p.spec)
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
 		return cmd.Run() == nil
