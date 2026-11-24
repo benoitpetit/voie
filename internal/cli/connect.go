@@ -237,6 +237,27 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	if err := providers.ProvisionGatewayEnv(spec); err != nil {
 		return fmt.Errorf("prepare %s configuration: %w", spec.Name, err)
 	}
+	if len(spec.SetupCommand) > 0 {
+		setup := strings.Join(spec.SetupCommand, " ")
+		if file, ok := command.InOrStdin().(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+			answer, err := readLine(command, bufio.NewReader(command.InOrStdin()), "Run "+setup+" to set up an account? [Y/n]: ", false)
+			if err != nil {
+				return err
+			}
+			if strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes") || answer == "" {
+				fmt.Fprintf(command.OutOrStdout(), "+ %s\n", setup)
+				login := exec.CommandContext(command.Context(), spec.SetupCommand[0], spec.SetupCommand[1:]...)
+				login.Stdin = command.InOrStdin()
+				login.Stdout = command.OutOrStdout()
+				login.Stderr = command.ErrOrStderr()
+				if err := login.Run(); err != nil {
+					return fmt.Errorf("account setup for %s: %w", spec.Name, err)
+				}
+			}
+		} else {
+			fmt.Fprintf(command.OutOrStdout(), "Set up an account first with: %s\n", setup)
+		}
+	}
 	if err := providers.StartExternalGateway(spec.Name); err != nil {
 		return fmt.Errorf("start %s gateway: %w", spec.Name, err)
 	}
@@ -244,6 +265,19 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		return fmt.Errorf("provision %s key: %w", spec.Name, err)
 	}
 	providers.RefreshGatewayModels(spec.Name)
+	if spec.DashboardURL != "" {
+		fmt.Fprintf(command.OutOrStdout(), "Dashboard for account setup: %s\n", spec.DashboardURL)
+		if file, ok := command.InOrStdin().(*os.File); ok && term.IsTerminal(int(file.Fd())) {
+			fmt.Fprintln(command.OutOrStdout(), "Create or link your account there, then validate here to stop the gateway.")
+			if _, err := readLine(command, bufio.NewReader(command.InOrStdin()), "Press Enter when done: ", false); err != nil {
+				return err
+			}
+			providers.ShutdownGateways()
+			fmt.Fprintln(command.OutOrStdout(), "Gateway stopped.")
+		} else {
+			fmt.Fprintln(command.OutOrStdout(), "Non-interactive session: the gateway will stop when this command exits.")
+		}
+	}
 	account, _ := providers.ExternalGatewayAccount(spec.Name)
 	fmt.Fprintf(command.OutOrStdout(), "%s ready (account: %s, model: %s)\n", spec.Name, account.Required, spec.Alias)
 	return nil

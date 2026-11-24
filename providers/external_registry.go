@@ -48,6 +48,8 @@ type ExternalGatewaySpec struct {
 	AccountRequired string            // "none", "upstream", "dashboard+upstream"
 	AccountKind     string            // which account exactly
 	AccountURL      string            // where to create or link it
+	DashboardURL    string            // local dashboard to open during `voie connect`
+	SetupCommand    []string          // interactive account login to run before starting
 	KeyRequired     string            // local gateway key policy
 }
 
@@ -63,6 +65,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "dashboard+upstream",
 		AccountKind:     "OmniRoute dashboard password + at least one upstream provider (keyless NOAUTH providers exist)",
 		AccountURL:      "http://localhost:20128",
+		DashboardURL:    "http://localhost:20128",
 		KeyRequired:     "optional locally (REQUIRE_API_KEY off by default)",
 		Start:           []string{"omniroute"},
 	},
@@ -75,6 +78,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream",
 		AccountKind:     "Qoder CN/intl account (free daily check-in credits)",
 		AccountURL:      "https://qoder.com/account/integrations",
+		DashboardURL:    "http://127.0.0.1:8790",
 		KeyRequired:     "optional on localhost when no key is set",
 		Start:           []string{"bash", "start-qoder-proxy.sh"},
 	},
@@ -86,6 +90,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream",
 		AccountKind:     "Windsurf/Devin account (free models available)",
 		AccountURL:      "https://windsurf.com/show-auth-token",
+		DashboardURL:    "http://localhost:3003/dashboard",
 		KeyRequired:     "required: API_KEY or WINDSURFAPI_ALLOW_UNAUTHENTICATED=1 on loopback",
 		Start:           []string{"npm", "start"},
 	},
@@ -97,6 +102,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream",
 		AccountKind:     "GitHub Copilot Free, Codex or xAI account",
 		AccountURL:      "https://github.com/settings/copilot",
+		SetupCommand:    []string{"copilot-api", "auth"},
 		KeyRequired:     "optional on loopback",
 		Start:           []string{"copilot-api", "start"},
 	},
@@ -108,6 +114,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream",
 		AccountKind:     "Cursor Free/Hobby account or dashboard integration key",
 		AccountURL:      "https://cursor.com/dashboard/integrations",
+		SetupCommand:    []string{"cursor-api-proxy", "login"},
 		KeyRequired:     "optional",
 		Start:           []string{"cursor-api-proxy"},
 	},
@@ -131,6 +138,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream",
 		AccountKind:     "Qoder / WorkBuddy / Trae account",
 		AccountURL:      "http://127.0.0.1:3010",
+		DashboardURL:    "http://127.0.0.1:3010",
 		KeyRequired:     "required: generated admin or client key",
 		Start:           []string{"./gateway"},
 	},
@@ -142,6 +150,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		AccountRequired: "upstream",
 		AccountKind:     "CodeBuddy (CN) or WorkBuddy (Global) account",
 		AccountURL:      "http://127.0.0.1:8787/admin",
+		DashboardURL:    "http://127.0.0.1:8787/admin",
 		KeyRequired:     "none: placeholder accepted",
 		Start:           []string{"workbuddy2api", "--port", "8787"},
 	},
@@ -170,7 +179,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		Deps:            [][]string{{"bash", "-c", "chmod +x *.sh"}},
 		SetupHint:       "consumer-subscription reverse proxy: link your own Trae account in the dashboard; ToS risk",
 		AccountRequired: "upstream", AccountKind: "Trae personal account (CN or INTL)",
-		AccountURL: "http://127.0.0.1:8791", KeyRequired: "optional locally (dashboard password admin)",
+		AccountURL: "http://127.0.0.1:8791", DashboardURL: "http://127.0.0.1:8791", KeyRequired: "optional locally (dashboard password admin)",
 		Start: []string{"bash", "start-trae2api-hub.sh"},
 	},
 	{
@@ -230,7 +239,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 		},
 		SetupHint:       "BYOK only: set ENCRYPTION_KEY before connect, add your own provider keys in the dashboard; remote catalog is disabled",
 		AccountRequired: "upstream", AccountKind: "official free API keys added in the dashboard",
-		AccountURL: "https://github.com/tashfeenahmed/freellmapi", KeyRequired: "unified key from the dashboard",
+		AccountURL: "https://github.com/tashfeenahmed/freellmapi", DashboardURL: "http://127.0.0.1:3001", KeyRequired: "unified key from the dashboard",
 		Start: []string{"docker", "compose", "up", "-d"},
 		Stop:  []string{"docker", "compose", "down"},
 	},
