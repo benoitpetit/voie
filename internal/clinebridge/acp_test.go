@@ -198,3 +198,27 @@ func TestPromptCollectsChunksAfterResponse(t *testing.T) {
 		t.Fatalf("Prompt text = %q, want the trailing agent chunk", text)
 	}
 }
+
+func TestPromptReturnsWhenAgentExitsDuringGrace(t *testing.T) {
+	agent := newFakeAgent()
+	client := NewClient(agent, agent)
+	agent.push(`{"jsonrpc":"2.0","id":1,"result":{"stopReason":"end_turn"}}`)
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		agent.mu.Lock()
+		close(agent.responses)
+		agent.mu.Unlock()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_, _ = client.Prompt(ctx, "s1", "hi", nil)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Prompt hung after the agent closed stdout during the grace window")
+	}
+}

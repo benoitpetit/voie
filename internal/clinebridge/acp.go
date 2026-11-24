@@ -199,7 +199,10 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, onChunk fun
 			defer timer.Stop()
 			for {
 				select {
-				case params := <-c.updates:
+				case params, ok := <-c.updates:
+					if !ok {
+						return res.reason, res.err
+					}
 					handle(params)
 					if !timer.Stop() {
 						select {
@@ -208,6 +211,8 @@ func (c *Client) Prompt(ctx context.Context, sessionID, text string, onChunk fun
 						}
 					}
 					timer.Reset(trailingUpdateGrace)
+				case <-ctx.Done():
+					return "", ctx.Err()
 				case <-timer.C:
 					return res.reason, res.err
 				}
