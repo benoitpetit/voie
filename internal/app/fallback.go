@@ -53,6 +53,11 @@ func (s *Service) resolvePolicy(request CompletionRequest) (FallbackPolicy, erro
 // classifyFailure returns the failure category of an error, treating anything
 // that is not a typed ProviderFailure as permanent (not retry-eligible).
 func classifyFailure(err error) FailureCategory {
+	// A provider-side deadline while the caller still has time is retryable;
+	// a canceled caller is not (contextOrUpstreamError handles that case).
+	if errors.Is(err, context.DeadlineExceeded) {
+		return FailureTransient
+	}
 	var failure *ProviderFailure
 	if errors.As(err, &failure) {
 		return failure.Category
@@ -231,17 +236,19 @@ func (s *Service) callWithFallbacks(ctx context.Context, request CompletionReque
 			response, callErr := provider.ChatCompletion(ctx, request.Messages, candidate)
 			attempts = append(attempts, Attempt{Model: candidate, Provider: providerName, Attempt: ordinal, Outcome: OutcomeFailed, DurationMillis: time.Since(started).Milliseconds()})
 			attempt := &attempts[len(attempts)-1]
-			if callErr == nil {
-				if response == nil || len(response.Choices) == 0 {
-					request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call failed", Model: candidate, Provider: providerName, Status: "failed"})
-					return nil, attempts, appError(ErrUpstream, fmt.Sprintf("provider %q returned an empty completion", providerName), nil)
-				}
+			if callErr == nil && response != nil && len(response.Choices) > 0 {
 				attempt.Outcome = OutcomeSucceeded
 				response.Provider = providerName
 				request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call completed", Model: candidate, Provider: providerName, Status: "succeeded"})
 				return response, attempts, nil
 			}
-			request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call failed", Model: candidate, Provider: providerName, Status: "failed"})
+			if callErr == nil {
+				request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call failed", Model: candidate, Provider: providerName, Status: "failed"})
+				callErr = NewProviderFailure(FailureUnavailable, providerName, candidate, 0, fmt.Errorf("empty completion"))
+			}
+			if callErr != nil {
+				request.emitProgress(ProgressEvent{Stage: "model", Message: "Model call failed", Model: candidate, Provider: providerName, Status: "failed"})
+			}
 			attempt.Outcome = outcomeFor(callErr)
 			lastErr = callErr
 			switch classifyFailure(callErr) {
@@ -258,6 +265,12 @@ func (s *Service) callWithFallbacks(ctx context.Context, request CompletionReque
 		}
 		if index >= policy.MaxFallbackModels {
 			break
+		}
+	}
+	if ctx.Err() == nil {
+		var failure *ProviderFailure
+		if errors.As(lastErr, &failure) {
+			return nil, attempts, lastErr
 		}
 	}
 	return nil, attempts, s.contextOrUpstreamError(ctx, lastErr)

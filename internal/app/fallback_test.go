@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 type fallbackProvider struct {
@@ -410,5 +411,50 @@ func TestFallbackClassicStreamStopsAfterFirstChunk(t *testing.T) {
 	}
 	if len(a.calls) != 1 || len(b.calls) != 0 {
 		t.Fatalf("stream calls a=%v b=%v, want no retry or fallback after a chunk", a.calls, b.calls)
+	}
+}
+
+func TestEmptyCompletionIsFallbackEligible(t *testing.T) {
+	registry := NewRegistry()
+	primary := &fallbackProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}, empty: map[string]bool{"a-model": true}}
+	backup := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}}
+	registry.Register("a", primary)
+	registry.Register("b", backup)
+	service, err := NewService(registry, ServiceOptions{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{
+		Model: "a-model", Messages: []Message{{Role: "user", Content: "hi"}},
+		Fallback: &FallbackOverride{Models: []string{"b-model"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Choices[0].Message.Content != "answer from b-model" {
+		t.Fatalf("response = %+v, want the fallback model's answer", response)
+	}
+}
+
+func TestUntypedDeadlineWithLiveCallerIsTransient(t *testing.T) {
+	provider := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, DefaultModel: "a-model", SupportedModels: []string{"a-model"}},
+		failFirst: map[string]int{"a-model": 1},
+		failures:  map[string]error{"a-model": context.DeadlineExceeded},
+	}
+	registry := NewRegistry()
+	registry.Register("a", provider)
+	service, err := NewService(registry, ServiceOptions{
+		Timeout:  time.Second,
+		Fallback: &FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 0},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Complete(context.Background(), CompletionRequest{Model: "a-model", Messages: []Message{{Role: "user", Content: "hi"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.calls) < 2 {
+		t.Fatalf("calls = %v, want a retry after the transient deadline", provider.calls)
 	}
 }
