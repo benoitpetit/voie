@@ -399,4 +399,3 @@ func TestBudgetNotConsumedByInvalidCandidate(t *testing.T) {
 		t.Fatalf("budget = %d, want 1 (pinned-out candidate must not consume budget)", state.budget)
 	}
 }
-
