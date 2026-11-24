@@ -178,5 +178,5 @@ func TestAPIRefDocumentsOpenAISubset(t *testing.T) {
 	api := readDoc(t, "api-reference.md")
 	assertContains(t, "api-reference.md", api, "temperature")
 	assertContains(t, "api-reference.md", api, "tool_calls")
-	assertContains(t, "api-reference.md", api, "Only one completion choice")
+	assertContains(t, "api-reference.md", api, "completion choice is supported")
 }
