@@ -1090,3 +1090,36 @@ func TestStreamingUsageChunkWhenRequested(t *testing.T) {
 		}
 	}
 }
+
+func TestStreamingFallbackReportsFinalModel(t *testing.T) {
+	service, primary, backup := httpFallbackService(t)
+	primary.failingModel, primary.failure = "model-a", app.NewProviderFailure(app.FailureTransient, "a", "model-a", 503, errors.New("down"))
+	primary.failures = 10
+	handler := NewHandler(service, &config.Config{})
+	body := `{"model":"model-a","stream":true,"fallback":{"models":["model-b"]},"messages":[{"role":"user","content":"hi"}]}`
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	chunks := sseChatChunks(recorder.Body.String())
+	if len(chunks) < 2 {
+		t.Fatalf("no SSE chunks: %s", recorder.Body.String())
+	}
+	final := chunks[len(chunks)-1]
+	routing, _ := final["routing"].(map[string]any)
+	if routing == nil || len(routing["attempts"].([]any)) < 2 {
+		t.Fatalf("final routing = %v, want fallback attempts", final["routing"])
+	}
+	models, _ := routing["models"].([]any)
+	if len(models) == 0 {
+		t.Fatalf("final routing has no models: %v", routing)
+	}
+	last, _ := models[len(models)-1].(map[string]any)
+	if last["model"] != "model-b" || last["status"] != "succeeded" {
+		t.Fatalf("final route = %v, want the successful fallback model", last)
+	}
+	if final["model"] != "model-b" {
+		t.Fatalf("final model = %v, want the successful fallback model", final["model"])
+	}
+	if backup.calls[0] != "model-b" {
+		t.Fatalf("backup calls = %v", backup.calls)
+	}
+}

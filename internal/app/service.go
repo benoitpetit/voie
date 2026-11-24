@@ -363,6 +363,12 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 			return streamErr
 		}
 		routing.Attempts = attempts
+		if len(attempts) > 0 {
+			last := attempts[len(attempts)-1]
+			if last.Outcome == OutcomeSucceeded {
+				routing.Models = []RoutedModel{{Model: last.Model, Provider: last.Provider, Status: "succeeded"}}
+			}
+		}
 	} else {
 		request.emitProgress(ProgressEvent{Stage: "routing", Message: "Selecting model from routing profile", Status: "started"})
 		candidate, info, selectErr := s.selectAutomatic(callCtx, request)

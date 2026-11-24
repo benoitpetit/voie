@@ -167,6 +167,14 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 	}
 	logChatOutcome(request, nil, err, finalRouting)
 	resolveModel(finalRouting)
+	// A fallback may have replaced the primary model after the first chunk.
+	if finalRouting != nil && len(finalRouting.Models) > 0 {
+		last := finalRouting.Models[len(finalRouting.Models)-1].Model
+		if last != "" && !strings.EqualFold(last, resolvedModel) &&
+			!strings.EqualFold(app.NormalizeModelID(last), app.NormalizeModelID(resolvedModel)) {
+			resolvedModel = last
+		}
+	}
 	start(nil)
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
