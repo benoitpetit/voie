@@ -2,6 +2,7 @@ package clinebridge
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -79,5 +80,28 @@ func TestClineBridgeHealth(t *testing.T) {
 	// spawning the ACP child process.
 	if len(denyHook) == 0 || !strings.Contains(string(denyHook), "skip") {
 		t.Fatal("deny hook must always skip tools")
+	}
+}
+
+func TestFlattenMessagesKeepsRoles(t *testing.T) {
+	messages := []bridgeMessage{
+		{Role: "user", Content: json.RawMessage(`"hello"`)},
+		{Role: "assistant", Content: json.RawMessage(`"hi"`)},
+	}
+	got := flattenMessages(messages)
+	if !strings.Contains(got, "user:") || !strings.Contains(got, "assistant:") {
+		t.Fatalf("flattenMessages = %q, want role markers", got)
+	}
+}
+
+func TestBridgeSSEChunksUseOpenAIShape(t *testing.T) {
+	chunk := bridgeStreamChunk("chatcmpl-1", "cline-model", "token", false)
+	for _, key := range []string{"id", "object", "created", "model", "choices"} {
+		if _, ok := chunk[key]; !ok {
+			t.Errorf("SSE chunk missing %q: %v", key, chunk)
+		}
+	}
+	if chunk["object"] != "chat.completion.chunk" || chunk["model"] != "cline-model" {
+		t.Fatalf("SSE chunk = %v", chunk)
 	}
 }
