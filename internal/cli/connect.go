@@ -163,11 +163,11 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					if err := ensureACPAuth(command, binary, spec.AuthCheck, spec.AuthLogin, input); err != nil {
 						return fmt.Errorf("%s auth: %w", provider, err)
 					}
-					if err := startACPBridge(provider); err != nil {
+					if err := startACPBridge(command.Context(), provider); err != nil {
 						return fmt.Errorf("start %s ACP bridge: %w", provider, err)
 					}
 				} else if provider == "cline" {
-					if err := startClineBridge(); err != nil {
+					if err := startClineBridge(command.Context()); err != nil {
 						return fmt.Errorf("start cline ACP bridge (did you run `cline auth`?): %w", err)
 					}
 				}

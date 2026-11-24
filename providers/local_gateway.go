@@ -114,8 +114,13 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 		return nil
 	}
 	gatewayMu.Lock()
-	defer gatewayMu.Unlock()
-	if g.healthy() {
+	locked := true
+	defer func() {
+		if locked {
+			gatewayMu.Unlock()
+		}
+	}()
+	if _, alreadyRunning := gatewayProcess[g.spec.Name]; alreadyRunning {
 		return nil
 	}
 	if _, err := exec.LookPath(g.resolveBinary()); err != nil {
@@ -173,14 +178,17 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	running := &runningProcess{cmd: cmd, done: make(chan struct{}), spec: g.spec}
 	gatewayProcess[g.spec.Name] = running
 	gatewayStarted[g.spec.Name] = true
+	// Health polling must not hold the global lock: a gateway that never
+	// becomes healthy would block every other gateway start for up to 15s.
+	locked = false
+	gatewayMu.Unlock()
 	// Exactly one Wait() per process, owned by the manager. A second Wait()
 	// from ShutdownGateways can block forever on some platforms.
 	go func() {
 		_ = cmd.Wait()
 		_ = devNull.Close()
-		// Signal exit before taking the lock: Ensure() holds gatewayMu while
-		// it waits on done, so closing afterwards would deadlock whenever a
-		// gateway never becomes healthy.
+		// Signal exit before taking the lock so a waiter on done can proceed
+		// even while this goroutine is waiting for gatewayMu.
 		close(running.done)
 		gatewayMu.Lock()
 		if gatewayProcess[g.spec.Name] == running {

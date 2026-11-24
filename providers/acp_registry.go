@@ -98,12 +98,12 @@ func (p *ACPProvider) working() bool {
 // StartACPBridge starts (or reuses) the bridge and reports whether it became
 // healthy. `voie connect` uses this so a provider is visible right after it is
 // connected.
-func StartACPBridge(name string) error {
+func StartACPBridge(ctx context.Context, name string) error {
 	spec, ok := ACPProviderSpecByName(name)
 	if !ok {
 		return errUnknownProvider
 	}
-	return NewACPProvider(spec).gateway.Ensure(context.Background())
+	return NewACPProvider(spec).gateway.Ensure(ctx)
 }
 
 var errUnknownProvider = errors.New("unknown provider")

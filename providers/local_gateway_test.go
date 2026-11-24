@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -157,5 +158,65 @@ func TestHealthyAcceptsOwnBridgeHealth(t *testing.T) {
 	})
 	if !gateway.healthy() {
 		t.Fatal("own bridge health response was rejected")
+	}
+}
+
+func TestStartACPBridgePropagatesCancellation(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "codebuddy")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	err := StartACPBridge(ctx, "codebuddy")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("StartACPBridge error = %v, want context.Canceled", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Fatalf("cancellation took %s, want prompt", time.Since(start))
+	}
+}
+
+func TestEnsureDoesNotHoldGlobalLockWhilePolling(t *testing.T) {
+	block := make(chan struct{})
+	defer close(block)
+	callsA := 0
+	a := NewLocalGateway(LocalGatewaySpec{Name: "lock-test-a", Binary: "sleep", Args: []string{"30"}, BaseURL: "http://127.0.0.1:1", HealthPath: "/health"})
+	a.HealthCheck = func() bool {
+		callsA++
+		if callsA == 1 {
+			return false
+		}
+		<-block
+		return false
+	}
+	b := NewLocalGateway(LocalGatewaySpec{Name: "lock-test-b", Binary: "sleep", Args: []string{"30"}, BaseURL: "http://127.0.0.1:2", HealthPath: "/health"})
+	callsB := 0
+	b.HealthCheck = func() bool {
+		callsB++
+		return callsB >= 2
+	}
+	doneA := make(chan struct{})
+	go func() {
+		_ = a.Ensure(context.Background())
+		close(doneA)
+	}()
+	time.Sleep(100 * time.Millisecond)
+	doneB := make(chan error, 1)
+	go func() { doneB <- b.Ensure(context.Background()) }()
+	select {
+	case err := <-doneB:
+		if err != nil {
+			t.Fatalf("gateway B Ensure: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("gateway B blocked on the global gateway lock while A was polling")
+	}
+	select {
+	case <-doneA:
+	default:
 	}
 }

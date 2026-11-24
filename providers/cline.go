@@ -75,8 +75,8 @@ func (p *Cline) GetInfo() app.ProviderInfo {
 }
 
 // StartClineBridge starts the in-process ACP bridge used by `voie connect cline`.
-func StartClineBridge() error {
-	return NewCline().gateway.Ensure(context.Background())
+func StartClineBridge(ctx context.Context) error {
+	return NewCline().gateway.Ensure(ctx)
 }
 
 func (p *Cline) ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error) {
