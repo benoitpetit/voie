@@ -109,3 +109,60 @@ func TestServiceConversationFailureDoesNotAppendAndRejectsSystemReplacement(t *t
 		t.Fatalf("err=%v calls=%d", err, store.calls)
 	}
 }
+
+func TestConversationCRUDThroughService(t *testing.T) {
+	store := &memoryConversationStore{}
+	service, err := NewService(NewRegistry(), ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	created, err := service.CreateConversation(ctx)
+	if err != nil || created.ID != "c1" {
+		t.Fatalf("create = %+v, %v", created, err)
+	}
+	got, err := service.GetConversation(ctx, created.ID)
+	if err != nil || got.ID != created.ID {
+		t.Fatalf("get = %+v, %v", got, err)
+	}
+	if _, err := service.ListConversations(ctx, 10, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteConversation(ctx, created.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestToolMessageRequiresToolCallID(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("test", &testProvider{info: ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"model"}}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Complete(context.Background(), CompletionRequest{
+		Model:    "model",
+		Messages: []Message{{Role: "tool", Content: "result"}},
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestSystemMessageRejectedAfterFirstTurn(t *testing.T) {
+	store := &memoryConversationStore{}
+	store.value = Conversation{ID: "c1", Version: 1, Turns: []ConversationTurn{{UserMessages: []Message{{Role: "user", Content: "hi"}}, Assistant: Message{Role: "assistant", Content: "hello"}}}}
+	registry := NewRegistry()
+	registry.Register("test", &testProvider{info: ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"model"}}})
+	service, err := NewService(registry, ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Complete(context.Background(), CompletionRequest{
+		Model: "model", ConversationID: "c1",
+		Messages: []Message{{Role: "system", Content: "new instructions"}, {Role: "user", Content: "hi"}},
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}

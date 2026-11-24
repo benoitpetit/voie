@@ -645,9 +645,16 @@ func validateMessages(messages []Message) error {
 	}
 	for i, message := range messages {
 		switch message.Role {
-		case "system", "developer", "user", "tool":
+		case "system", "developer", "user":
 			if strings.TrimSpace(message.Content) == "" {
 				return appError(ErrInvalidInput, fmt.Sprintf("message %d must have content", i), nil)
+			}
+		case "tool":
+			if strings.TrimSpace(message.Content) == "" {
+				return appError(ErrInvalidInput, fmt.Sprintf("message %d must have content", i), nil)
+			}
+			if strings.TrimSpace(message.ToolCallID) == "" {
+				return appError(ErrInvalidInput, fmt.Sprintf("message %d must have tool_call_id", i), nil)
 			}
 		case "assistant":
 			if strings.TrimSpace(message.Content) == "" && message.ToolCalls == nil {
