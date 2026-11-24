@@ -295,7 +295,13 @@ func (h *apiHandler) models(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use GET.")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"object": "list", "data": h.service.ListModels()})
+	tier := app.ModelTier(strings.ToLower(strings.TrimSpace(r.URL.Query().Get("tier"))))
+	if tier != "" && tier != app.TierFree && tier != app.TierPaid {
+		writeError(w, http.StatusBadRequest, "tier must be free or paid")
+		return
+	}
+	provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+	writeJSON(w, http.StatusOK, map[string]interface{}{"object": "list", "data": h.service.ListModelsFiltered(provider, tier)})
 }
 
 func (h *apiHandler) providers(w http.ResponseWriter, r *http.Request) {

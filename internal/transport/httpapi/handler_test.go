@@ -1191,3 +1191,55 @@ func TestStreamingUsageChunkCarriesConversationAndRouting(t *testing.T) {
 	}
 	t.Fatal("no usage chunk found")
 }
+
+type tierHTTPProvider struct{}
+
+func (*tierHTTPProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"free-model", "paid-model"}, FreeModels: []string{"free-model"}}
+}
+func (*tierHTTPProvider) SupportsModel(model string) bool {
+	return model == "free-model" || model == "paid-model"
+}
+func (*tierHTTPProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{}, nil
+}
+func (*tierHTTPProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
+}
+
+func TestHTTPModelsTierAndProviderFilters(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &tierHTTPProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	for _, tc := range []struct {
+		query  string
+		status int
+		want   []string
+		absent []string
+	}{
+		{query: "?tier=free", status: http.StatusOK, want: []string{"free-model"}, absent: []string{"paid-model"}},
+		{query: "?tier=paid", status: http.StatusOK, want: []string{"paid-model", `"tier":"paid"`}, absent: []string{"free-model"}},
+		{query: "?provider=test&tier=paid", status: http.StatusOK, want: []string{"paid-model"}},
+		{query: "?tier=bogus", status: http.StatusBadRequest},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/models"+tc.query, nil))
+		if recorder.Code != tc.status {
+			t.Fatalf("%s: status = %d, want %d", tc.query, recorder.Code, tc.status)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(recorder.Body.String(), want) {
+				t.Errorf("%s: body missing %q: %s", tc.query, want, recorder.Body.String())
+			}
+		}
+		for _, absent := range tc.absent {
+			if strings.Contains(recorder.Body.String(), absent) {
+				t.Errorf("%s: body contains %q", tc.query, absent)
+			}
+		}
+	}
+}
