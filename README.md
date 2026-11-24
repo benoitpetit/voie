@@ -93,7 +93,7 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `DEBUG` | `false` | Enable debug logging |
 | `DEFAULT_PROVIDER` | empty | Provider used for the generic `openai` model in API requests |
 | `TIMEOUT` | `120` | End-to-end completion timeout in seconds |
-| `API_TOKEN` | empty | Bearer token required for non-loopback binds |
+| `API_TOKEN` | empty (`voie-local` in the Docker image) | Bearer token required for non-loopback binds; override the image default for hosted use |
 | `REQUIRE_CONVERSATION_SCOPE` | `false` | Require the trusted conversation scope header on `/v1/*`; requires `API_TOKEN` |
 | `ROUTER_MODEL` | empty | Optional model used by profiles with `selection: "router"`; also the ensemble synthesizer fallback |
 | `SYNTHESIS_MODEL` | empty | Model that merges ensemble answers; falls back to `ROUTER_MODEL` |

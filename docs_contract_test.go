@@ -92,3 +92,10 @@ func TestDocumentedCommandsAndStatusCodes(t *testing.T) {
 		assertContains(t, "api-reference.md", api, "| `"+code+"` |")
 	}
 }
+
+func TestDockerfileDeclaresAPIToken(t *testing.T) {
+	dockerfile := readDoc(t, "Dockerfile")
+	assertContains(t, "Dockerfile", dockerfile, "HOST=0.0.0.0")
+	assertContains(t, "Dockerfile", dockerfile, "API_TOKEN=")
+	assertContains(t, "docs/deploy-coolify.md", readDoc(t, "docs/deploy-coolify.md"), "API_TOKEN")
+}

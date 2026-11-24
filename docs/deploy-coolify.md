@@ -22,7 +22,7 @@ Mount a persistent volume at `/data`. voie stores local conversation data in
 
 ## Required secret
 
-Set `API_TOKEN` in the Coolify application environment to a high-entropy secret
+The image ships with `API_TOKEN=voie-local` so a bare container starts behind a placeholder token. Set `API_TOKEN` in the Coolify application environment to a high-entropy secret
 generated for this origin. Do not commit or print the value. The Go service
 binds to `0.0.0.0:8080` in the container and refuses to start on a non-loopback
 host when `API_TOKEN` is empty.

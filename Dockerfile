@@ -21,6 +21,7 @@ COPY --from=build /out/voie /usr/local/bin/voie
 
 ENV HOST=0.0.0.0 \
     PORT=8080 \
+    API_TOKEN=voie-local \
     CONVERSATION_DB_PATH=/data/conversations.db
 
 EXPOSE 8080
