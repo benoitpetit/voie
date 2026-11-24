@@ -140,3 +140,5 @@ The MCP transport writes protocol messages to stdout. `voie mcp` sends applicati
 `voie install` without arguments prints a compact `NAME / TYPE / STATUS / ACCOUNT / NEXT` table: `NEXT` is the single command to run (`voie install <name>`, `voie connect <name>`, or `-` when already connected). Long install commands, ports, labels and setup hints are available with `voie install --verbose` and are always printed when actually installing a provider.
 
 `voie connect disconnect <provider>` removes the saved key and its connection state, so the provider's models disappear from `voie models`. For CLI agents and local gateways, voie asks whether to also delete the installed npm/uv package or the cloned gateway directory; answering no keeps the files. `--remove-app` removes them without a prompt (for scripts), and `--keep-app` keeps them without prompting.
+
+Only the `auto` lane of pplx-proxy is classified `free`; the subscription models it advertises are `paid` with `price unknown`. A `403` from Perplexity means the connected account tier cannot use that model — the upstream error message is surfaced verbatim.

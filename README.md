@@ -266,3 +266,5 @@ Responses include `routing.attempts`: one entry per provider call with the model
 ### Perplexity gateway (opt-in)
 
 `voie install pplx-proxy` / `voie connect pplx-proxy` installs [pplx-proxy](https://github.com/jamie950315/pplx-proxy) on loopback port 8892. During `voie connect`, voie opens a visible browser on Perplexity so you can sign in, then captures `__Secure-next-auth.session-token` into the gateway's `.env` automatically. If Perplexity rejects the session later, the error tells you to rerun `voie connect pplx-proxy`. Use a private account you can afford to lose; this is an unofficial reverse proxy with ToS risk.
+
+Only the `auto` lane of pplx-proxy is classified `free`; the subscription models it advertises are `paid` with `price unknown`. A `403` from Perplexity means the connected account tier cannot use that model — the upstream error message is surfaced verbatim.

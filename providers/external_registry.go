@@ -189,6 +189,7 @@ var ExternalGateways = []ExternalGatewaySpec{
 	{
 		Name: "pplx-proxy", Label: "Perplexity (pplx-proxy)", Repo: "https://github.com/jamie950315/pplx-proxy.git",
 		Port: 8892, Alias: "pplx-auto", Upstream: "auto", HealthPath: "/health",
+		FreeModels: []string{"auto"}, // only the auto lane is free on a free account
 		Deps: [][]string{
 			{"python3", "-m", "venv", "venv"},
 			{"venv/bin/pip", "install", "-r", "requirements.txt"},
@@ -685,6 +686,7 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 	}
 	if spec.Name == "pplx-proxy" {
 		cfg.OmitDefaultMaxTokens = true
+		cfg.BodyHint = pplxProxyErrorHint
 		cfg.ResponseHint = func(content string) error {
 			if strings.Contains(content, "Sign up and repeat your request.") {
 				return fmt.Errorf("Perplexity cookie expired or invalid; run `voie connect pplx-proxy`")
@@ -693,6 +695,21 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		}
 	}
 	return &ExternalGateway{openAIKeylessProvider: newOpenAIKeylessProvider(cfg, &http.Client{Timeout: openAIKeylessTimeout}), spec: spec, gateway: gateway}
+}
+
+func pplxProxyErrorHint(status int, body []byte) string {
+	if status < 400 {
+		return ""
+	}
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &payload) != nil || payload.Error.Message == "" {
+		return ""
+	}
+	return payload.Error.Message
 }
 
 func (p *ExternalGateway) working() bool {

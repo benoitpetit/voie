@@ -316,3 +316,11 @@ func TestFreellmpoolCatalogueKeepsOnlyRoutingAliases(t *testing.T) {
 		t.Fatalf("non-pool gateway was filtered: %v", got)
 	}
 }
+
+func TestPPLXProxyOnlyAutoIsFree(t *testing.T) {
+	models := map[string]string{"auto": "auto", "gpt": "gpt", "claude55sonnet": "claude55sonnet"}
+	free := gatewayFreeModels("pplx-proxy", models)
+	if len(free) != 1 || !free["auto"] {
+		t.Fatalf("free models = %v, want only auto", free)
+	}
+}

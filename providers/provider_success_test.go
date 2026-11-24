@@ -259,3 +259,15 @@ func TestGatewayModelIDsMatchCaseInsensitively(t *testing.T) {
 		t.Fatalf("resolve = %q, %v", resolved, err)
 	}
 }
+
+func TestPPLXProxySurfacesUpstreamErrorMessage(t *testing.T) {
+	var hint string
+	if p := newOpenAIKeylessProvider(openAIKeylessConfig{}, nil); p != nil {
+		// BodyHint is configured by NewExternalGateway; verify the parser shape
+		// using the same extraction helper.
+		hint = pplxProxyErrorHint(403, []byte(`{"error":{"message":"model requires Pro"}}`))
+	}
+	if hint != "model requires Pro" {
+		t.Fatalf("hint = %q", hint)
+	}
+}
