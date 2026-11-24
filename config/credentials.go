@@ -83,7 +83,15 @@ func (c *Credentials) write() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o600)
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, append(data, '\n'), 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(temporary, path); err != nil {
+		_ = os.Remove(temporary)
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 func (c *Credentials) Set(provider, token string) error {

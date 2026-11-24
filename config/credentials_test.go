@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -84,5 +85,43 @@ func TestCredentialStoreOpencodeSharesEnv(t *testing.T) {
 	}
 	if got, want := ProviderKeyEnv("openrouter"), "VOIE_OPENROUTER_KEY"; got != want {
 		t.Errorf("ProviderKeyEnv(openrouter) = %q, want %q", got, want)
+	}
+}
+
+func TestCredentialsWriteIsAtomicAndKeeps0600(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	path := CredentialsPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"providers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("openrouter", "token"); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("credentials mode = %o, want 600", info.Mode().Perm())
+	}
+	reloaded, err := LoadCredentials()
+	if err != nil || reloaded.Token("openrouter") != "token" {
+		t.Fatalf("reloaded = %+v, %v", reloaded, err)
+	}
+	if entries, err := os.ReadDir(filepath.Dir(path)); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".tmp") {
+				t.Fatalf("temporary credential file left behind: %s", entry.Name())
+			}
+		}
 	}
 }

@@ -184,3 +184,24 @@ func TestLoadRejectsInvalidRequireConversationScope(t *testing.T) {
 		t.Fatalf("Load() = %v, want REQUIRE_CONVERSATION_SCOPE error", err)
 	}
 }
+
+func TestAPITokenIsTrimmed(t *testing.T) {
+	t.Setenv("API_TOKEN", "  secret  ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.APIToken != "secret" {
+		t.Fatalf("API_TOKEN = %q, want trimmed secret", cfg.APIToken)
+	}
+}
+
+func TestLoadWithoutUserConfigDirWhenPathsExplicit(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("ROUTING_CONFIG_PATH", filepath.Join(t.TempDir(), "routing.json"))
+	t.Setenv("CONVERSATION_DB_PATH", filepath.Join(t.TempDir(), "conversations.db"))
+	if _, err := Load(); err != nil {
+		t.Fatalf("Load with explicit paths failed: %v", err)
+	}
+}
