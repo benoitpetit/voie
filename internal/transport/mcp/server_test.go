@@ -375,3 +375,55 @@ func (p *mcpFallbackProvider) ChatCompletion(_ context.Context, _ []app.Message,
 func (*mcpFallbackProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
 	return nil
 }
+
+type tierMCPProvider struct{}
+
+func (*tierMCPProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "test", Label: "Test", Working: true,
+		SupportedModels: []string{"free-model", "paid-model"}, FreeModels: []string{"free-model"}}
+}
+func (*tierMCPProvider) SupportsModel(model string) bool {
+	return model == "free-model" || model == "paid-model"
+}
+func (*tierMCPProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{}, nil
+}
+func (*tierMCPProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
+}
+
+func TestMCPListModelsTierAndProviderFilters(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &tierMCPProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(service)
+	clientSession, closeSessions := connectTestClient(t, server)
+	defer closeSessions()
+	for _, tc := range []struct {
+		args   map[string]any
+		want   string
+		absent string
+	}{
+		{args: map[string]any{"tier": "paid"}, want: "paid-model", absent: "free-model"},
+		{args: map[string]any{"tier": "free"}, want: "free-model", absent: "paid-model"},
+		{args: map[string]any{"provider": "test", "tier": "paid"}, want: "paid-model"},
+	} {
+		result, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_models", Arguments: tc.args})
+		if err != nil || result.IsError {
+			t.Fatalf("%v: %+v %v", tc.args, result, err)
+		}
+		encoded, _ := json.Marshal(result.StructuredContent)
+		if !strings.Contains(string(encoded), tc.want) {
+			t.Errorf("%v: structured result missing %q: %s", tc.args, tc.want, encoded)
+		}
+		if tc.absent != "" && strings.Contains(string(encoded), tc.absent) {
+			t.Errorf("%v: structured result contains %q: %s", tc.args, tc.absent, encoded)
+		}
+		if strings.Contains(string(encoded), `"tier":"paid"`) == false && tc.args["tier"] == "paid" {
+			t.Errorf("paid result has no tier field: %s", encoded)
+		}
+	}
+}

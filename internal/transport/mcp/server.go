@@ -27,11 +27,18 @@ var toolNames = []string{listModelsToolName, listProvidersToolName, chatCompleti
 
 type emptyInput struct{}
 
+type listModelsInput struct {
+	Tier     string `json:"tier,omitempty" jsonschema:"optional filter: free or paid; omit for all"`
+	Provider string `json:"provider,omitempty" jsonschema:"optional provider name filter"`
+}
+
 type modelItem struct {
-	ID       string `json:"id"`
-	Provider string `json:"provider"`
-	OwnedBy  string `json:"owned_by"`
-	Group    string `json:"group,omitempty"`
+	ID       string        `json:"id"`
+	Provider string        `json:"provider"`
+	OwnedBy  string        `json:"owned_by"`
+	Group    string        `json:"group,omitempty"`
+	Tier     app.ModelTier `json:"tier"`
+	Price    string        `json:"price,omitempty"`
 }
 
 type modelGroup struct {
@@ -84,8 +91,12 @@ func NewServer(service *app.Service) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: brand.Name, Version: brand.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{
 		Name: listModelsToolName, Description: "List supported model IDs and their providers.",
-	}, logToolCall(listModelsToolName, func(context.Context, *mcp.CallToolRequest, emptyInput) (*mcp.CallToolResult, modelsOutput, error) {
-		models := service.ListModels()
+	}, logToolCall(listModelsToolName, func(_ context.Context, _ *mcp.CallToolRequest, input listModelsInput) (*mcp.CallToolResult, modelsOutput, error) {
+		tier := app.ModelTier(strings.ToLower(strings.TrimSpace(input.Tier)))
+		if tier != "" && tier != app.TierFree && tier != app.TierPaid {
+			return nil, modelsOutput{}, fmt.Errorf("tier must be free or paid")
+		}
+		models := service.ListModelsFiltered(strings.TrimSpace(input.Provider), tier)
 		output := modelsOutput{Models: make([]modelItem, 0, len(models))}
 		byGroup := make(map[string][]modelItem)
 		for _, model := range models {
@@ -94,7 +105,12 @@ func NewServer(service *app.Service) *mcp.Server {
 			if group == "" {
 				group = model.OwnedBy
 			}
-			item := modelItem{ID: model.ID, Provider: provider, OwnedBy: model.OwnedBy, Group: group}
+			item := modelItem{ID: model.ID, Provider: provider, OwnedBy: model.OwnedBy, Group: group, Tier: model.Tier}
+			if model.Price != nil && model.Price.PromptPerToken != "" {
+				item.Price = model.Price.Currency + " " + model.Price.PromptPerToken + "/" + model.Price.CompletionPerToken
+			} else if model.Tier == app.TierPaid {
+				item.Price = "price unknown"
+			}
 			output.Models = append(output.Models, item)
 			byGroup[group] = append(byGroup[group], item)
 		}
@@ -107,7 +123,11 @@ func NewServer(service *app.Service) *mcp.Server {
 		for _, name := range names {
 			lines = append(lines, fmt.Sprintf("%s:", name))
 			for _, item := range byGroup[name] {
-				lines = append(lines, fmt.Sprintf("  %s (%s)", item.ID, item.Provider))
+				price := ""
+				if item.Price != "" {
+					price = " — " + item.Price
+				}
+				lines = append(lines, fmt.Sprintf("  %s (%s) [%s]%s", item.ID, item.Provider, item.Tier, price))
 			}
 			output.Groups = append(output.Groups, modelGroup{Name: name, Models: byGroup[name]})
 		}
