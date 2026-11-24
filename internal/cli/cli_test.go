@@ -38,7 +38,7 @@ func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
 	}
 }
 
-func TestModelsOutputIsGrouped(t *testing.T) {
+func TestModelsOutputHasProviderAndModel(t *testing.T) {
 	rt, _ := newCLITestRuntime(t)
 	var stdout bytes.Buffer
 	if err := runModels(&stdout, rt.Service(), false); err != nil {

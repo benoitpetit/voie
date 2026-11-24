@@ -249,7 +249,7 @@ Responses include `routing.attempts`: one entry per provider call with the model
 - `voie chat` reports routing and model-call progress on stderr. Interactive terminals show a monochrome spinner; redirected output uses plain lines. Successful answer text remains the only chat output on stdout.
 - The HTTP server logs each request, including authentication failures, with a request ID, method, path, status, and duration. Chat logs add the selected route or typed failure category.
 - The MCP server logs each tool call to stderr with its tool name, status, and duration. stdout remains reserved for MCP protocol messages.
-- Logs omit query values, headers, prompts, answers, request/response bodies, token counts, and client IPs. All logs and progress output are monochrome.
+- Logs omit query values, headers, prompts, answers, request/response bodies, token counts, and client IPs. All logs and progress output are monochrome; with `DEBUG=true`, upstream providers may log their own response bodies to stderr.
 
 ## Project guides
 

@@ -13,12 +13,12 @@ Public providers receive the prompts sent to them; avoid confidential data unles
 
 ## Workflow
 
-1. Prefer the configured `voie` MCP server when available. Call `list_models` and select an exact model ID from its current results.
+1. Prefer the configured `voie` MCP server when available. Call `list_models` and select an exact model ID from its current results. Local conversation management is available through `create_conversation`, `list_conversations`, `get_conversation`, and `delete_conversation`.
 2. Call `chat_completion` with that explicit `model` and a `messages` array. Set `provider` only when the user asks for a provider or routing needs to be constrained.
 3. If MCP is unavailable and the local executable is available, run `voie models --json`, then `voie chat --model MODEL_ID "PROMPT"`.
 4. If only the HTTP API is available, call `GET /v1/models`, then `POST /v1/chat/completions` with the exact model ID and messages. Send the configured bearer token when the API requires authentication.
 
-When automatic selection is requested, use `strategy: "auto"` to select one model or `strategy: "ensemble"` to combine several. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`. For an ensemble with explicit model IDs, use `models` to specify the candidates; a task hint does not change that explicit list.
+When automatic selection is requested, use `strategy: "auto"` to select one model or `strategy: "ensemble"` to combine several. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`. For an ensemble with explicit model IDs, use `ensemble.models` in MCP/HTTP or repeatable `--ensemble-model` in the CLI; the root-level `models` field is legacy. A task hint does not change that explicit list.
 
 ## Install the CLI
 

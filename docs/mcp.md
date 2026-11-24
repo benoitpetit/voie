@@ -25,7 +25,9 @@ Build it with `go build -o voie .`. The same executable also provides the CLI an
 
 ## Tools
 
-### `list_models`
+### The structured `list_models` result includes `models[]` with `id`, `provider`, `owned_by` and optional `group`, plus a `groups[]` grouping array.
+
+`list_models`
 
 Takes an empty object. Returns a human-readable list plus structured model entries with `id`, `provider`, and `owned_by`. Use this at runtime; the available catalogue can change.
 
@@ -99,7 +101,7 @@ The result includes assistant text and structured `text`, `model`, and `provider
 
 ### Conversation tools
 
-- `create_conversation` takes `{}` and returns a new local conversation ID and timestamps.
+- `create_conversation` takes `{}` and returns a new local conversation ID with `created_at`, `updated_at`, `expires_at`, `version`, and `turns`.
 - `list_conversations` takes `{}` and returns summaries without transcript contents.
 - `get_conversation` takes `{"id":"CONVERSATION_ID"}` and returns the transcript.
 - `delete_conversation` takes `{"id":"CONVERSATION_ID"}` and deletes the transcript and its expiry marker.

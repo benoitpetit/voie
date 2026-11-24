@@ -159,3 +159,16 @@ func TestCIRunsNpmTestsRaceAndWindowsBuild(t *testing.T) {
 	assertContains(t, "ci.yml", workflow, "windows-latest")
 	assertContains(t, "ci.yml", workflow, "GOOS=windows")
 }
+
+func TestDocsAndSkillMatchSurfaces(t *testing.T) {
+	skill := readDoc(t, "skills/voie/SKILL.md")
+	assertContains(t, "SKILL.md", skill, "ensemble.models")
+	assertContains(t, "SKILL.md", skill, "create_conversation")
+	mcp := readDoc(t, "docs/mcp.md")
+	assertContains(t, "docs/mcp.md", mcp, "groups")
+	assertContains(t, "docs/mcp.md", mcp, "expires_at")
+	readme := readDoc(t, "README.md")
+	assertContains(t, "README.md", readme, "DEBUG=true")
+	cli := readDoc(t, "docs/cli.md")
+	assertOmits(t, "docs/cli.md", cli, "owner column")
+}
