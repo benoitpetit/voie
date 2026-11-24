@@ -443,3 +443,21 @@ func TestRouterFailureAppearsInRoutingAttempts(t *testing.T) {
 		t.Fatalf("attempts = %+v, want one failed router attempt", decision.Attempts)
 	}
 }
+
+func TestModelDescriptorPrefersExactPublicID(t *testing.T) {
+	service, err := NewService(NewRegistry(), ServiceOptions{RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"dk-foo": {Description: "duck", Capabilities: []string{"vision"}},
+			"dp-foo": {Description: "deep", Capabilities: []string{"coding"}},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := service.modelDescriptor("dk-foo"); got.Description != "duck" {
+		t.Fatalf("dk-foo descriptor = %+v, want duck", got)
+	}
+	if got := service.modelDescriptor("dp-foo"); got.Description != "deep" {
+		t.Fatalf("dp-foo descriptor = %+v, want deep", got)
+	}
+}

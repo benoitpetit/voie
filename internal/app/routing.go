@@ -278,8 +278,18 @@ func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, ex
 		return nil, appError(ErrUnknownProvider, fmt.Sprintf("provider %q is not registered", providerFilter), nil)
 	}
 	preferred := make(map[string]int, len(rule.PreferredModels))
+	preferredCanonical := make(map[string]int, len(rule.PreferredModels))
+	canonicalOwner := make(map[string]string, len(rule.PreferredModels))
 	for i, model := range rule.PreferredModels {
-		preferred[canonicalModelID(model)] = i
+		exact := strings.ToLower(strings.TrimSpace(model))
+		preferred[exact] = i
+		canonical := canonicalModelID(model)
+		if owner, ok := canonicalOwner[canonical]; ok && owner != exact {
+			delete(preferredCanonical, canonical) // ambiguous: two public IDs share a raw ID
+			continue
+		}
+		canonicalOwner[canonical] = exact
+		preferredCanonical[canonical] = i
 	}
 	seen := make(map[string]struct{})
 	candidates := make([]ModelCandidate, 0)
@@ -322,8 +332,14 @@ func (s *Service) modelCandidates(providerFilter, task string, rule TaskRule, ex
 		}
 	}
 	sort.SliceStable(candidates, func(i, j int) bool {
-		left, leftOK := preferred[canonicalModelID(candidates[i].Model)]
-		right, rightOK := preferred[canonicalModelID(candidates[j].Model)]
+		left, leftOK := preferred[strings.ToLower(candidates[i].Model)]
+		if !leftOK {
+			left, leftOK = preferredCanonical[canonicalModelID(candidates[i].Model)]
+		}
+		right, rightOK := preferred[strings.ToLower(candidates[j].Model)]
+		if !rightOK {
+			right, rightOK = preferredCanonical[canonicalModelID(candidates[j].Model)]
+		}
 		if leftOK != rightOK {
 			return leftOK
 		}
@@ -343,9 +359,21 @@ func canonicalModelID(id string) string {
 
 func (s *Service) modelDescriptor(model string) ModelDescriptor {
 	for id, descriptor := range s.options.RoutingPolicy.Models {
-		if canonicalModelID(id) == canonicalModelID(model) {
+		if strings.EqualFold(strings.TrimSpace(id), strings.TrimSpace(model)) {
 			return descriptor
 		}
+	}
+	canonical := canonicalModelID(model)
+	var fallback ModelDescriptor
+	matches := 0
+	for id, descriptor := range s.options.RoutingPolicy.Models {
+		if canonicalModelID(id) == canonical {
+			fallback = descriptor
+			matches++
+		}
+	}
+	if matches == 1 {
+		return fallback
 	}
 	return ModelDescriptor{}
 }
