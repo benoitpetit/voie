@@ -17,35 +17,48 @@ CREATE INDEX IF NOT EXISTS conversations_expiry ON conversations(expires_at);
 CREATE INDEX IF NOT EXISTS tombstones_expiry ON conversation_tombstones(expires_at);
 `
 
+func columnExists(ctx context.Context, tx *sql.Tx, table, column string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+table+")")
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 func migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return err
 	}
-	var version int
-	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
-		return err
-	}
-	if version >= 2 {
-		return nil
-	}
-
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if version < 1 {
-		if _, err = tx.ExecContext(ctx, "PRAGMA user_version = 1"); err != nil {
+	for _, table := range []string{"conversations", "conversation_tombstones"} {
+		exists, err := columnExists(ctx, tx, table, "tenant_id")
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, "ALTER TABLE "+table+" ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
 	}
-	if _, err = tx.ExecContext(ctx, "ALTER TABLE conversations ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, "ALTER TABLE conversation_tombstones ADD COLUMN tenant_id TEXT NOT NULL DEFAULT ''"); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, "PRAGMA user_version = 2"); err != nil {
+	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = 2"); err != nil {
 		return err
 	}
 	return tx.Commit()

@@ -157,3 +157,69 @@ func TestStoreCleanupLeavesThirtyDayTombstone(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+
+func TestMigrationIsIdempotentOnPartialUpgrade(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "partial.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, statement := range []string{
+		`CREATE TABLE conversations (id TEXT PRIMARY KEY, payload BLOB NOT NULL, version INTEGER NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, tenant_id TEXT NOT NULL DEFAULT '')`,
+		`CREATE TABLE conversation_tombstones (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)`,
+		`PRAGMA user_version = 1`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := migrate(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(context.Background(), db); err != nil {
+		t.Fatalf("second migration failed: %v", err)
+	}
+	for _, table := range []string{"conversations", "conversation_tombstones"} {
+		if !hasColumn(t, db, table, "tenant_id") {
+			t.Errorf("%s is missing tenant_id after migration", table)
+		}
+	}
+}
+
+func TestFreshDatabaseHasTenantID(t *testing.T) {
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "fresh.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := migrate(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"conversations", "conversation_tombstones"} {
+		if !hasColumn(t, db, table, "tenant_id") {
+			t.Errorf("%s is missing tenant_id on a fresh database", table)
+		}
+	}
+}
+
+func hasColumn(t *testing.T, db *sql.DB, table, column string) bool {
+	t.Helper()
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			t.Fatal(err)
+		}
+		if name == column {
+			return true
+		}
+	}
+	return false
+}
