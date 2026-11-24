@@ -118,6 +118,7 @@ func writeChatDecodeError(w http.ResponseWriter, err error) {
 
 func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, request app.CompletionRequest) {
 	started := false
+	var streamed strings.Builder
 	var finalRouting *app.RoutingInfo
 	completionID := "chatcmpl-" + randomID()
 	resolvedModel := request.Model
@@ -151,6 +152,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		if routing != nil {
 			finalRouting = routing
 		}
+		streamed.WriteString(chunk)
 		start(routing)
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
@@ -174,6 +176,21 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
 			ConversationID: request.ConversationID, Routing: finalRouting,
 			Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{}, FinishReason: &finishReason}},
+		})
+	}
+	if options := request.Options.StreamOptions; options != nil && options.IncludeUsage {
+		promptTokens := 0
+		for _, message := range request.Messages {
+			promptTokens += len(message.Content)/4 + 4
+		}
+		completionTokens := len(streamed.String()) / 4
+		if completionTokens < 1 {
+			completionTokens = 1
+		}
+		writeSSE(w, app.StreamChunk{
+			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(),
+			Model: resolvedModel, Choices: []app.StreamChoice{},
+			Usage: &app.Usage{PromptTokens: promptTokens, CompletionTokens: completionTokens, TotalTokens: promptTokens + completionTokens},
 		})
 	}
 	_, _ = fmt.Fprint(w, "data: [DONE]\n\n")

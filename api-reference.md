@@ -249,3 +249,6 @@ Errors use this JSON envelope:
 Completions use the configured end-to-end `TIMEOUT` (seconds), defaulting to 120 seconds. Unknown model IDs are rejected instead of being silently sent to another provider.
 
 Routing and conversation configuration: `ROUTER_MODEL` is used only by profiles with `selection: "router"` and as the ensemble synthesis fallback; `SYNTHESIS_MODEL` produces ensemble output. `ROUTING_CONFIG_PATH` defaults to `<user-config-dir>/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `<user-config-dir>/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.
+
+
+When `stream_options.include_usage` is true, a final SSE chunk carries an estimated `usage` object (token counts are computed from character counts, not reported by the upstream provider).

@@ -1059,3 +1059,34 @@ func TestHTTPRejectsNGreaterThanOne(t *testing.T) {
 		t.Fatalf("status = %d, want 400: %s", response.Code, response.Body.String())
 	}
 }
+
+func TestStreamingUsageChunkWhenRequested(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	for _, tc := range []struct {
+		streamOptions string
+		wantUsage     bool
+	}{
+		{streamOptions: `,"stream_options":{"include_usage":true}`, wantUsage: true},
+		{streamOptions: "", wantUsage: false},
+	} {
+		body := `{"stream":true,"model":"model"` + tc.streamOptions + `,"messages":[{"role":"user","content":"hi"}]}`
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+		chunks := sseChatChunks(recorder.Body.String())
+		found := false
+		for _, chunk := range chunks {
+			if chunk["usage"] == nil {
+				continue
+			}
+			found = true
+			usage, _ := chunk["usage"].(map[string]any)
+			if usage["total_tokens"] == nil {
+				t.Fatalf("usage chunk has no total_tokens: %v", chunk)
+			}
+		}
+		if found != tc.wantUsage {
+			t.Errorf("streamOptions %q: usage chunk = %v, want %v", tc.streamOptions, found, tc.wantUsage)
+		}
+	}
+}

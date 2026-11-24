@@ -48,6 +48,7 @@ type StreamChunk struct {
 	ConversationID string         `json:"conversation_id,omitempty"`
 	Routing        *RoutingInfo   `json:"routing,omitempty"`
 	Choices        []StreamChoice `json:"choices"`
+	Usage          *Usage         `json:"usage,omitempty"`
 }
 
 // StreamChoice is the OpenAI streaming choice shape. It deliberately has no
