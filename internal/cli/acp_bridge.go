@@ -14,6 +14,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// acpBridgeConfig builds the bridge configuration for one ACP agent spec.
+func acpBridgeConfig(spec providers.ACPProviderSpec, binary, scratch, key string) clinebridge.Config {
+	// Keep agentic side effects out of the user's workspace: no auto
+	// approval, a scratch cwd and a deny-all hook, as for Cline.
+	args := append([]string(nil), spec.AgentArgs...)
+	args = append(args, "--auto-approve", "false", "--cwd", scratch, "--hooks-dir", scratch)
+	if spec.Model != "" && spec.Model != "auto" {
+		args = append(args, "--model", spec.Model)
+	}
+	return clinebridge.Config{
+		Listen:       fmt.Sprintf("127.0.0.1:%d", spec.Port),
+		ClinePath:    binary,
+		AgentArgs:    args,
+		StartupDelay: 1500 * time.Millisecond,
+		ScratchDir:   scratch,
+		HookPath:     filepath.Join(scratch, "hooks.mjs"),
+		LocalKey:     key,
+		Model:        spec.Model,
+		FreeFeedURL:  spec.FeedURL,
+	}
+}
+
 // newACPBridgeCommand serves any ACP provider declared in providers.ACPProviders.
 func newACPBridgeCommand() *cobra.Command {
 	var providerName string
@@ -50,23 +72,7 @@ func newACPBridgeCommand() *cobra.Command {
 			if key == "" {
 				key = "voie-local"
 			}
-			// Keep agentic side effects out of the user's workspace: no auto
-			// approval, a scratch cwd and a deny-all hook, as for Cline.
-			args := append([]string(nil), spec.AgentArgs...)
-			args = append(args, "--auto-approve", "false", "--cwd", scratch, "--hooks-dir", scratch)
-			if spec.Model != "" && spec.Model != "auto" {
-				args = append(args, "--model", spec.Model)
-			}
-			return clinebridge.Run(command.Context(), clinebridge.Config{
-				Listen:       fmt.Sprintf("127.0.0.1:%d", spec.Port),
-				ClinePath:    binary,
-				AgentArgs:    args,
-				StartupDelay: 1500 * time.Millisecond,
-				ScratchDir:   scratch,
-				HookPath:     filepath.Join(scratch, "hooks.mjs"),
-				LocalKey:     key,
-				Model:        spec.Model,
-			})
+			return clinebridge.Run(command.Context(), acpBridgeConfig(spec, binary, scratch, key))
 		},
 	}
 	command.Flags().StringVar(&providerName, "provider", "", "ACP provider name")

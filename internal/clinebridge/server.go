@@ -29,6 +29,7 @@ var denyHook = []byte(`export default {
 // Run starts the ACP child and the OpenAI-compatible HTTP endpoint.
 func Run(ctx context.Context, cfg Config) error {
 	currentFreeFeedURL = cfg.FreeFeedURL
+	currentModel = cfg.Model
 	if err := os.MkdirAll(cfg.ScratchDir, 0o700); err != nil {
 		return err
 	}
