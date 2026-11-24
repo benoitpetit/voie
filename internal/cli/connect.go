@@ -289,7 +289,7 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 
 // connectPicker prints the same flat provider list for `connect --list` and
 // for the interactive selector. The selector adds a leading number column.
-func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered bool) []string {
+func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered, showCancel bool) []string {
 	typeByName := make(map[string]string)
 	typeByName["openrouter"] = "token"
 	typeByName["orcarouter"] = "token"
@@ -335,7 +335,7 @@ func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered 
 			fmt.Fprintf(table, "%s\t%s\t%s\n", name, typeByName[name], state)
 		}
 	}
-	if numbered {
+	if showCancel {
 		fmt.Fprintln(table, "0\tCancel\t\t")
 	}
 	return names
@@ -343,7 +343,7 @@ func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered 
 
 func runConnectList(out io.Writer, store *config.Credentials) error {
 	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	connectPicker(table, store, false)
+	connectPicker(table, store, true, false)
 	return table.Flush()
 }
 
@@ -420,7 +420,7 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 	}
 	fmt.Fprintln(command.ErrOrStderr(), "Available providers:")
 	table := tabwriter.NewWriter(command.ErrOrStderr(), 0, 0, 2, ' ', 0)
-	names := connectPicker(table, store, true)
+	names := connectPicker(table, store, true, true)
 	table.Flush()
 	answer, err := readLine(command, input, "Provider number: ", false)
 	if err != nil {
