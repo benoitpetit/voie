@@ -151,3 +151,11 @@ func TestReadmeDocumentsAllProviderKeyEnvVars(t *testing.T) {
 		assertContains(t, "README.md", readme, name)
 	}
 }
+
+func TestCIRunsNpmTestsRaceAndWindowsBuild(t *testing.T) {
+	workflow := readDoc(t, ".github/workflows/ci.yml")
+	assertContains(t, "ci.yml", workflow, "npm test")
+	assertContains(t, "ci.yml", workflow, "go test -race ./...")
+	assertContains(t, "ci.yml", workflow, "windows-latest")
+	assertContains(t, "ci.yml", workflow, "GOOS=windows")
+}

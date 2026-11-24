@@ -26,4 +26,28 @@ jobs:
         run: test -z "$(gofmt -l .)"
 
       - name: Test
-        run: go test -cover ./...
+        run: go test -race -cover ./...
+
+      - name: npm tests
+        working-directory: npm
+        run: npm test
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Cross-build Windows binary
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: go build ./...
+
+      - name: Test Windows replacement helpers
+        run: go test ./internal/update -run TestReplace
