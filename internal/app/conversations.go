@@ -27,7 +27,7 @@ func ConversationScope(ctx context.Context) string {
 type ConversationStore interface {
 	Create(context.Context) (Conversation, error)
 	Get(context.Context, string) (Conversation, error)
-	List(context.Context) ([]ConversationSummary, error)
+	List(context.Context, int, int) ([]ConversationSummary, error)
 	Delete(context.Context, string) error
 	AppendTurn(context.Context, string, int64, []Message, Message, RoutingInfo) (Conversation, error)
 	CleanupExpired(context.Context, time.Time) (int, error)

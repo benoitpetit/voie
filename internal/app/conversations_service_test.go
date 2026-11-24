@@ -25,7 +25,7 @@ func (m *memoryConversationStore) Get(_ context.Context, id string) (Conversatio
 	}
 	return m.value, nil
 }
-func (m *memoryConversationStore) List(context.Context) ([]ConversationSummary, error) {
+func (m *memoryConversationStore) List(context.Context, int, int) ([]ConversationSummary, error) {
 	return nil, nil
 }
 func (m *memoryConversationStore) Delete(context.Context, string) error { return nil }

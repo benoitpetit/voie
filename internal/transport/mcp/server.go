@@ -161,7 +161,7 @@ func NewServer(service *app.Service) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{Name: listConversationsToolName, Description: "List local conversations without transcript contents."}, logToolCall(listConversationsToolName, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, struct {
 		Conversations []app.ConversationSummary `json:"conversations"`
 	}, error) {
-		items, err := service.ListConversations(ctx)
+		items, err := service.ListConversations(ctx, 100, 0)
 		out := struct {
 			Conversations []app.ConversationSummary `json:"conversations"`
 		}{items}

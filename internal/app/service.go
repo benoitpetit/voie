@@ -471,11 +471,11 @@ func (s *Service) GetConversation(ctx context.Context, id string) (Conversation,
 	}
 	return s.options.Conversations.Get(ctx, id)
 }
-func (s *Service) ListConversations(ctx context.Context) ([]ConversationSummary, error) {
+func (s *Service) ListConversations(ctx context.Context, limit, offset int) ([]ConversationSummary, error) {
 	if s.options.Conversations == nil {
 		return nil, appError(ErrConversationStore, "conversation storage is not configured", nil)
 	}
-	return s.options.Conversations.List(ctx)
+	return s.options.Conversations.List(ctx, limit, offset)
 }
 func (s *Service) DeleteConversation(ctx context.Context, id string) error {
 	if s.options.Conversations == nil {

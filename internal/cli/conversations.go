@@ -27,7 +27,7 @@ func newConversationsCommand(getService func() (*app.Service, error)) *cobra.Com
 		if e != nil {
 			return e
 		}
-		items, e := s.ListConversations(c.Context())
+		items, e := s.ListConversations(c.Context(), 100, 0)
 		if e != nil {
 			return e
 		}

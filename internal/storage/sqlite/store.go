@@ -186,13 +186,13 @@ func (s *Store) missing(ctx context.Context, db *sql.DB, id string) error {
 	return app.ErrConversationNotFound
 }
 
-func (s *Store) List(ctx context.Context) ([]app.ConversationSummary, error) {
+func (s *Store) List(ctx context.Context, limit, offset int) ([]app.ConversationSummary, error) {
 	db, release, err := s.open(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	rows, err := db.QueryContext(ctx, "SELECT payload FROM conversations WHERE tenant_id=? AND expires_at>? ORDER BY updated_at DESC", app.ConversationScope(ctx), time.Now().UnixNano())
+	rows, err := db.QueryContext(ctx, "SELECT payload FROM conversations WHERE tenant_id=? AND expires_at>? ORDER BY updated_at DESC LIMIT ? OFFSET ?", app.ConversationScope(ctx), time.Now().UnixNano(), limit, offset)
 	if err != nil {
 		return nil, storeErr(err)
 	}

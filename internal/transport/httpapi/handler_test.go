@@ -911,3 +911,44 @@ func TestStreamingAndNonStreamingModelAgree(t *testing.T) {
 		t.Fatalf("streaming model = %v, want %q", chunks, response.Model)
 	}
 }
+
+func TestConversationListRespectsLimitAndOffset(t *testing.T) {
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	registry := app.NewRegistry()
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute, Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := service.CreateConversation(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	handler := NewHandler(service, &config.Config{})
+	for _, tc := range []struct {
+		query string
+		want  int
+	}{
+		{query: "", want: 3},
+		{query: "?limit=2&offset=1", want: 2},
+	} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/conversations"+tc.query, nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", recorder.Code, recorder.Body.String())
+		}
+		var payload struct {
+			Data []json.RawMessage `json:"data"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if len(payload.Data) != tc.want {
+			t.Errorf("%q: got %d conversations, want %d", tc.query, len(payload.Data), tc.want)
+		}
+	}
+}
