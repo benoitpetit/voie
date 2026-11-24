@@ -41,7 +41,7 @@ func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
 func TestModelsOutputHasProviderAndModel(t *testing.T) {
 	rt, _ := newCLITestRuntime(t)
 	var stdout bytes.Buffer
-	if err := runModels(&stdout, rt.Service(), false); err != nil {
+	if err := runModels(&stdout, rt.Service(), false, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdout.String(), "test provider") && !strings.Contains(stdout.String(), "MODEL") {
@@ -461,5 +461,74 @@ func TestHealthcheckPortOverride(t *testing.T) {
 	command.SetArgs([]string{"--port", port})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("healthcheck --port %s: %v", port, err)
+	}
+}
+
+type tierTestProvider struct{}
+
+func (*tierTestProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "test", Label: "Test", Working: true,
+		SupportedModels: []string{"free-model", "paid-model"}, FreeModels: []string{"free-model"}}
+}
+func (*tierTestProvider) SupportsModel(model string) bool {
+	return model == "free-model" || model == "paid-model"
+}
+func (*tierTestProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{}, nil
+}
+func (*tierTestProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
+}
+
+func TestModelsTierFlags(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &tierTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		args   []string
+		want   []string
+		absent []string
+	}{
+		{args: nil, want: []string{"TIER", "free-model", "paid-model"}},
+		{args: []string{"--free"}, want: []string{"free-model"}, absent: []string{"paid-model"}},
+		{args: []string{"--paid"}, want: []string{"paid-model", "price unknown"}, absent: []string{"free-model"}},
+		{args: []string{"--all"}, want: []string{"free-model", "paid-model"}},
+		{args: []string{"--provider", "test", "--paid"}, want: []string{"paid-model"}, absent: []string{"free-model"}},
+	} {
+		var stdout, stderr bytes.Buffer
+		command := newModelsCommand(func() (*app.Service, error) { return service, nil })
+		command.SetOut(&stdout)
+		command.SetErr(&stderr)
+		command.SetArgs(tc.args)
+		if err := command.Execute(); err != nil {
+			t.Fatalf("%v: %v", tc.args, err)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(stdout.String(), want) {
+				t.Errorf("%v: output missing %q: %s", tc.args, want, stdout.String())
+			}
+		}
+		for _, absent := range tc.absent {
+			if strings.Contains(stdout.String(), absent) {
+				t.Errorf("%v: output unexpectedly contains %q: %s", tc.args, absent, stdout.String())
+			}
+		}
+	}
+}
+
+func TestModelsRejectsConflictingTierFlags(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &tierTestProvider{})
+	service, _ := app.NewService(registry, app.ServiceOptions{})
+	var stdout, stderr bytes.Buffer
+	command := newModelsCommand(func() (*app.Service, error) { return service, nil })
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{"--free", "--paid"})
+	if err := command.Execute(); err == nil {
+		t.Fatal("conflicting tier flags were accepted")
 	}
 }
