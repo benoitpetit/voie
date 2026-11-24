@@ -770,3 +770,46 @@ func (p *httpFallbackProvider) ChatCompletionStream(_ context.Context, _ []app.M
 	callback("chunk")
 	return nil
 }
+
+func TestUnmatchedRoutesReturn404(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute})
+	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/nope"},
+		{http.MethodPost, "/nope"},
+		{http.MethodGet, "/v1/nope"},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(tc.method, tc.path, nil))
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404: %s", response.Code, response.Body.String())
+			}
+			if !strings.Contains(response.Body.String(), `"code":"404"`) {
+				t.Fatalf("error envelope missing code: %s", response.Body.String())
+			}
+		})
+	}
+	for _, path := range []string{"/", "/health"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", path, response.Code)
+		}
+	}
+}
+
+func TestRootAndHealthRejectNonGET(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{Host: "127.0.0.1", Port: "8080", Timeout: time.Minute})
+	for _, path := range []string{"/", "/health"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, path, nil))
+		if response.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("POST %s status = %d, want 405", path, response.Code)
+		}
+		if !strings.Contains(response.Body.String(), "Use GET") {
+			t.Fatalf("POST %s body = %s, want Use GET hint", path, response.Body.String())
+		}
+	}
+}

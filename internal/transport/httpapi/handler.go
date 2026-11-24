@@ -252,7 +252,11 @@ func (h *apiHandler) providers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"object": "list", "data": list, "count": len(list), "timestamp": time.Now().Unix()})
 }
 
-func (h *apiHandler) health(w http.ResponseWriter, _ *http.Request) {
+func (h *apiHandler) health(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use GET.")
+		return
+	}
 	providers := h.service.ListProviderMetadata()
 	working := make([]string, 0, len(providers))
 	disabled := make([]string, 0)
@@ -274,7 +278,15 @@ func (h *apiHandler) health(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (h *apiHandler) root(w http.ResponseWriter, _ *http.Request) {
+func (h *apiHandler) root(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		writeError(w, http.StatusNotFound, "Not found.")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed. Use GET.")
+		return
+	}
 	providers := h.service.ListProviderMetadata()
 	workingCount, modelCount := 0, 0
 	for _, provider := range providers {
