@@ -417,3 +417,29 @@ func TestRoutingHonorsPrefixedModelIDsFromCatalogue(t *testing.T) {
 		t.Fatalf("description = %q, want the prefixed descriptor", candidate.Description)
 	}
 }
+
+func TestRouterFailureAppearsInRoutingAttempts(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("router", &testProvider{
+		info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}},
+		response: &ChatCompletionResponse{Choices: []Choice{{Message: Message{Role: "assistant", Content: "not json"}}}},
+	})
+	registry.Register("w", &testProvider{info: ProviderInfo{Name: "w", Working: true, SupportedModels: []string{"model-w", "model-w2"}}})
+	service, err := NewService(registry, ServiceOptions{
+		RouterModel: "router-model",
+		RoutingPolicy: RoutingPolicy{
+			Models: map[string]ModelDescriptor{"model-w": {Capabilities: []string{"writing"}}, "model-w2": {Capabilities: []string{"writing"}}},
+			Tasks:  map[string]TaskRule{"writing": {RequiredCapabilities: []string{"writing"}, Selection: SelectionRouter}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, decision, err := service.selectCandidates(context.Background(), CompletionRequest{Task: "writing"}, 1)
+	if err == nil {
+		t.Fatal("malformed router decision was accepted")
+	}
+	if len(decision.Attempts) != 1 || decision.Attempts[0].Outcome != OutcomeFailed {
+		t.Fatalf("attempts = %+v, want one failed router attempt", decision.Attempts)
+	}
+}

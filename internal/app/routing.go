@@ -176,42 +176,46 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 	routeStarted := time.Now()
 	response, err := router.ChatCompletion(ctx, routerMessages, s.options.RouterModel)
 	routeAttempt := Attempt{Model: s.options.RouterModel, Provider: router.GetInfo().Name, Attempt: 1, DurationMillis: time.Since(routeStarted).Milliseconds()}
+	failed := func(err error) ([]ModelCandidate, RouteDecision, error) {
+		routeAttempt.Outcome = OutcomeFailed
+		return nil, RouteDecision{Task: taskHint, Attempts: []Attempt{routeAttempt}}, err
+	}
 	if err != nil {
 		routeAttempt.Outcome = outcomeFor(err)
-		return nil, RouteDecision{}, appError(ErrRouting, "router model request failed", err)
+		return failed(appError(ErrRouting, "router model request failed", err))
 	}
 	if response == nil || len(response.Choices) == 0 {
 		routeAttempt.Outcome = OutcomeFailed
-		return nil, RouteDecision{}, appError(ErrRouting, "router model returned no decision", nil)
+		return failed(appError(ErrRouting, "router model returned no decision", nil))
 	}
 	routeAttempt.Outcome = OutcomeSucceeded
 	decision, err := parseRouteDecision(response.Choices[0].Message.Content)
 	if err != nil {
-		return nil, RouteDecision{}, appError(ErrRouting, "router model returned an invalid decision", err)
+		return failed(appError(ErrRouting, "router model returned an invalid decision", err))
 	}
 	decision.Task = strings.ToLower(strings.TrimSpace(decision.Task))
 	if decision.Task == "" {
 		decision.Task = taskHint
 	}
 	if decision.Task != taskHint {
-		return nil, RouteDecision{}, appError(ErrRouting, "router task does not match the requested task", nil)
+		return failed(appError(ErrRouting, "router task does not match the requested task", nil))
 	}
 	decision.Attempts = append(decision.Attempts, routeAttempt)
 	selectedIDs := decision.Models
 	if selectedCount == 1 {
 		if decision.Model == "" || len(decision.Models) != 0 {
-			return nil, RouteDecision{}, appError(ErrRouting, "router decision must contain exactly one model", nil)
+			return failed(appError(ErrRouting, "router decision must contain exactly one model", nil))
 		}
 		selectedIDs = []string{decision.Model}
 	} else if len(selectedIDs) != selectedCount || decision.Model != "" {
-		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router decision must contain exactly %d models", selectedCount), nil)
+		return failed(appError(ErrRouting, fmt.Sprintf("router decision must contain exactly %d models", selectedCount), nil))
 	}
 	selected := make([]ModelCandidate, 0, len(selectedIDs))
 	seen := make(map[string]struct{}, len(selectedIDs))
 	for _, id := range selectedIDs {
 		key := strings.ToLower(strings.TrimSpace(id))
 		if _, duplicate := seen[key]; duplicate {
-			return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router selected model %q more than once", id), nil)
+			return failed(appError(ErrRouting, fmt.Sprintf("router selected model %q more than once", id), nil))
 		}
 		seen[key] = struct{}{}
 		var match *ModelCandidate
@@ -222,7 +226,7 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 			}
 		}
 		if match == nil {
-			return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router selected ineligible model %q", id), nil)
+			return failed(appError(ErrRouting, fmt.Sprintf("router selected ineligible model %q", id), nil))
 		}
 		selected = append(selected, *match)
 	}
