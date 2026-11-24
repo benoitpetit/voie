@@ -178,7 +178,14 @@ func (p *TokenProvider) SupportsModel(model string) bool {
 
 func (p *TokenProvider) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
-	info.FreeModels = sortedKeys(catalog.Models(p.spec.Name))
+	free := sortedKeys(catalog.Models(p.spec.Name))
+	// The declared alias is a documented free entry even when the remote
+	// catalogue is offline or excludes it for other reasons.
+	if p.spec.Alias != "" {
+		free = append(free, p.spec.Alias)
+		sort.Strings(free)
+	}
+	info.FreeModels = free
 	info.Working = p.token() != ""
 	return info
 }

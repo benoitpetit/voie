@@ -132,3 +132,28 @@ func TestTokenProviderHiddenWithoutToken(t *testing.T) {
 		}
 	}
 }
+
+func TestTokenProviderDeclaredAliasIsFree(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var spec TokenProviderSpec
+	for _, candidate := range TokenProviders {
+		if candidate.Name == "vlm-run" {
+			spec = candidate
+			break
+		}
+	}
+	if spec.Name == "" {
+		t.Fatal("vlm-run spec missing")
+	}
+	provider := NewTokenProvider(spec)
+	free := provider.GetInfo().FreeModels
+	found := false
+	for _, id := range free {
+		if id == spec.Alias {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("FreeModels = %v, want declared alias %q", free, spec.Alias)
+	}
+}
