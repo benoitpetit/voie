@@ -8,7 +8,7 @@ voie does not run models. Inference stays on the services it forwards to. Some p
 
 Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID returned by `voie models`. Keyless models work with no account; token-backed models require `voie connect <provider>` first. Read the catalogue with `voie models --json` or `GET /v1/models` against a running server.
 
-The registry currently has 54 providers in five groups: keyless public endpoints, token-based OpenAI-compatible APIs, local gateways/CLI bridges, and opt-in third-party reverse-engineered gateways. Only providers that are actually usable appear in `voie models` and in routing. Availability can change without notice, and providers may rate-limit or block automated access. Some log prompts upstream; others state that they do not use data for training.
+The registry currently has 53 providers in five groups: keyless public endpoints, token-based OpenAI-compatible APIs, local gateways/CLI bridges, and opt-in third-party reverse-engineered gateways. Only providers that are actually usable appear in `voie models` and in routing. Availability can change without notice, and providers may rate-limit or block automated access. Some log prompts upstream; others state that they do not use data for training.
 
 The opencode providers use a local OpenAI-compatible gateway at `http://127.0.0.1:8090`. Its loopback key is set in the gateway (default `voie-local`) and mirrored in voie's configuration; callers still supply no key. Free IDs are capped by the upstream daily quota. Go IDs (`oc2ago-*`) need a Go API key or a Go OAuth connection in the gateway; see [Local gateway setup](docs/local-gateway.md).
 
@@ -124,7 +124,6 @@ The API listens on `127.0.0.1:8080` by default. See the [CLI guide](docs/cli.md)
 | `VOIE_IFLYTEK_SPARK_KEY` | saved token | iFlytek Spark APIPassword |
 | `VOIE_VLM_RUN_KEY` | `vlmrun` | VLM Run key; anonymous bearer works by default |
 | `VOIE_RUNCRATE_KEY` | saved token | Runcrate key (`rc_live_...`), free weekly allowance |
-| `VOIE_PERPLEXITY_COOKIES` | none | Optional Cookie header from an anonymous perplexity.ai session; makes `pplx-turbo` reliable when anonymous access is throttled |
 
 Additional overrides: `VOIE_OPENCODE_GATEWAY_URL` (local gateway base URL), `KIRO_GATEWAY_DIR` (ACP bridge checkout), `VOIE_CLINE_FREE_FEED_URL` (free-model feed). ACP and third-party gateway providers accept `VOIE_<PROVIDER>_KEY` overrides as well (`VOIE_CODEBUDDY_KEY`, `VOIE_MINIMAX_CODE_KEY`, `VOIE_DEVIN_KEY`, `VOIE_QODER_KEY`, `VOIE_COPILOT_CLI_KEY`, `VOIE_CURSOR_KEY`, `VOIE_OMNIROUTE_KEY`, `VOIE_QODER2API_KEY`, `VOIE_WINDSURFAPI_KEY`, `VOIE_COPILOT_API_KEY`, `VOIE_CURSOR_API_PROXY_KEY`, `VOIE_CODEARTS2API_KEY`, `VOIE_CLI2API_KEY`, `VOIE_WORKBUDDY2API_KEY`, `VOIE_FREELLMPOOL_KEY`, `VOIE_FREE_LLM_ROUTER_KEY`, `VOIE_TRAE2API_KEY`, `VOIE_OLLAMA_KEY`, `VOIE_LMSTUDIO_KEY`, `VOIE_LLAMACPP_KEY`, `VOIE_9ROUTERX_KEY`, `VOIE_FREELLMAPI_KEY`, `VOIE_PPLX_PROXY_KEY`); saved credentials take precedence when no override is set.
 

@@ -4,7 +4,6 @@ import "github.com/benoitpetit/voie/internal/app"
 
 func NewRegistry() *app.Registry {
 	registry := app.NewRegistry()
-	registry.Register("perplexity", &Perplexity{})
 	registry.Register("duckai", NewDuckAI())
 	registry.Register("deepai", &DeepAI{})
 	registry.Register("quillbot", &Quillbot{})

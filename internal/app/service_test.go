@@ -428,3 +428,19 @@ func TestListModelsAddsPublicPriceWhenAvailable(t *testing.T) {
 		t.Fatalf("model = %+v", models[0])
 	}
 }
+
+func TestGenericModelFallsBackToFirstWorkingProvider(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("duckai", &testProvider{info: ProviderInfo{Name: "duckai", Working: true, DefaultModel: "luna", SupportedModels: []string{"luna"}}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{Model: "openai", Messages: []Message{{Role: "user", Content: "hi"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Provider != "duckai" {
+		t.Fatalf("provider = %q, want duckai", response.Provider)
+	}
+}

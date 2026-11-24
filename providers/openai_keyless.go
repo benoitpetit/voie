@@ -38,6 +38,7 @@ type openAIKeylessConfig struct {
 	TokenSupplier          func() string               // resolves the bearer token per request
 	BodyHint               func(int, []byte) string    // optional upstream-specific error detail
 	ResponseHint           func(string) error          // optional answer validation (e.g. expired session)
+	OmitDefaultMaxTokens   bool                        // gateway rejects unsupported generation controls
 	Ensure                 func(context.Context) error // optional lazy gateway startup
 }
 
@@ -59,7 +60,7 @@ type openAIKeylessRequest struct {
 	Model         string             `json:"model"`
 	Messages      []Message          `json:"messages"`
 	Stream        bool               `json:"stream"`
-	MaxTokens     int                `json:"max_tokens"`
+	MaxTokens     *int               `json:"max_tokens,omitempty"`
 	Temperature   *float64           `json:"temperature,omitempty"`
 	TopP          *float64           `json:"top_p,omitempty"`
 	Stop          []string           `json:"stop,omitempty"`
@@ -142,9 +143,12 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 		}
 	}
 	options := app.RequestOptionsFrom(ctx)
-	maxTokens := 1024
+	var maxTokens *int
 	if options.MaxTokens != nil {
-		maxTokens = *options.MaxTokens
+		maxTokens = options.MaxTokens
+	} else if !p.cfg.OmitDefaultMaxTokens {
+		defaultTokens := 1024
+		maxTokens = &defaultTokens
 	}
 	payload, err := json.Marshal(openAIKeylessRequest{
 		Model: model, Messages: messages, Stream: stream, MaxTokens: maxTokens,

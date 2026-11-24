@@ -11,7 +11,7 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 	if provider.GetInfo().Name != "duckai" {
 		t.Fatalf("registered provider name = %q, want duckai", provider.GetInfo().Name)
 	}
-	for _, existing := range []string{"perplexity", "deepai", "quillbot", "yqcloud"} {
+	for _, existing := range []string{"deepai", "quillbot", "yqcloud"} {
 		if registry.Get(existing) == nil {
 			t.Errorf("existing provider %q is missing after Duck.ai registration", existing)
 		}

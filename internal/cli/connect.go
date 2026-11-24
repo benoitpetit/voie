@@ -287,6 +287,17 @@ func removeProviderFiles(provider string) error {
 	return install.Uninstall(context.Background(), provider, uninstallRunner)
 }
 
+// gatewayLoopbackKey is the bearer token voie sends to a local gateway.
+func gatewayLoopbackKey(name string) string {
+	store, err := config.LoadCredentials()
+	if err == nil {
+		if key := store.Token(name); key != "" {
+			return key
+		}
+	}
+	return "voie-local"
+}
+
 func validateToken(provider, token string) error {
 	// Cloudflare Workers AI has no documented GET /ai/v1/models endpoint;
 	// validating there returns 405 even with valid credentials. The first real
@@ -360,6 +371,9 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 		}
 	}
 	if spec.Name == "pplx-proxy" {
+		if err := providers.SetGatewayEnvValue(spec.Name, "PPLX_PROXY_API_KEY", gatewayLoopbackKey(spec.Name)); err != nil {
+			return fmt.Errorf("configure %s loopback key: %w", spec.Name, err)
+		}
 		fmt.Fprintln(command.OutOrStdout(), "Sign in to Perplexity in the browser window that opens; voie will capture the session cookie.")
 		cookie, err := capturePerplexityCookie(command.Context())
 		if err != nil {
@@ -432,7 +446,9 @@ func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered,
 	}
 	for index, name := range names {
 		state := "not connected"
-		if store.Token(name) != "" {
+		if strings.EqualFold(store.State(name), "connected") {
+			state = "connected"
+		} else if store.Token(name) != "" {
 			state = "connected"
 			if _, ok := providers.ExternalGatewayByName(name); ok {
 				account, _ := providers.ExternalGatewayAccount(name)
