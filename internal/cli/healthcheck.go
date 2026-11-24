@@ -15,13 +15,17 @@ func newHealthcheckCommand(client *http.Client) *cobra.Command {
 	if client == nil {
 		client = &http.Client{Timeout: 3 * time.Second}
 	}
-	return &cobra.Command{
+	var portFlag string
+	command := &cobra.Command{
 		Use:          "healthcheck",
 		Short:        "Check the local HTTP service health",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(command *cobra.Command, _ []string) error {
-			port := strings.TrimSpace(os.Getenv("PORT"))
+			port := strings.TrimSpace(portFlag)
+			if port == "" {
+				port = strings.TrimSpace(os.Getenv("PORT"))
+			}
 			if port == "" {
 				port = "8080"
 			}
@@ -43,4 +47,6 @@ func newHealthcheckCommand(client *http.Client) *cobra.Command {
 			return nil
 		},
 	}
+	command.Flags().StringVar(&portFlag, "port", "", "HTTP port to check (defaults to PORT)")
+	return command
 }

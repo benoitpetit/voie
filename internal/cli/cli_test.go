@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -427,4 +430,36 @@ func (p *cliFlakyProvider) ChatCompletion(_ context.Context, _ []app.Message, mo
 }
 func (*cliFlakyProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
 	return nil
+}
+
+func TestCliStateDetectsAllInstalledAgentCLIs(t *testing.T) {
+	previous := lookPath
+	lookPath = func(string) (string, error) { return "/usr/bin/agent", nil }
+	t.Cleanup(func() { lookPath = previous })
+	for _, name := range []string{"cline", "kiro", "antigravity", "codebuddy", "qoder", "cursor", "minimax-code", "devin", "copilot-cli"} {
+		if got := cliState(name); got != "installed" {
+			t.Errorf("cliState(%q) = %q, want installed", name, got)
+		}
+	}
+}
+
+func TestHealthcheckPortOverride(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	_, port, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	command := newHealthcheckCommand(server.Client())
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{"--port", port})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("healthcheck --port %s: %v", port, err)
+	}
 }

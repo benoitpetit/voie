@@ -80,12 +80,19 @@ func runInstallList(out io.Writer) error {
 	return nil
 }
 
+// lookPath is a seam for tests that simulate installed agent CLIs.
+var lookPath = exec.LookPath
+
 func cliState(name string) string {
-	switch name {
-	case "cline", "kiro", "devin", "minimax-code", "copilot-cli":
-		if _, err := exec.LookPath(cliBinary(name)); err == nil {
-			return "installed"
-		}
+	known := map[string]bool{"cline": true, "kiro": true, "antigravity": true}
+	for _, spec := range providers.ACPProviders {
+		known[spec.Name] = true
+	}
+	if !known[name] {
+		return "not installed"
+	}
+	if _, err := lookPath(cliBinary(name)); err == nil {
+		return "installed"
 	}
 	return "not installed"
 }
