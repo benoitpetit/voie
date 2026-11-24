@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- HTTP: unmatched routes return 404, root/health reject non-GET, and the scope header is validated and applied in every auth mode.
+- Streaming: the resolved upstream model and the final `routing.attempts` are now emitted; `stream_options.include_usage` adds an estimated usage chunk.
+- ACP bridges: each agent uses its own catalogue, no Cline-only flags, per-request model pinning, trailing chunks are kept, loopback ports are identity-checked, and cancellation is prompt.
+- Gateway refresh, npm/CLIProxyAPI installer checksums, model ownership/prefix collisions, Docker token default, and CLI usage/error streams.
+- Docs contract now derives provider counts, env vars and CI requirements from code; chain/debate, conversation CRUD, store, config and updater paths gained regression tests.
+
 ### Added
 
 - 16 token-based OpenAI-compatible providers (OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run, Runcrate) declared in one catalogue.
