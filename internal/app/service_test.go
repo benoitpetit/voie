@@ -360,3 +360,42 @@ func TestListModelsKeepsDeclaringProviderForSharedIDs(t *testing.T) {
 		t.Fatalf("missing catalogue entries: %v", want)
 	}
 }
+
+func TestListModelsTiersAndFilters(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("test", &testProvider{info: ProviderInfo{
+		Name: "test", Label: "Test", Working: true,
+		SupportedModels: []string{"free-model", "paid-model"},
+		FreeModels:      []string{"free-model"},
+	}})
+	registry.Register("other", &testProvider{info: ProviderInfo{
+		Name: "other", Label: "Other", Working: true, SupportedModels: []string{"other-model"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := service.ListModelsFiltered("", "")
+	if len(all) != 3 {
+		t.Fatalf("all = %d models, want 3", len(all))
+	}
+	tiers := map[string]ModelTier{}
+	for _, model := range all {
+		tiers[model.ID] = model.Tier
+	}
+	if tiers["free-model"] != TierFree || tiers["paid-model"] != TierPaid || tiers["other-model"] != TierFree {
+		t.Fatalf("tiers = %v", tiers)
+	}
+	if got := service.ListModelsFiltered("", TierFree); len(got) != 2 {
+		t.Fatalf("free = %d, want 2", len(got))
+	}
+	if got := service.ListModelsFiltered("", TierPaid); len(got) != 1 || got[0].ID != "paid-model" {
+		t.Fatalf("paid = %+v, want only paid-model", got)
+	}
+	if got := service.ListModelsFiltered("test", TierPaid); len(got) != 1 {
+		t.Fatalf("test/paid = %d, want 1", len(got))
+	}
+	if got := service.ListModelsFiltered("missing", ""); len(got) != 0 {
+		t.Fatalf("unknown provider = %d, want 0", len(got))
+	}
+}

@@ -498,14 +498,29 @@ func (s *Service) DeleteConversation(ctx context.Context, id string) error {
 }
 
 func (s *Service) ListModels() []ModelInfo {
+	return s.ListModelsFiltered("", "")
+}
+
+// ListModelsFiltered returns the callable catalogue, optionally restricted to
+// one provider and/or one tier ("free" or "paid"). An empty tier means all.
+func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []ModelInfo {
 	models := make([]ModelInfo, 0)
 	seen := make(map[string]bool)
 	for _, name := range s.registry.GetProviderNames() {
+		if providerFilter != "" && !strings.EqualFold(providerFilter, name) {
+			continue
+		}
 		provider := s.registry.Get(name)
 		info := provider.GetInfo()
 		if !info.Working {
 			continue
 		}
+		free := make(map[string]bool, len(info.FreeModels))
+		for _, id := range info.FreeModels {
+			free[strings.ToLower(strings.TrimSpace(id))] = true
+		}
+		// Providers without a free list advertise only verified free models.
+		freeAll := len(info.FreeModels) == 0
 		for _, id := range info.SupportedModels {
 			ownerName, ownerInfo := name, info
 			if !provider.SupportsModel(id) {
@@ -518,17 +533,22 @@ func (s *Service) ListModels() []ModelInfo {
 			if seen[publicID] {
 				continue
 			}
+			modelTier := TierPaid
+			if freeAll || free[strings.ToLower(id)] || free[strings.ToLower(publicID)] {
+				modelTier = TierFree
+			}
+			if tier != "" && tier != modelTier {
+				continue
+			}
 			seen[publicID] = true
 			models = append(models, ModelInfo{
 				ID: publicID, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
-				Group:      ownerInfo.Label,
+				Tier: modelTier, Group: ownerInfo.Label,
 				Permission: []interface{}{}, Root: id,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
 			})
 		}
 	}
-	// Providers and their model declarations arrive in deterministic order, but
-	// sorting explicitly preserves stable ordering if their order changes later.
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return models
 }

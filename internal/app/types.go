@@ -99,6 +99,21 @@ type RoutedModel struct {
 	DurationMillis int64  `json:"duration_ms,omitempty"`
 }
 
+// ModelTier distinguishes verified free models from paid ones.
+type ModelTier string
+
+const (
+	TierFree ModelTier = "free"
+	TierPaid ModelTier = "paid"
+)
+
+// ModelPrice holds upstream per-token prices when publicly available.
+type ModelPrice struct {
+	PromptPerToken     string `json:"prompt_per_token,omitempty"`
+	CompletionPerToken string `json:"completion_per_token,omitempty"`
+	Currency           string `json:"currency,omitempty"`
+}
+
 type ProviderInfo struct {
 	Name               string   `json:"name"`
 	Label              string   `json:"label"`
@@ -112,9 +127,12 @@ type ProviderInfo struct {
 	NeedsAuth          bool     `json:"needs_auth"`
 	Description        string   `json:"description"`
 	ReverseEngineering bool     `json:"reverse_engineering"`
+	FreeModels         []string `json:"free_models,omitempty"`
 }
 
 type ModelInfo struct {
+	Tier       ModelTier              `json:"tier"`
+	Price      *ModelPrice            `json:"price,omitempty"`
 	ID         string                 `json:"id"`
 	Object     string                 `json:"object"`
 	Created    int64                  `json:"created"`
