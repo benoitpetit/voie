@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExternalGatewaysAreRegistered(t *testing.T) {
@@ -138,5 +139,37 @@ func TestExternalGatewayInstallCommand(t *testing.T) {
 	command := NewExternalGateway(spec).InstallCommand()
 	if command == "" {
 		t.Fatal("install command is empty")
+	}
+}
+
+func TestRefreshGatewayModelsRefetchesLiveCatalogue(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"fresh-model"}]}`))
+	}))
+	defer server.Close()
+	previous := gatewayBaseURL
+	gatewayBaseURL = func(spec ExternalGatewaySpec) string { return server.URL }
+	defer func() { gatewayBaseURL = previous }()
+	gatewayModelsMu.Lock()
+	gatewayModelCaches = make(map[string]gatewayModelCacheEntry)
+	gatewayModelsMu.Unlock()
+	writeGatewayModelsCache(map[string]gatewayModelCacheEntry{
+		"omniroute": {At: time.Now(), Models: map[string]string{"om-stale": "stale-model"}},
+	})
+
+	RefreshGatewayModels("omniroute")
+
+	gatewayModelsMu.Lock()
+	entry, ok := gatewayModelCaches["omniroute"]
+	gatewayModelsMu.Unlock()
+	if !ok || entry.Models["om-fresh-model"] != "fresh-model" {
+		t.Fatalf("refresh did not fetch the live catalogue: %v", entry.Models)
+	}
+	if _, stale := entry.Models["om-stale"]; stale {
+		t.Fatalf("stale model survived refresh: %v", entry.Models)
+	}
+	if saved := readGatewayModelsCache()["omniroute"]; saved.Models["om-fresh-model"] != "fresh-model" {
+		t.Fatalf("disk cache was not refreshed: %v", saved.Models)
 	}
 }

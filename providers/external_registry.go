@@ -415,6 +415,23 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 	return filterGatewayModels(name, models)
 }
 
+// gatewayBaseURL is a seam for tests that point a gateway at an httptest
+// server instead of its fixed loopback port.
+var gatewayBaseURL = func(spec ExternalGatewaySpec) string {
+	return "http://127.0.0.1:" + itoa(spec.Port)
+}
+
+// discardGatewayModelsCache drops both the in-memory and the persisted copy
+// so a refresh actually fetches the gateway again.
+func discardGatewayModelsCache(name string) {
+	gatewayModelsMu.Lock()
+	defer gatewayModelsMu.Unlock()
+	delete(gatewayModelCaches, name)
+	entries := readGatewayModelsCache()
+	delete(entries, name)
+	writeGatewayModelsCache(entries)
+}
+
 // RefreshGatewayModels discovers the live catalogue while a gateway is up and
 // persists it, so `voie models` keeps showing the real models after shutdown.
 func RefreshGatewayModels(name string) {
@@ -422,10 +439,8 @@ func RefreshGatewayModels(name string) {
 	if !ok {
 		return
 	}
-	gatewayModelsMu.Lock()
-	delete(gatewayModelCaches, name)
-	gatewayModelsMu.Unlock()
-	fetchGatewayModels(spec.Name, "http://127.0.0.1:"+itoa(spec.Port), gatewayTokenSupplier(spec)())
+	discardGatewayModelsCache(name)
+	fetchGatewayModels(spec.Name, gatewayBaseURL(spec), gatewayTokenSupplier(spec)())
 }
 
 // ProvisionGatewayEnv creates the generated secrets once and reuses them on
