@@ -44,3 +44,29 @@ func TestListModelsUsesPrefixedIDs(t *testing.T) {
 		t.Error("prefixed model ID cannot be routed")
 	}
 }
+
+func TestNormalizeModelIDUsesLongestPrefix(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"oc2ago-x", "x"},
+		{"oc2a-x", "x"},
+		{"cl2-cli2-free", "cli2-free"},
+		{"orc-x", "x"},
+		{"or-x", "x"},
+	} {
+		if got := app.NormalizeModelID(tc.input); got != tc.want {
+			t.Errorf("NormalizeModelID(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestLegacyAliasesRemainUnprefixed(t *testing.T) {
+	for _, tc := range []struct{ provider, id string }{
+		{"openrouter", "orfree"},
+		{"orcarouter", "orcafree"},
+		{"vlm-run", "vlmfree"},
+	} {
+		if got := app.PrefixModelID(tc.provider, tc.id); got != tc.id {
+			t.Errorf("PrefixModelID(%q, %q) = %q, want unchanged", tc.provider, tc.id, got)
+		}
+	}
+}

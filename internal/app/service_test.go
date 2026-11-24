@@ -338,3 +338,25 @@ func (p *testProvider) SupportsModel(model string) bool {
 	}
 	return false
 }
+
+func TestListModelsKeepsDeclaringProviderForSharedIDs(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("deepai", &testProvider{info: ProviderInfo{Name: "deepai", Label: "DeepAI", Working: true, SupportedModels: []string{"gpt-6-luna"}}})
+	registry.Register("duckai", &testProvider{info: ProviderInfo{Name: "duckai", Label: "Duck.ai", Working: true, SupportedModels: []string{"gpt-6-luna"}}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"dp-gpt-6-luna": "deepai", "dk-gpt-6-luna": "duckai"}
+	for _, model := range service.ListModels() {
+		if provider, ok := want[model.ID]; ok {
+			if model.Meta["provider"] != provider {
+				t.Errorf("%s: meta.provider = %v, want %s", model.ID, model.Meta["provider"], provider)
+			}
+			delete(want, model.ID)
+		}
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing catalogue entries: %v", want)
+	}
+}

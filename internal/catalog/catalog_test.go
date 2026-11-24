@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,13 @@ func TestFallsBackToEmbeddedSnapshotOffline(t *testing.T) {
 	defer SetSource("")
 	if got := Models("openrouter"); len(got) < 10 {
 		t.Errorf("offline Models(openrouter) = %d aliases, want the embedded catalogue", len(got))
+	}
+}
+
+func TestOrcaRouterEmbeddedIDsUseOrcPrefix(t *testing.T) {
+	for id := range embeddedModels["orcarouter"] {
+		if strings.HasPrefix(id, "ocr-") {
+			t.Errorf("orcarouter embedded model %q uses the stale ocr- prefix", id)
+		}
 	}
 }

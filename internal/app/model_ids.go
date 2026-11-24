@@ -61,11 +61,18 @@ var modelPrefixes = map[string]string{
 	"workbuddy2api":    "wb",
 }
 
+// legacyUnprefixedIDs are public aliases that predate provider namespacing
+// and must keep their exact spelling.
+var legacyUnprefixedIDs = map[string]bool{
+	"orfree": true, "orcafree": true, "vlmfree": true,
+}
+
 // PrefixModelID returns the public model ID for a provider. IDs that already
-// carry the provider prefix are left intact.
+// carry the provider prefix, or that are documented legacy aliases, are left
+// intact.
 func PrefixModelID(provider, id string) string {
 	prefix := modelPrefixes[provider]
-	if prefix == "" || strings.HasPrefix(id, prefix) {
+	if prefix == "" || legacyUnprefixedIDs[id] || strings.HasPrefix(id, prefix+"-") {
 		return id
 	}
 	return prefix + "-" + id

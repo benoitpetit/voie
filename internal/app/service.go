@@ -495,9 +495,11 @@ func (s *Service) ListModels() []ModelInfo {
 		}
 		for _, id := range info.SupportedModels {
 			ownerName, ownerInfo := name, info
-			if routed := s.registry.GetForModel(id); routed != nil {
-				ownerInfo = routed.GetInfo()
-				ownerName = strings.ToLower(ownerInfo.Name)
+			if !provider.SupportsModel(id) {
+				if routed := s.registry.GetForModel(id); routed != nil {
+					ownerInfo = routed.GetInfo()
+					ownerName = strings.ToLower(ownerInfo.Name)
+				}
 			}
 			publicID := PrefixModelID(ownerName, id)
 			if seen[publicID] {
