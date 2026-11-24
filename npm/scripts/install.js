@@ -6,6 +6,7 @@ const {
   binaryName,
   findAsset,
   verifyChecksum,
+  requireChecksumAsset,
   extractTarGz,
   extractZip,
 } = require("./lib");
@@ -48,12 +49,10 @@ async function main() {
   }
 
   const archive = await get(asset.browser_download_url);
-  const checksumAsset = release.assets.find((item) => item.name === "checksums.txt");
-  if (checksumAsset) {
-    const checksums = (await get(checksumAsset.browser_download_url)).toString("utf8");
-    if (!verifyChecksum(checksums, asset.name, archive)) {
-      throw new Error(`SHA-256 mismatch for ${asset.name}`);
-    }
+  const checksumAsset = requireChecksumAsset(release);
+  const checksums = (await get(checksumAsset.browser_download_url)).toString("utf8");
+  if (!verifyChecksum(checksums, asset.name, archive)) {
+    throw new Error(`SHA-256 mismatch for ${asset.name}`);
   }
 
   const extracted = asset.name.endsWith(".zip")

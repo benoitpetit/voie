@@ -94,11 +94,20 @@ function extractZip(buffer, wanted) {
   return null;
 }
 
+function requireChecksumAsset(release) {
+  const asset = (release.assets || []).find((item) => item.name === "checksums.txt");
+  if (!asset || !asset.browser_download_url) {
+    throw new Error("release is missing checksums.txt; refusing to install an unverified binary");
+  }
+  return asset;
+}
+
 module.exports = {
   platformKey,
   binaryName,
   findAsset,
   verifyChecksum,
+  requireChecksumAsset,
   extractTarGz,
   extractZip,
 };

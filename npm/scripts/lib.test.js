@@ -6,6 +6,7 @@ const {
   binaryName,
   findAsset,
   verifyChecksum,
+  requireChecksumAsset,
   extractTarGz,
   extractZip,
 } = require("./lib");
@@ -99,4 +100,17 @@ test("extractTarGz returns the binary", () => {
 test("extractZip returns the Windows binary", () => {
   assert.deepEqual(extractZip(zipFixture("voie.exe", payload), "voie.exe"), payload);
   assert.equal(extractZip(zipFixture("voie.exe", payload), "voie"), null);
+});
+
+test('requireChecksumAsset rejects a release without checksums.txt', () => {
+  assert.throws(
+    () => requireChecksumAsset({ assets: [{ name: "voie_0.1.2_linux_amd64.tar.gz" }] }),
+    /checksums\.txt/,
+  );
+});
+
+test('requireChecksumAsset returns the checksum asset when present', () => {
+  const checksums = { name: "checksums.txt", browser_download_url: "https://example.invalid/checksums.txt" };
+  const release = { assets: [{ name: "voie.tar.gz" }, checksums] };
+  assert.equal(requireChecksumAsset(release), checksums);
 });
