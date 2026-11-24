@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,8 @@ type ExternalGatewaySpec struct {
 	AccountURL      string            // where to create or link it
 	DashboardURL    string            // local dashboard to open during `voie connect`
 	SetupCommand    []string          // interactive account login to run before starting
+	SetupLogCommand []string          // command whose output contains a first-run setup code
+	SetupLogPattern string            // regex; first capture group is the code shown to the user
 	KeyRequired     string            // local gateway key policy
 }
 
@@ -240,8 +243,10 @@ var ExternalGateways = []ExternalGatewaySpec{
 		SetupHint:       "BYOK only: set ENCRYPTION_KEY before connect, add your own provider keys in the dashboard; remote catalog is disabled",
 		AccountRequired: "upstream", AccountKind: "official free API keys added in the dashboard",
 		AccountURL: "https://github.com/tashfeenahmed/freellmapi", DashboardURL: "http://127.0.0.1:3001", KeyRequired: "unified key from the dashboard",
-		Start: []string{"docker", "compose", "up", "-d"},
-		Stop:  []string{"docker", "compose", "down"},
+		SetupLogCommand: []string{"docker", "compose", "logs", "--tail", "200"},
+		SetupLogPattern: `First-run setup code:\s*(\S+)`,
+		Start:           []string{"docker", "compose", "up", "-d"},
+		Stop:            []string{"docker", "compose", "down"},
 	},
 }
 
@@ -533,6 +538,32 @@ func ProvisionGatewayKey(spec ExternalGatewaySpec) error {
 		return fmt.Errorf("9routerx key creation failed: HTTP %d", response.StatusCode)
 	}
 	return store.Set(spec.Name, key)
+}
+
+// SetupCodeFromLogs runs the gateway's log command and extracts the first-run
+// setup code. It returns an empty string when no code is present (for example
+// once an account already exists).
+func SetupCodeFromLogs(spec ExternalGatewaySpec) string {
+	if len(spec.SetupLogCommand) == 0 || spec.SetupLogPattern == "" {
+		return ""
+	}
+	pattern, err := regexp.Compile(spec.SetupLogPattern)
+	if err != nil {
+		return ""
+	}
+	// A freshly started container may not have flushed its boot log yet.
+	for attempt := 0; attempt < 4; attempt++ {
+		cmd := exec.Command(spec.SetupLogCommand[0], spec.SetupLogCommand[1:]...)
+		cmd.Dir = gatewayDir(spec)
+		output, err := cmd.CombinedOutput()
+		if err == nil {
+			if match := pattern.FindSubmatch(output); len(match) >= 2 {
+				return strings.TrimSpace(string(match[1]))
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return ""
 }
 
 // ExternalGateway is a normal provider pointed at a user-installed gateway.

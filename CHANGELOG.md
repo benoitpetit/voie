@@ -21,6 +21,7 @@
 - Only verified free models are listed: gateways whose lane is keyless/local keep their live discovery, while Qoder/Trae expose only their documented free `Auto` mode and 9routerx stays limited to its working free alias. Renamed `free-llm-router` models to `flr-` and `trae2api` models to `te-`.
 - Reversed Perplexity's current web API: the ask payload is now wrapped in `params` with a new request reason and client hints, and answers arrive in nested `text_payload` workflow blocks. Only the anonymous `turbo` model is advertised; an optional `VOIE_PERPLEXITY_COOKIES` makes it reliable when anonymous traffic is throttled.
 - `voie connect` now keeps dashboard gateways running until the user validates in the terminal: it prints the local dashboard URL, waits for Enter, then stops the gateway. Gateway specs declare their dashboard URL. Copilot API and Cursor ACP Proxy offer their CLI login (`auth` / `login`) during connect instead.
+- FreeLLMAPI's first-run setup code is extracted from the container logs and printed during `voie connect`, so the first account can be created from a browser outside the container.
 
 ## v0.1.4 - 2026-11-22
 

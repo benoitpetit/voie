@@ -267,6 +267,9 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	providers.RefreshGatewayModels(spec.Name)
 	if spec.DashboardURL != "" {
 		fmt.Fprintf(command.OutOrStdout(), "Dashboard for account setup: %s\n", spec.DashboardURL)
+		if code := providers.SetupCodeFromLogs(spec); code != "" {
+			fmt.Fprintf(command.OutOrStdout(), "First-run setup code: %s (enter it in the dashboard when asked)\n", code)
+		}
 		if file, ok := command.InOrStdin().(*os.File); ok && term.IsTerminal(int(file.Fd())) {
 			fmt.Fprintln(command.OutOrStdout(), "Create or link your account there, then validate here to stop the gateway.")
 			if _, err := readLine(command, bufio.NewReader(command.InOrStdin()), "Press Enter when done: ", false); err != nil {
