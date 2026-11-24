@@ -22,7 +22,7 @@
 - Reversed Perplexity's current web API: the ask payload is now wrapped in `params` with a new request reason and client hints, and answers arrive in nested `text_payload` workflow blocks. Only the anonymous `turbo` model is advertised; an optional `VOIE_PERPLEXITY_COOKIES` makes it reliable when anonymous traffic is throttled.
 - `voie connect` now keeps dashboard gateways running until the user validates in the terminal: it prints the local dashboard URL, waits for Enter, then stops the gateway. Gateway specs declare their dashboard URL. Copilot API and Cursor ACP Proxy offer their CLI login (`auth` / `login`) during connect instead.
 - FreeLLMAPI's first-run setup code is extracted from the container logs and printed during `voie connect`, so the first account can be created from a browser outside the container.
-- `voie connect --list` shows a `TYPE` column (`token`, `cli`, `keyless gateway`, `dashboard gateway`, `byok gateway`, `local runtime`). `voie providers` reports installed gateways as `ready` even while their loopback listener is stopped, since they start on demand.
+- `voie connect --list` and the interactive `voie connect` menu share the same grouped `NAME / TYPE / STATE` layout (the menu adds a `#` column for selection). Types: `token`, `cli`, `keyless gateway`, `dashboard gateway`, `byok gateway`, `local runtime`. `voie providers` reports installed gateways as `ready` even while their loopback listener is stopped, since they start on demand.
 
 ## v0.1.4 - 2026-11-22
 

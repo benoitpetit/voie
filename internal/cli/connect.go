@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -287,42 +286,46 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	return nil
 }
 
-func runConnectList(out io.Writer, store *config.Credentials) error {
+type connectEntry struct {
+	Name  string
+	Type  string
+	State string
+}
+
+type connectSection struct {
+	Title   string
+	Entries []connectEntry
+}
+
+func connectSections(store *config.Credentials) []connectSection {
 	tokenProviders := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
 	cliProviders := []string{
 		"opencode-zen", "opencode-go", "antigravity", "kiro", "cline",
 		"codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor",
 	}
-	sections := []struct {
-		title string
-		kind  string
-		names []string
-	}{
-		{"API TOKEN (create a key with the provider)", "token", tokenProviders},
-		{"CLI / LOCAL GATEWAY (sign in with the official tool)", "cli", cliProviders},
+	sections := []connectSection{
+		{Title: "API TOKEN (create a key with the provider)"},
+		{Title: "CLI / LOCAL GATEWAY (sign in with the official tool)"},
 	}
-	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	for _, section := range sections {
-		if _, err := fmt.Fprintf(table, "\n%s\nNAME\tTYPE\tSTATE\n", section.title); err != nil {
-			return err
+	for _, name := range tokenProviders {
+		state := "not connected"
+		if store.Token(name) != "" {
+			state = "connected"
+		} else if name == "vlm-run" {
+			state = "available (anonymous bearer)"
 		}
-		for _, name := range section.names {
-			state := "not connected"
-			if store.Token(name) != "" {
-				state = "connected"
-			} else if name == "opencode-zen" || name == "opencode-go" {
-				state = "available (anonymous / local key)"
-			} else if name == "vlm-run" {
-				state = "available (anonymous bearer)"
-			}
-			if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", name, section.kind, state); err != nil {
-				return err
-			}
+		sections[0].Entries = append(sections[0].Entries, connectEntry{Name: name, Type: "token", State: state})
+	}
+	for _, name := range cliProviders {
+		state := "not connected"
+		if store.Token(name) != "" {
+			state = "connected"
+		} else if name == "opencode-zen" || name == "opencode-go" {
+			state = "available (anonymous / local key)"
 		}
+		sections[1].Entries = append(sections[1].Entries, connectEntry{Name: name, Type: "cli", State: state})
 	}
-	if _, err := fmt.Fprintln(table, "\nREVERSE-ENGINEERED GATEWAYS (ToS risk, opt-in)\nNAME\tTYPE\tSTATE"); err != nil {
-		return err
-	}
+	gateways := connectSection{Title: "REVERSE-ENGINEERED GATEWAYS (ToS risk, opt-in)"}
 	for _, spec := range providers.ExternalGateways {
 		installed, _, _ := providers.ExternalGatewayStatus(spec.Name)
 		account, _ := providers.ExternalGatewayAccount(spec.Name)
@@ -330,10 +333,37 @@ func runConnectList(out io.Writer, store *config.Credentials) error {
 		if installed {
 			state = "installed — account: " + account.Required
 		}
-		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", spec.Name, providers.ExternalGatewayType(spec), state); err != nil {
-			return err
+		gateways.Entries = append(gateways.Entries, connectEntry{
+			Name: spec.Name, Type: providers.ExternalGatewayType(spec), State: state,
+		})
+	}
+	return append(sections, gateways)
+}
+
+func printConnectSections(table *tabwriter.Writer, sections []connectSection, numbered bool) []string {
+	var names []string
+	for _, section := range sections {
+		fmt.Fprintf(table, "\n%s\n", section.Title)
+		if numbered {
+			fmt.Fprintln(table, "#\tNAME\tTYPE\tSTATE")
+		} else {
+			fmt.Fprintln(table, "NAME\tTYPE\tSTATE")
+		}
+		for _, entry := range section.Entries {
+			names = append(names, entry.Name)
+			if numbered {
+				fmt.Fprintf(table, "%d\t%s\t%s\t%s\n", len(names), entry.Name, entry.Type, entry.State)
+			} else {
+				fmt.Fprintf(table, "%s\t%s\t%s\n", entry.Name, entry.Type, entry.State)
+			}
 		}
 	}
+	return names
+}
+
+func runConnectList(out io.Writer, store *config.Credentials) error {
+	table := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	printConnectSections(table, connectSections(store), false)
 	return table.Flush()
 }
 
@@ -408,17 +438,11 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 		}
 		return args[0], nil
 	}
-	names := append([]string(nil), connectableProviders...)
-	sort.Strings(names)
 	fmt.Fprintln(command.ErrOrStderr(), "Available providers:")
-	for i, name := range names {
-		state := "not connected"
-		if store.Token(name) != "" {
-			state = "connected"
-		}
-		fmt.Fprintf(command.ErrOrStderr(), "  %d) %-14s %s\n", i+1, name, state)
-	}
-	fmt.Fprintln(command.ErrOrStderr(), "  0) Cancel")
+	table := tabwriter.NewWriter(command.ErrOrStderr(), 0, 0, 2, ' ', 0)
+	ordered := printConnectSections(table, connectSections(store), true)
+	fmt.Fprintln(table, "\n0\tCancel\t\t")
+	table.Flush()
 	answer, err := readLine(command, input, "Provider number: ", false)
 	if err != nil {
 		return "", err
@@ -428,10 +452,10 @@ func selectProvider(command *cobra.Command, args []string, store *config.Credent
 		return "", errConnectCanceled
 	}
 	var index int
-	if _, err := fmt.Sscanf(answer, "%d", &index); err != nil || index < 1 || index > len(names) {
+	if _, err := fmt.Sscanf(answer, "%d", &index); err != nil || index < 1 || index > len(ordered) {
 		return "", fmt.Errorf("invalid provider selection %q", answer)
 	}
-	return names[index-1], nil
+	return ordered[index-1], nil
 }
 
 type lineResult struct {
