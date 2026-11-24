@@ -353,7 +353,7 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		if err != nil {
 			return err
 		}
-		routing = &RoutingInfo{Strategy: StrategyClassic}
+		routing = &RoutingInfo{Strategy: StrategyClassic, Models: []RoutedModel{{Model: model, Provider: provider.GetInfo().Name, Status: "started"}}}
 		attempts, streamErr := s.streamWithFallback(callCtx, request, provider, model, strings.ToLower(strings.TrimSpace(request.Provider)), policy, streamCallback)
 		if streamErr != nil {
 			return streamErr
@@ -372,7 +372,7 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		if fbErr != nil {
 			return fbErr
 		}
-		routing = &RoutingInfo{Strategy: StrategyAuto, Task: info.Task, Attempts: append([]Attempt(nil), info.Attempts...)}
+		routing = &RoutingInfo{Strategy: StrategyAuto, Task: info.Task, Attempts: append([]Attempt(nil), info.Attempts...), Models: []RoutedModel{{Model: candidate.Model, Provider: candidate.Provider, Status: "started"}}}
 		attempts, streamErr := s.streamWithFallbacks(callCtx, request, s.registry.Get(candidate.Provider), candidate.Model, fallbacks, strings.ToLower(strings.TrimSpace(request.Provider)), len(info.Attempts)+1, policy, streamCallback)
 		if streamErr != nil {
 			return streamErr

@@ -103,18 +103,22 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 	var finalRouting *app.RoutingInfo
 	completionID := "chatcmpl-" + randomID()
 	resolvedModel := request.Model
+	resolveModel := func(routing *app.RoutingInfo) {
+		if routing == nil || (resolvedModel != "" && !strings.EqualFold(resolvedModel, "openai")) {
+			return
+		}
+		if routing.SynthesisModel != "" {
+			resolvedModel = routing.SynthesisModel
+		} else if len(routing.Models) > 0 {
+			resolvedModel = routing.Models[len(routing.Models)-1].Model
+		}
+	}
 	start := func(routing *app.RoutingInfo) {
 		if started {
 			return
 		}
 		started = true
-		if resolvedModel == "" && routing != nil {
-			if routing.SynthesisModel != "" {
-				resolvedModel = routing.SynthesisModel
-			} else if len(routing.Models) > 0 {
-				resolvedModel = routing.Models[0].Model
-			}
-		}
+		resolveModel(routing)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -142,6 +146,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	logChatOutcome(request, nil, err, finalRouting)
+	resolveModel(finalRouting)
 	start(nil)
 	if err != nil {
 		writeSSE(w, map[string]interface{}{"error": map[string]string{"message": err.Error(), "type": "provider_error"}})
@@ -149,6 +154,7 @@ func (h *apiHandler) streamCompletion(w http.ResponseWriter, r *http.Request, re
 		finishReason := "stop"
 		writeSSE(w, app.StreamChunk{
 			ID: completionID, Object: "chat.completion.chunk", Created: time.Now().Unix(), Model: resolvedModel,
+			ConversationID: request.ConversationID, Routing: finalRouting,
 			Choices: []app.StreamChoice{{Index: 0, Delta: &app.Delta{}, FinishReason: &finishReason}},
 		})
 	}

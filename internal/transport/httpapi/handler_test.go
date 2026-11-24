@@ -813,3 +813,101 @@ func TestRootAndHealthRejectNonGET(t *testing.T) {
 		}
 	}
 }
+
+func sseChatChunks(body string) []map[string]any {
+	chunks := make([]map[string]any, 0)
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "data: ") || strings.Contains(line, "[DONE]") {
+			continue
+		}
+		var chunk map[string]any
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk); err == nil {
+			chunks = append(chunks, chunk)
+		}
+	}
+	return chunks
+}
+
+func TestStreamingFirstChunkUsesResolvedModel(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &httpTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute, DefaultProvider: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	for _, model := range []string{"", "openai"} {
+		body := `{"stream":true,"messages":[{"role":"user","content":"hi"}]}`
+		if model != "" {
+			body = `{"stream":true,"model":"` + model + `","messages":[{"role":"user","content":"hi"}]}`
+		}
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+		chunks := sseChatChunks(recorder.Body.String())
+		if len(chunks) == 0 {
+			t.Fatalf("model %q: no SSE chunks: %s", model, recorder.Body.String())
+		}
+		if got := chunks[0]["model"]; got != "model" {
+			t.Fatalf("model %q: first chunk model = %v, want resolved upstream model", model, got)
+		}
+	}
+}
+
+func TestStreamingFinalChunkCarriesAttemptsAndConversationID(t *testing.T) {
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	registry := app.NewRegistry()
+	registry.Register("test", &httpTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute, Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := service.CreateConversation(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	body := `{"stream":true,"model":"model","conversation_id":"` + conversation.ID + `","messages":[{"role":"user","content":"hi"}]}`
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	chunks := sseChatChunks(recorder.Body.String())
+	if len(chunks) < 2 {
+		t.Fatalf("no SSE chunks: %s", recorder.Body.String())
+	}
+	final := chunks[len(chunks)-1]
+	choices, _ := final["choices"].([]any)
+	if len(choices) != 1 {
+		t.Fatalf("final chunk choices = %v", final["choices"])
+	}
+	choice, _ := choices[0].(map[string]any)
+	if choice["finish_reason"] != "stop" {
+		t.Fatalf("final chunk is not the finish chunk: %v", final)
+	}
+	routing, _ := final["routing"].(map[string]any)
+	if routing == nil || len(routing["attempts"].([]any)) != 1 {
+		t.Fatalf("final chunk routing = %v, want one attempt", final["routing"])
+	}
+	if final["conversation_id"] != conversation.ID {
+		t.Fatalf("final chunk conversation_id = %v, want %s", final["conversation_id"], conversation.ID)
+	}
+}
+
+func TestStreamingAndNonStreamingModelAgree(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	body := `{"model":"model","messages":[{"role":"user","content":"hi"}]}`
+	status, response := httpChatRequest(t, handler, body)
+	if status != http.StatusOK || response.Model != "model" {
+		t.Fatalf("non-streaming model = %q (status %d)", response.Model, status)
+	}
+	streamed := strings.Replace(body, `{"model"`, `{"stream":true,"model"`, 1)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(streamed)))
+	chunks := sseChatChunks(recorder.Body.String())
+	if len(chunks) == 0 || chunks[0]["model"] != response.Model {
+		t.Fatalf("streaming model = %v, want %q", chunks, response.Model)
+	}
+}
