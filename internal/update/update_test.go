@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -391,4 +393,30 @@ func zipArchive(files map[string][]byte) []byte {
 	}
 	_ = writer.Close()
 	return output.Bytes()
+}
+
+func TestLoopbackHostRejectsSpoofed127Domain(t *testing.T) {
+	if isLoopbackHost("127.evil.example") {
+		t.Fatal("spoofed 127.* domain treated as loopback")
+	}
+	if !isLoopbackHost("LOCALHOST") || !isLoopbackHost("127.0.0.1") || !isLoopbackHost("::1") {
+		t.Fatal("valid loopback host rejected")
+	}
+}
+
+func TestRedirectToRemoteRejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://evil.example/asset", http.StatusFound)
+	}))
+	defer server.Close()
+	apiBase, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := boundedClient(server.Client(), apiBase)
+	response, err := client.Get(server.URL + "/release")
+	if err == nil {
+		response.Body.Close()
+		t.Fatal("plaintext redirect to a remote host was accepted")
+	}
 }

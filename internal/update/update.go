@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -260,7 +261,10 @@ func validateAssetURL(raw string, apiBase *url.URL) (*url.URL, error) {
 }
 
 func isLoopbackHost(host string) bool {
-	return host == "localhost" || strings.HasPrefix(host, "127.") || host == "::1"
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	return net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()
 }
 
 func boundedClient(client *http.Client, apiBase *url.URL) *http.Client {
