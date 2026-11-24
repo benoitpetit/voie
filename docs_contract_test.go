@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -98,4 +101,53 @@ func TestDockerfileDeclaresAPIToken(t *testing.T) {
 	assertContains(t, "Dockerfile", dockerfile, "HOST=0.0.0.0")
 	assertContains(t, "Dockerfile", dockerfile, "API_TOKEN=")
 	assertContains(t, "docs/deploy-coolify.md", readDoc(t, "docs/deploy-coolify.md"), "API_TOKEN")
+}
+
+func TestReadmeProviderCountMatchesRegistry(t *testing.T) {
+	readme := readDoc(t, "README.md")
+	re := regexp.MustCompile(`has (\d+) providers`)
+	match := re.FindStringSubmatch(readme)
+	if match == nil {
+		t.Fatal("README has no provider count")
+	}
+	got, err := strconv.Atoi(match[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := len(providers.NewRegistry().GetProviderNames()); got != want {
+		t.Errorf("README provider count = %d, want %d", got, want)
+	}
+}
+
+func TestReadmeGatewayCountMatchesSpecs(t *testing.T) {
+	readme := readDoc(t, "README.md")
+	want := fmt.Sprintf("%d third-party gateways", len(providers.ExternalGateways))
+	assertContains(t, "README.md", readme, want)
+}
+
+func TestChangelogCountsAndTokenListMatchCode(t *testing.T) {
+	changelog := readDoc(t, "CHANGELOG.md")
+	tokenCount := len(providers.TokenProviders) + 2
+	assertContains(t, "CHANGELOG.md", changelog, fmt.Sprintf("- %d token-based", tokenCount))
+	assertContains(t, "CHANGELOG.md", changelog, fmt.Sprintf("%d opt-in third-party gateways", len(providers.ExternalGateways)))
+	assertContains(t, "CHANGELOG.md", changelog, "Runcrate")
+}
+
+func TestEnvExampleListsRequiredVariables(t *testing.T) {
+	env := readDoc(t, ".env.example")
+	for _, name := range []string{
+		"REQUIRE_CONVERSATION_SCOPE", "VOIE_PERPLEXITY_COOKIES",
+		"VOIE_CLOUDFLARE_ACCOUNT_ID", "VOIE_OPENCODE_GATEWAY_URL",
+		"KIRO_GATEWAY_DIR", "VOIE_CLINE_FREE_FEED_URL",
+	} {
+		assertContains(t, ".env.example", env, name)
+	}
+}
+
+func TestReadmeDocumentsAllProviderKeyEnvVars(t *testing.T) {
+	readme := readDoc(t, "README.md")
+	for _, spec := range providers.ExternalGateways {
+		name := "VOIE_" + strings.ToUpper(strings.ReplaceAll(spec.Name, "-", "_")) + "_KEY"
+		assertContains(t, "README.md", readme, name)
+	}
 }
