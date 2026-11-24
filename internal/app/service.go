@@ -21,6 +21,8 @@ type CompletionRequest struct {
 	Fallback       *FallbackOverride       `json:"fallback,omitempty"`
 	ConversationID string                  `json:"conversation_id,omitempty"`
 	Messages       []Message               `json:"messages"`
+	N              int                     `json:"n,omitempty"`
+	Options        RequestOptions          `json:"-"`
 	OnProgress     func(ProgressEvent)     `json:"-"`
 	progress       *progressEmitter
 }
@@ -205,6 +207,7 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	}
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
+	callCtx = WithRequestOptions(callCtx, request.Options)
 	_, version, userMessages, err := s.prepareConversation(callCtx, &request)
 	if err != nil {
 		return nil, err
@@ -305,6 +308,7 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 	}
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
+	callCtx = WithRequestOptions(callCtx, request.Options)
 	_, version, userMessages, err := s.prepareConversation(callCtx, &request)
 	if err != nil {
 		return err
@@ -402,6 +406,9 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 }
 
 func (s *Service) validateRequestOptions(request CompletionRequest, strategy Strategy) error {
+	if request.N > 1 {
+		return appError(ErrInvalidInput, "only one completion choice is supported", nil)
+	}
 	switch strategy {
 	case StrategyClassic:
 		if strings.TrimSpace(request.Task) != "" || len(request.Models) != 0 || request.Ensemble != nil {

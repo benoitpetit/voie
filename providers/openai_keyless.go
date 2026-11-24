@@ -55,16 +55,23 @@ func newOpenAIKeylessProvider(cfg openAIKeylessConfig, client *http.Client) *ope
 var _ app.Provider = (*openAIKeylessProvider)(nil)
 
 type openAIKeylessRequest struct {
-	Model     string    `json:"model"`
-	Messages  []Message `json:"messages"`
-	Stream    bool      `json:"stream"`
-	MaxTokens int       `json:"max_tokens"`
+	Model         string             `json:"model"`
+	Messages      []Message          `json:"messages"`
+	Stream        bool               `json:"stream"`
+	MaxTokens     int                `json:"max_tokens"`
+	Temperature   *float64           `json:"temperature,omitempty"`
+	TopP          *float64           `json:"top_p,omitempty"`
+	Stop          []string           `json:"stop,omitempty"`
+	Tools         []map[string]any   `json:"tools,omitempty"`
+	ToolChoice    any                `json:"tool_choice,omitempty"`
+	StreamOptions *app.StreamOptions `json:"stream_options,omitempty"`
 }
 
 type openAIKeylessCompletion struct {
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Content   string      `json:"content"`
+			ToolCalls interface{} `json:"tool_calls,omitempty"`
 		} `json:"message"`
 		Delta struct {
 			Content string `json:"content"`
@@ -132,11 +139,15 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 			return nil, app.WrapNetworkFailure(err, p.cfg.Name, model)
 		}
 	}
+	options := app.RequestOptionsFrom(ctx)
+	maxTokens := 1024
+	if options.MaxTokens != nil {
+		maxTokens = *options.MaxTokens
+	}
 	payload, err := json.Marshal(openAIKeylessRequest{
-		Model:     model,
-		Messages:  messages,
-		Stream:    stream,
-		MaxTokens: 1024,
+		Model: model, Messages: messages, Stream: stream, MaxTokens: maxTokens,
+		Temperature: options.Temperature, TopP: options.TopP, Stop: options.Stop,
+		Tools: options.Tools, ToolChoice: options.ToolChoice, StreamOptions: options.StreamOptions,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%s: encode request: %w", p.cfg.Name, err)
@@ -189,10 +200,18 @@ func (p *openAIKeylessProvider) decodeCompletion(body io.Reader, messages []Mess
 	if err := json.NewDecoder(io.LimitReader(body, 8<<20)).Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("%s: decode response: %w", p.cfg.Name, err)
 	}
-	if len(parsed.Choices) == 0 || parsed.Choices[0].Message.Content == "" {
+	if len(parsed.Choices) == 0 {
 		return nil, fmt.Errorf("%s: empty response", p.cfg.Name)
 	}
-	return CreateResponse("chatcmpl-"+uuid.New().String(), model, parsed.Choices[0].Message.Content, EstimatePromptTokens(messages)), nil
+	message := parsed.Choices[0].Message
+	if message.Content == "" && message.ToolCalls == nil {
+		return nil, fmt.Errorf("%s: empty response", p.cfg.Name)
+	}
+	response := CreateResponse("chatcmpl-"+uuid.New().String(), model, message.Content, EstimatePromptTokens(messages))
+	if message.ToolCalls != nil {
+		response.Choices[0].Message.ToolCalls = message.ToolCalls
+	}
+	return response, nil
 }
 
 func (p *openAIKeylessProvider) decodeStream(body io.Reader, callback func(string)) error {

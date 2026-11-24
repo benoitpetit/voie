@@ -29,6 +29,14 @@ type chatRequest struct {
 	ConversationID string                      `json:"conversation_id,omitempty"`
 	Messages       []app.Message               `json:"messages"`
 	Stream         bool                        `json:"stream,omitempty"`
+	N              int                         `json:"n,omitempty"`
+	Temperature    *float64                    `json:"temperature,omitempty"`
+	MaxTokens      *int                        `json:"max_tokens,omitempty"`
+	TopP           *float64                    `json:"top_p,omitempty"`
+	Stop           []string                    `json:"stop,omitempty"`
+	Tools          []map[string]any            `json:"tools,omitempty"`
+	ToolChoice     any                         `json:"tool_choice,omitempty"`
+	StreamOptions  *app.StreamOptions          `json:"stream_options,omitempty"`
 }
 
 func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
@@ -72,7 +80,17 @@ func (h *apiHandler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeChatDecodeError(w, err)
 		return
 	}
-	appRequest := app.CompletionRequest{Model: request.Model, Provider: request.Provider, Strategy: request.Strategy, Task: request.Task, Models: request.Models, Ensemble: request.Ensemble, Fallback: request.Fallback, ConversationID: request.ConversationID, Messages: request.Messages}
+	appRequest := app.CompletionRequest{
+		Model: request.Model, Provider: request.Provider, Strategy: request.Strategy,
+		Task: request.Task, Models: request.Models, Ensemble: request.Ensemble,
+		Fallback: request.Fallback, ConversationID: request.ConversationID,
+		Messages: request.Messages, N: request.N,
+		Options: app.RequestOptions{
+			Temperature: request.Temperature, MaxTokens: request.MaxTokens, TopP: request.TopP,
+			Stop: request.Stop, Tools: request.Tools, ToolChoice: request.ToolChoice,
+			StreamOptions: request.StreamOptions,
+		},
+	}
 	if !request.Stream {
 		response, err := h.service.Complete(r.Context(), appRequest)
 		if err != nil {

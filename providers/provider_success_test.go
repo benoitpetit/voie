@@ -1,12 +1,16 @@
 package providers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/benoitpetit/voie/internal/app"
 )
 
 func TestPerplexityCompletionReturnsResolvedModelAndAggregatedAnswer(t *testing.T) {
@@ -146,5 +150,35 @@ func TestRegisteredProviderMetadataDoesNotClaimLiveReachability(t *testing.T) {
 		if info := registry.Get(name).GetInfo(); info.Alive {
 			t.Errorf("provider %q reports Alive=true in static metadata", name)
 		}
+	}
+}
+
+func TestKeylessProviderForwardsOptionsAndDecodesToolCalls(t *testing.T) {
+	var captured map[string]interface{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"call1","type":"function","function":{"name":"f","arguments":"{}"}}]}}]}`)
+	}))
+	defer server.Close()
+	provider := newOpenAIKeylessProvider(openAIKeylessConfig{
+		Name: "test", CompletionsURL: server.URL, DefaultModel: "model",
+		ModelIDs: map[string]string{"model": "model"},
+	}, server.Client())
+	temperature, maxTokens := 0.2, 64
+	ctx := app.WithRequestOptions(context.Background(), app.RequestOptions{
+		Temperature: &temperature, MaxTokens: &maxTokens, Tools: []map[string]any{{"type": "function"}},
+	})
+	response, err := provider.ChatCompletion(ctx, []Message{{Role: "user", Content: "hi"}}, "model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if captured["temperature"] != 0.2 || captured["max_tokens"] != float64(64) {
+		t.Fatalf("captured payload = %#v", captured)
+	}
+	if _, ok := captured["tools"]; !ok {
+		t.Fatalf("tools were not forwarded: %#v", captured)
+	}
+	if len(response.Choices) == 0 || response.Choices[0].Message.ToolCalls == nil {
+		t.Fatalf("tool calls were not decoded: %+v", response.Choices)
 	}
 }

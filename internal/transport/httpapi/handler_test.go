@@ -1002,3 +1002,60 @@ func TestProvidersJSONOmitsReadyForNonGateways(t *testing.T) {
 		t.Fatalf("ready emitted for a non-gateway provider: %s", recorder.Body.String())
 	}
 }
+
+type optionsRecordingProvider struct{ got app.RequestOptions }
+
+func (*optionsRecordingProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "test", Label: "Test", Working: true, DefaultModel: "model", SupportedModels: []string{"model"}}
+}
+func (*optionsRecordingProvider) SupportsModel(model string) bool { return model == "model" }
+func (p *optionsRecordingProvider) ChatCompletion(ctx context.Context, _ []app.Message, _ string) (*app.ChatCompletionResponse, error) {
+	p.got = app.RequestOptionsFrom(ctx)
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "ok"}}}}, nil
+}
+func (*optionsRecordingProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
+}
+
+func TestHTTPChatAcceptsOpenAIFields(t *testing.T) {
+	provider := &optionsRecordingProvider{}
+	registry := app.NewRegistry()
+	registry.Register("test", provider)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	body := `{"model":"model","temperature":0.2,"max_tokens":64,"top_p":0.9,"stop":["END"],"tools":[{"type":"function"}],"messages":[{"role":"user","content":"hi"}]}`
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.Code, response.Body.String())
+	}
+	if provider.got.Temperature == nil || *provider.got.Temperature != 0.2 {
+		t.Fatalf("temperature = %v", provider.got.Temperature)
+	}
+	if provider.got.MaxTokens == nil || *provider.got.MaxTokens != 64 {
+		t.Fatalf("max_tokens = %v", provider.got.MaxTokens)
+	}
+	if len(provider.got.Stop) != 1 || provider.got.Stop[0] != "END" || len(provider.got.Tools) != 1 {
+		t.Fatalf("options = %+v", provider.got)
+	}
+}
+
+func TestHTTPRejectsNGreaterThanOne(t *testing.T) {
+	provider := &optionsRecordingProvider{}
+	registry := app.NewRegistry()
+	registry.Register("test", provider)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	body := `{"model":"model","n":2,"messages":[{"role":"user","content":"hi"}]}`
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400: %s", response.Code, response.Body.String())
+	}
+}
