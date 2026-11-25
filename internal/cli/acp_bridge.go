@@ -31,6 +31,7 @@ func acpBridgeConfig(spec providers.ACPProviderSpec, binary, scratch, key string
 	// approval, a scratch cwd and a deny-all hook, as for Cline.
 	args := acpBridgeArgs(spec)
 	return clinebridge.Config{
+		Provider:     spec.Name,
 		Listen:       fmt.Sprintf("127.0.0.1:%d", spec.Port),
 		ClinePath:    binary,
 		AgentArgs:    args,

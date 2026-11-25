@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/clinebridge"
 	"github.com/benoitpetit/voie/internal/install"
 )
 
@@ -74,6 +75,14 @@ func NewACPProvider(spec ACPProviderSpec) *ACPProvider {
 		CompletionsURL: "http://127.0.0.1:" + itoa(spec.Port) + "/v1/chat/completions",
 		DefaultModel:   spec.Alias,
 		ModelIDs:       map[string]string{spec.Alias: spec.Model},
+		ModelsSupplier: func() map[string]string {
+			models := map[string]string{spec.Alias: spec.Model}
+			discovered, _ := clinebridge.ReadModelCache(spec.Name)
+			for _, model := range discovered {
+				models[app.PrefixModelID(spec.Name, model.ID)] = model.ID
+			}
+			return models
+		},
 		Description:    spec.Label + " free models through a local ACP bridge",
 		SupportsStream: true,
 		TokenSupplier:  gateway.localKey,

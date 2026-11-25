@@ -4,6 +4,8 @@
 
 ### Added
 
+- ACP bridges discover the agent's real model catalogue during the handshake, cache it, and expose it in `voie models`; model switching falls back to `session/set_config_option` when needed.
+
 - OpenRouter paid models from the public catalogue, with real per-token prices; free aliases keep `USD 0/0`.
 
 - Optional `pplx-proxy` gateway for Perplexity with automatic session-cookie capture during `voie connect` and an actionable error when the cookie expires.

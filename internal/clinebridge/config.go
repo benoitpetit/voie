@@ -11,6 +11,7 @@ import (
 
 // Config is the local bridge configuration.
 type Config struct {
+	Provider     string
 	Listen       string
 	ClinePath    string
 	AgentArgs    []string

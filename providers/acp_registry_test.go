@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/clinebridge"
 )
 
 func TestACPProvidersAreRegistered(t *testing.T) {
@@ -73,5 +74,28 @@ func TestCLIProviderRequiresConnectBeforeCallable(t *testing.T) {
 	}
 	if !NewACPProvider(spec).GetInfo().Working {
 		t.Fatal("connected CLI should be callable")
+	}
+}
+
+func TestACPProviderExposesDiscoveredModels(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := clinebridge.WriteModelCache("codebuddy", []clinebridge.ACPModel{{ID: "gpt-6-luna", Name: "GPT-6 Luna"}}); err != nil {
+		t.Fatal(err)
+	}
+	var spec ACPProviderSpec
+	for _, candidate := range ACPProviders {
+		if candidate.Name == "codebuddy" {
+			spec = candidate
+		}
+	}
+	info := NewACPProvider(spec).GetInfo()
+	found := false
+	for _, id := range info.SupportedModels {
+		if id == "cb-gpt-6-luna" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("SupportedModels = %v, want cb-gpt-6-luna", info.SupportedModels)
 	}
 }

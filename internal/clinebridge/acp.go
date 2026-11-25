@@ -25,6 +25,7 @@ type Client struct {
 	mu      sync.Mutex
 	pending map[int64]chan rpcMessage
 	updates chan map[string]any
+	models  []ACPModel
 	writeMu sync.Mutex
 }
 
@@ -105,6 +106,11 @@ func (c *Client) readLoop() {
 	close(c.updates)
 }
 
+// Models returns the catalogue discovered during the ACP handshake.
+func (c *Client) Models() []ACPModel {
+	return c.models
+}
+
 func (c *Client) call(ctx context.Context, method string, params map[string]any) (map[string]any, error) {
 	id := c.nextID.Add(1)
 	ch := make(chan rpcMessage, 1)
@@ -144,6 +150,7 @@ func (c *Client) Handshake(ctx context.Context, cwd, model string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	c.models = ParseModels(result)
 	sessionID, _ := result["sessionId"].(string)
 	if sessionID == "" {
 		return "", fmt.Errorf("ACP session/new returned no sessionId")

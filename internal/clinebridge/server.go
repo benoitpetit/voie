@@ -61,7 +61,7 @@ func Run(ctx context.Context, cfg Config) error {
 		args = []string{"--acp", "--auto-approve", "false", "--cwd", cfg.ScratchDir, "--hooks-dir", cfg.ScratchDir}
 	}
 	command := exec.CommandContext(ctx, cfg.ClinePath, args...)
-	command.Env = append(os.Environ(), "CLINE_PROVIDER=cline", "CLINE_MODEL="+cfg.Model)
+	command.Env = append(os.Environ(), "CLINE_PROVIDER="+cfg.Provider, "CLINE_MODEL="+cfg.Model)
 	stdin, err := command.StdinPipe()
 	if err != nil {
 		return err
@@ -103,6 +103,9 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return withDiagnostics(err)
 	}
+	if cfg.Provider != "" {
+		_ = WriteModelCache(cfg.Provider, client.Models())
+	}
 
 	// ACP sessions are sequential: serialize prompts so concurrent HTTP
 	// requests cannot interleave agent message chunks.
@@ -126,8 +129,15 @@ func Run(ctx context.Context, cfg Config) error {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		data := make([]map[string]any, 0, len(ids))
+		seen := map[string]bool{}
 		for _, id := range ids {
+			seen[id] = true
+		}
+		for _, model := range client.Models() {
+			seen[model.ID] = true
+		}
+		data := make([]map[string]any, 0, len(seen))
+		for id := range seen {
 			data = append(data, map[string]any{"id": id, "object": "model"})
 		}
 		writeJSON(w, map[string]any{"object": "list", "data": data})
