@@ -568,12 +568,28 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 	return models
 }
 
+func (s *Service) publicProviderInfo(info ProviderInfo) ProviderInfo {
+	prefix := func(ids []string) []string {
+		out := make([]string, len(ids))
+		for i, id := range ids {
+			out[i] = PrefixModelID(info.Name, id)
+		}
+		return out
+	}
+	info.SupportedModels = prefix(info.SupportedModels)
+	info.FreeModels = prefix(info.FreeModels)
+	if info.DefaultModel != "" {
+		info.DefaultModel = PrefixModelID(info.Name, info.DefaultModel)
+	}
+	return info
+}
+
 func (s *Service) ListProviders(ctx context.Context) ([]ProviderInfo, error) {
 	names := s.workingProviderNames()
 	providers := make([]ProviderInfo, len(names))
 	var waitGroup sync.WaitGroup
 	for i, name := range names {
-		providers[i] = s.registry.Get(name).GetInfo()
+		providers[i] = s.publicProviderInfo(s.registry.Get(name).GetInfo())
 		waitGroup.Add(1)
 		go func(index int) {
 			defer waitGroup.Done()
@@ -594,7 +610,7 @@ func (s *Service) ListProviderMetadata() []ProviderInfo {
 	names := s.registry.GetProviderNames()
 	providers := make([]ProviderInfo, 0, len(names))
 	for _, name := range names {
-		providers = append(providers, s.registry.Get(name).GetInfo())
+		providers = append(providers, s.publicProviderInfo(s.registry.Get(name).GetInfo()))
 	}
 	return providers
 }

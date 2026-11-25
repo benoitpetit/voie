@@ -518,3 +518,26 @@ func TestExplicitEmptyFreeListMeansNoFreeModels(t *testing.T) {
 		t.Fatalf("models = %+v, want paid", models)
 	}
 }
+
+func TestProviderListingsUsePublicModelIDs(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("duckai", &testProvider{info: ProviderInfo{
+		Name: "duckai", Working: true, DefaultModel: "gpt-6-luna",
+		SupportedModels: []string{"gpt-6-luna"}, FreeModels: []string{"gpt-6-luna"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers, err := service.ListProviders(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 1 || providers[0].SupportedModels[0] != "dk-gpt-6-luna" || providers[0].DefaultModel != "dk-gpt-6-luna" {
+		t.Fatalf("provider info = %+v, want prefixed IDs", providers)
+	}
+	metadata := service.ListProviderMetadata()
+	if len(metadata) != 1 || metadata[0].SupportedModels[0] != "dk-gpt-6-luna" {
+		t.Fatalf("metadata = %+v, want prefixed IDs", metadata)
+	}
+}
