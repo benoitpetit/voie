@@ -502,3 +502,19 @@ func TestPublicPrefixSelectsOwningProvider(t *testing.T) {
 		t.Fatalf("dk- model routed to %v, want duckai", got)
 	}
 }
+
+func TestExplicitEmptyFreeListMeansNoFreeModels(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("gateway", &testProvider{info: ProviderInfo{
+		Name: "gateway", Working: true, SupportedModels: []string{"paid-model"},
+		FreeModels: []string{}, NoFreeModels: true,
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := service.ListModelsFiltered("", "")
+	if len(models) != 1 || models[0].Tier != TierPaid {
+		t.Fatalf("models = %+v, want paid", models)
+	}
+}

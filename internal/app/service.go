@@ -522,7 +522,7 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 			free[strings.ToLower(strings.TrimSpace(id))] = true
 		}
 		// Providers without a free list advertise only verified free models.
-		freeAll := len(info.FreeModels) == 0
+		freeAll := !info.NoFreeModels && len(info.FreeModels) == 0
 		for _, id := range info.SupportedModels {
 			ownerName, ownerInfo := name, info
 			if !provider.SupportsModel(id) {

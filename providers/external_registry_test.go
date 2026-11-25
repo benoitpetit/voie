@@ -335,3 +335,11 @@ func TestGatewayCacheKeysGainProviderPrefix(t *testing.T) {
 		t.Fatalf("keys = %v, want pplx-gpt", got)
 	}
 }
+
+func TestGatewayFreeAllowlistIsCaseInsensitive(t *testing.T) {
+	models := map[string]string{"q2-alias": "auto"}
+	free := gatewayFreeModels("qoder2api", models)
+	if len(free) != 1 || !free["q2-alias"] {
+		t.Fatalf("free = %v, want the lowercase auto alias", free)
+	}
+}

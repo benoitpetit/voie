@@ -372,10 +372,10 @@ func gatewayFreeModels(name string, models map[string]string) map[string]bool {
 	}
 	allowed := make(map[string]bool, len(spec.FreeModels))
 	for _, id := range spec.FreeModels {
-		allowed[id] = true
+		allowed[strings.ToLower(strings.TrimSpace(id))] = true
 	}
 	for alias, upstream := range models {
-		if allowed[upstream] {
+		if allowed[strings.ToLower(strings.TrimSpace(upstream))] {
 			free[alias] = true
 		}
 	}
@@ -784,6 +784,7 @@ func (p *ExternalGateway) GetInfo() app.ProviderInfo {
 		info.FreeModels = append(info.FreeModels, alias)
 	}
 	sort.Strings(info.FreeModels)
+	info.NoFreeModels = p.spec.FreeModels != nil && len(p.spec.FreeModels) == 0
 	info.Working = p.callable()
 	// A gateway that is installed and passes its check is ready even when its
 	// loopback listener is stopped: gateways start on demand on the first call.
