@@ -192,3 +192,18 @@ func TestUninstallRemovesCliPackageAndBinary(t *testing.T) {
 		t.Fatalf("binary still present: %v", err)
 	}
 }
+
+func TestBinaryPathFindsNpmPrefixLayout(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := filepath.Join(BinaryDir(), "node_modules", ".bin")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "codebuddy")
+	if err := os.WriteFile(want, []byte(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := BinaryPath("codebuddy"); got != want {
+		t.Fatalf("BinaryPath = %q, want %q", got, want)
+	}
+}

@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- ACP bridges resolve npm-installed CLIs from `node_modules/.bin` and surface the agent child process diagnostics when a handshake fails.
+
 - `voie install` reports anonymous lanes (vlm-run, opencode) as available, matching `voie connect --list`.
 
 - Every free model displays `USD 0/0`; public upstream prices replace it when available.

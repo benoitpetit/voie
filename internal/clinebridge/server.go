@@ -70,8 +70,18 @@ func Run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	command.Stderr = io.Discard
+	diagnostics := &lockedBuffer{}
+	command.Stderr = diagnostics
 	if err := command.Start(); err != nil {
+		return err
+	}
+	withDiagnostics := func(err error) error {
+		if err == nil {
+			return nil
+		}
+		if text := diagnostics.String(); text != "" {
+			return fmt.Errorf("%w: %s", err, text)
+		}
 		return err
 	}
 	defer func() {
@@ -91,7 +101,7 @@ func Run(ctx context.Context, cfg Config) error {
 	client := NewClient(stdin, stdout)
 	sessionID, err := client.Handshake(ctx, cfg.ScratchDir, cfg.Model)
 	if err != nil {
-		return err
+		return withDiagnostics(err)
 	}
 
 	// ACP sessions are sequential: serialize prompts so concurrent HTTP
@@ -185,7 +195,24 @@ func Run(ctx context.Context, cfg Config) error {
 		<-ctx.Done()
 		_ = server.Close()
 	}()
-	return server.ListenAndServe()
+	return withDiagnostics(server.ListenAndServe())
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(data)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return strings.TrimSpace(b.buf.String())
 }
 
 func finishReason(reason string) string {

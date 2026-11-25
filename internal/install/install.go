@@ -67,9 +67,13 @@ func BinaryPath(provider string) string {
 	if name == "" {
 		return ""
 	}
-	path := filepath.Join(BinaryDir(), name)
-	if info, err := os.Stat(path); err == nil && !info.IsDir() {
-		return path
+	for _, path := range []string{
+		filepath.Join(BinaryDir(), name),
+		filepath.Join(BinaryDir(), "node_modules", ".bin", name),
+	} {
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return path
+		}
 	}
 	return ""
 }

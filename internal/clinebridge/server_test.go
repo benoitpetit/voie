@@ -105,3 +105,21 @@ func TestBridgeSSEChunksUseOpenAIShape(t *testing.T) {
 		t.Fatalf("SSE chunk = %v", chunk)
 	}
 }
+
+func TestBridgeReportsChildDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	agent := filepath.Join(dir, "agent.sh")
+	if err := os.WriteFile(agent, []byte("#!/bin/sh\necho AGENT_DIAG >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+	defer cancel()
+	err := Run(ctx, Config{
+		Listen: "127.0.0.1:0", ClinePath: agent, AgentArgs: []string{"--acp"},
+		ScratchDir: filepath.Join(dir, "scratch"), HookPath: filepath.Join(dir, "scratch", "hooks.mjs"),
+		LocalKey: "k", Model: "auto",
+	})
+	if err == nil || !strings.Contains(err.Error(), "AGENT_DIAG") {
+		t.Fatalf("error = %v, want child diagnostics", err)
+	}
+}
