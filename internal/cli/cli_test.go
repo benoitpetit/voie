@@ -18,6 +18,7 @@ import (
 	"github.com/benoitpetit/voie/internal/brand"
 	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func TestChatUsesSharedServiceAndWritesOnlyAnswer(t *testing.T) {
@@ -579,5 +580,32 @@ func TestModelsOutputShowsSubscribePrice(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "subscribe") {
 		t.Fatalf("models output = %q, want subscribe label", stdout.String())
+	}
+}
+
+func TestBuildFallbackOverrideInfersEnablement(t *testing.T) {
+	flags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	flags.StringArray("fallback-model", nil, "")
+	if err := flags.Set("fallback-model", "other"); err != nil {
+		t.Fatal(err)
+	}
+	override, err := buildFallbackOverride(flags, false, false, 0, 0, []string{"other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if override == nil || override.Enabled == nil || !*override.Enabled {
+		t.Fatalf("override = %+v, want enabled fallback", override)
+	}
+	flags2 := pflag.NewFlagSet("test2", pflag.ContinueOnError)
+	flags2.Bool("no-fallback", false, "")
+	if err := flags2.Set("no-fallback", "true"); err != nil {
+		t.Fatal(err)
+	}
+	override2, err := buildFallbackOverride(flags2, false, true, 0, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if override2 == nil || override2.Enabled == nil || *override2.Enabled {
+		t.Fatalf("override = %+v, want disabled fallback", override2)
 	}
 }

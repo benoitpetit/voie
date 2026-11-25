@@ -138,7 +138,7 @@ func buildFallbackOverride(flags *pflag.FlagSet, enabled, disabled bool, retries
 		return nil, fmt.Errorf("--fallback-limit must be between 0 and 3, got %d", limit)
 	}
 	override := &app.FallbackOverride{}
-	if changed {
+	if changed || (!disabledChanged && (retriesChanged || limitChanged || modelsChanged)) {
 		enabled := true
 		override.Enabled = &enabled
 	}

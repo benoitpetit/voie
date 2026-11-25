@@ -21,6 +21,15 @@ func (s *Service) resolvePolicy(request CompletionRequest) (FallbackPolicy, erro
 	}
 	if override.Enabled != nil {
 		policy.Enabled = *override.Enabled
+		if policy.Enabled && override.MaxRetries == nil && override.MaxFallbackModels == nil &&
+			policy.MaxRetries == 0 && policy.MaxFallbackModels == 0 {
+			// `--fallback` must not be a no-op when the configured budgets
+			// are both zero; explicit zero overrides still win below.
+			policy.MaxRetries, policy.MaxFallbackModels = 1, 1
+		}
+	}
+	if override.Models != nil && (override.Enabled == nil || *override.Enabled) {
+		policy.Enabled = true
 	}
 	if override.MaxRetries != nil {
 		if *override.MaxRetries < 0 || *override.MaxRetries > 3 {

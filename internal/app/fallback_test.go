@@ -458,3 +458,38 @@ func TestUntypedDeadlineWithLiveCallerIsTransient(t *testing.T) {
 		t.Fatalf("calls = %v, want a retry after the transient deadline", provider.calls)
 	}
 }
+
+func TestFallbackEnableFromZeroBudgetsUsesDefaults(t *testing.T) {
+	registry := NewRegistry()
+	policy := FallbackPolicy{Enabled: false, MaxRetries: 0, MaxFallbackModels: 0}
+	service, err := NewService(registry, ServiceOptions{Fallback: &policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled := true
+	resolved, err := service.resolvePolicy(CompletionRequest{Fallback: &FallbackOverride{Enabled: &enabled}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Enabled || resolved.MaxRetries != 1 || resolved.MaxFallbackModels != 1 {
+		t.Fatalf("resolved policy = %+v, want enabled with budgets 1/1", resolved)
+	}
+}
+
+func TestFallbackModelListImpliesEnablement(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("first", &fallbackProvider{info: ProviderInfo{Name: "first", Working: true, SupportedModels: []string{"a"}}})
+	registry.Register("second", &fallbackProvider{info: ProviderInfo{Name: "second", Working: true, SupportedModels: []string{"b"}}})
+	policy := FallbackPolicy{Enabled: false, MaxRetries: 1, MaxFallbackModels: 1}
+	service, err := NewService(registry, ServiceOptions{Fallback: &policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := service.resolvePolicy(CompletionRequest{Fallback: &FallbackOverride{Models: []string{"b"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Enabled {
+		t.Fatal("explicit fallback models must enable fallback")
+	}
+}
