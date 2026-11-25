@@ -38,6 +38,12 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 			if strings.TrimSpace(model) == "" && (strategy == "" || strategy == "classic") {
 				return fmt.Errorf("chat requires --model MODEL")
 			}
+			if effectiveStrategy != "classic" && strings.TrimSpace(model) != "" {
+				return fmt.Errorf("--model is only valid with --strategy classic")
+			}
+			if effectiveStrategy == "ensemble" && len(models) == 0 && len(ensembleModels) == 1 {
+				return fmt.Errorf("ensemble requires at least two models")
+			}
 			if strategy != "" && strategy != "classic" && strategy != "auto" && strategy != "ensemble" {
 				return fmt.Errorf("strategy must be classic, auto, or ensemble")
 			}

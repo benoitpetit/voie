@@ -609,3 +609,20 @@ func TestBuildFallbackOverrideInfersEnablement(t *testing.T) {
 		t.Fatalf("override = %+v, want disabled fallback", override2)
 	}
 }
+
+func TestChatRejectsStrategyFlagConflictsEarly(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"chat", "--strategy", "auto", "--model", "model", "hello"}, "--model is only valid with --strategy classic"},
+		{[]string{"chat", "--strategy", "ensemble", "--model", "model", "hello"}, "--model is only valid with --strategy classic"},
+		{[]string{"chat", "--strategy", "ensemble", "--ensemble-model", "model", "hello"}, "ensemble requires at least two models"},
+	} {
+		var stdout, stderr bytes.Buffer
+		err := executeForTest(context.Background(), tc.args, strings.NewReader(""), &stdout, &stderr, mustCLITestRuntime(t))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("args %v error = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+}
