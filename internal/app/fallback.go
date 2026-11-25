@@ -62,14 +62,15 @@ func (s *Service) resolvePolicy(request CompletionRequest) (FallbackPolicy, erro
 // classifyFailure returns the failure category of an error, treating anything
 // that is not a typed ProviderFailure as permanent (not retry-eligible).
 func classifyFailure(err error) FailureCategory {
-	// A provider-side deadline while the caller still has time is retryable;
-	// a canceled caller is not (contextOrUpstreamError handles that case).
-	if errors.Is(err, context.DeadlineExceeded) {
-		return FailureTransient
-	}
+	// A typed provider failure is authoritative: WrapNetworkFailure marks a
+	// caller deadline permanent, and provider classifications must win over
+	// the raw cause. Only an untyped deadline is a retryable transport error.
 	var failure *ProviderFailure
 	if errors.As(err, &failure) {
 		return failure.Category
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return FailureTransient
 	}
 	return FailurePermanent
 }

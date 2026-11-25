@@ -493,3 +493,33 @@ func TestFallbackModelListImpliesEnablement(t *testing.T) {
 		t.Fatal("explicit fallback models must enable fallback")
 	}
 }
+
+func TestClassifyFailureRespectsTypedDeadline(t *testing.T) {
+	typed := NewProviderFailure(FailurePermanent, "a", "a-model", 0, context.DeadlineExceeded)
+	if got := classifyFailure(typed); got != FailurePermanent {
+		t.Fatalf("typed deadline classified as %v, want permanent", got)
+	}
+	if got := classifyFailure(context.DeadlineExceeded); got != FailureTransient {
+		t.Fatalf("plain deadline classified as %v, want transient", got)
+	}
+}
+
+func TestTypedDeadlineIsNotRetried(t *testing.T) {
+	a := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}},
+		failFirst: map[string]int{"a-model": 10},
+		failures:  map[string]error{"a-model": NewProviderFailure(FailurePermanent, "a", "a-model", 0, context.DeadlineExceeded)},
+	}
+	service, registry := fallbackService(t, ServiceOptions{Fallback: &FallbackPolicy{
+		Enabled: true, MaxRetries: 2, MaxFallbackModels: 1,
+	}}, a)
+	if _, err := service.Complete(context.Background(), CompletionRequest{
+		Model: "a-model", Messages: []Message{{Role: "user", Content: "hi"}},
+	}); err == nil {
+		t.Fatal("typed deadline unexpectedly succeeded")
+	}
+	calls := registry.Get("a").(*fallbackProvider).calls
+	if len(calls) != 1 {
+		t.Fatalf("calls = %v, want one attempt for a permanent deadline", calls)
+	}
+}
