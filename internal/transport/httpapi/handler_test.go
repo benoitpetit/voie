@@ -1243,3 +1243,13 @@ func TestHTTPModelsTierAndProviderFilters(t *testing.T) {
 		}
 	}
 }
+
+func TestHTTPModelsUnknownProviderIs404(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/models?provider=missing", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", recorder.Code, recorder.Body.String())
+	}
+}

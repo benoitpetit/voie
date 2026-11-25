@@ -532,3 +532,22 @@ func TestModelsRejectsConflictingTierFlags(t *testing.T) {
 		t.Fatal("conflicting tier flags were accepted")
 	}
 }
+
+func TestModelsAllConflictsAndUnknownProvider(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("test", &tierTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"--all", "--free"}, {"--provider", "missing"}} {
+		var stdout, stderr bytes.Buffer
+		command := newModelsCommand(func() (*app.Service, error) { return service, nil })
+		command.SetOut(&stdout)
+		command.SetErr(&stderr)
+		command.SetArgs(args)
+		if err := command.Execute(); err == nil {
+			t.Errorf("%v: expected an error", args)
+		}
+	}
+}

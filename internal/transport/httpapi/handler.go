@@ -301,6 +301,10 @@ func (h *apiHandler) models(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	provider := strings.TrimSpace(r.URL.Query().Get("provider"))
+	if provider != "" && !h.service.HasProvider(provider) {
+		writeError(w, http.StatusNotFound, "unknown provider")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"object": "list", "data": h.service.ListModelsFiltered(provider, tier)})
 }
 

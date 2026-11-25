@@ -499,6 +499,11 @@ func (s *Service) DeleteConversation(ctx context.Context, id string) error {
 	return s.options.Conversations.Delete(ctx, id)
 }
 
+// HasProvider reports whether a provider name is registered.
+func (s *Service) HasProvider(name string) bool {
+	return s.registry.Get(name) != nil
+}
+
 func (s *Service) ListModels() []ModelInfo {
 	return s.ListModelsFiltered("", "")
 }

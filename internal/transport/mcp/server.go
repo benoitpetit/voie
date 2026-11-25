@@ -88,7 +88,11 @@ func NewServer(service *app.Service) *mcp.Server {
 		if tier != "" && tier != app.TierFree && tier != app.TierPaid {
 			return nil, modelsOutput{}, fmt.Errorf("tier must be free or paid")
 		}
-		models := service.ListModelsFiltered(strings.TrimSpace(input.Provider), tier)
+		provider := strings.TrimSpace(input.Provider)
+		if provider != "" && !service.HasProvider(provider) {
+			return nil, modelsOutput{}, fmt.Errorf("unknown provider %q", provider)
+		}
+		models := service.ListModelsFiltered(provider, tier)
 		output := modelsOutput{Models: make([]modelItem, 0, len(models))}
 		byGroup := make(map[string][]modelItem)
 		for _, model := range models {

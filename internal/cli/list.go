@@ -25,8 +25,8 @@ func newModelsCommand(getService func() (*app.Service, error)) *cobra.Command {
   voie models --json`,
 		Args: cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			if freeOnly && paidOnly {
-				return fmt.Errorf("--free and --paid cannot be used together")
+			if freeOnly && paidOnly || all && (freeOnly || paidOnly) {
+				return fmt.Errorf("use only one of --free, --paid, or --all")
 			}
 			tier := app.ModelTier("")
 			if freeOnly {
@@ -38,6 +38,9 @@ func newModelsCommand(getService func() (*app.Service, error)) *cobra.Command {
 			service, err := getService()
 			if err != nil {
 				return err
+			}
+			if provider != "" && !service.HasProvider(provider) {
+				return fmt.Errorf("unknown provider %q", provider)
 			}
 			return runModels(command.OutOrStdout(), service, jsonOutput, provider, tier)
 		},
