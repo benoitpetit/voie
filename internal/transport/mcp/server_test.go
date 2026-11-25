@@ -445,3 +445,43 @@ func TestMCPListProvidersExposesFullMetadata(t *testing.T) {
 		}
 	}
 }
+
+type mcpEnsembleProvider struct{}
+
+func (*mcpEnsembleProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "ensemble-test", Label: "Ensemble", Working: true,
+		SupportedModels: []string{"a", "b", "synth"}, SupportsStream: true}
+}
+func (*mcpEnsembleProvider) SupportsModel(model string) bool {
+	return model == "a" || model == "b" || model == "synth"
+}
+func (*mcpEnsembleProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "answer from " + model}}}}, nil
+}
+func (*mcpEnsembleProvider) ChatCompletionStream(_ context.Context, _ []app.Message, model string, callback func(string)) error {
+	callback("answer from " + model)
+	return nil
+}
+
+func TestMCPChatCompletionExecutesEnsemble(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("ensemble-test", &mcpEnsembleProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{SynthesisModel: "synth", Timeout: time.Second,
+		HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{
+		"strategy": "ensemble",
+		"ensemble": map[string]any{"mode": "independent", "models": []any{"a", "b"}},
+		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("ensemble result = %+v, err = %v", result, err)
+	}
+	if result.StructuredContent == nil {
+		t.Fatal("ensemble result has no structured content")
+	}
+}

@@ -1253,3 +1253,38 @@ func TestHTTPModelsUnknownProviderIs404(t *testing.T) {
 		t.Fatalf("status = %d, want 404: %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+type httpEnsembleProvider struct{}
+
+func (*httpEnsembleProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "ensemble-test", Label: "Ensemble", Working: true,
+		SupportedModels: []string{"a", "b", "synth"}, SupportsStream: true}
+}
+func (*httpEnsembleProvider) SupportsModel(model string) bool {
+	return model == "a" || model == "b" || model == "synth"
+}
+func (*httpEnsembleProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "answer from " + model}}}}, nil
+}
+func (*httpEnsembleProvider) ChatCompletionStream(_ context.Context, _ []app.Message, model string, callback func(string)) error {
+	callback("answer from " + model)
+	return nil
+}
+
+func TestHTTPChatExecutesEnsemble(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("ensemble-test", &httpEnsembleProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{SynthesisModel: "synth", Timeout: time.Minute,
+		HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	status, response := httpChatRequest(t, handler, `{"strategy":"ensemble","ensemble":{"mode":"independent","models":["a","b"]},"messages":[{"role":"user","content":"hi"}]}`)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Model != "synth" || response.Routing == nil || response.Routing.EnsembleMode != app.EnsembleIndependent {
+		t.Fatalf("response = %+v routing = %+v", response, response.Routing)
+	}
+}

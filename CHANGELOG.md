@@ -4,6 +4,8 @@
 
 ### Added
 
+- Anticipatory tests for classic, auto and ensemble (independent/chain/debate) across service streaming, CLI, HTTP and MCP, plus docs contract coverage for strategies and fallback.
+
 - OrcaRouter exposes its authenticated model catalogue as `paid` with real per-token prices; unpriced aliases stay free. ACP subscription models now show `subscribe` instead of `price unknown`.
 
 - ACP bridges discover the agent's real model catalogue during the handshake, cache it, and expose it in `voie models`; model switching falls back to `session/set_config_option` when needed.
@@ -16,6 +18,8 @@
 - Hidden paid models from gateway allowlists, the free-model catalogue and Perplexity are now callable and listed as `paid`. Public per-token prices are fetched from OpenRouter when available; otherwise paid models show `price unknown`.
 
 ### Fixed
+
+- Execution audit: fallback flags always take effect, explicit fallback lists win in auto/ensemble, typed deadlines and malformed responses are classified coherently, router failures fall back to local selection, ensemble synthesis keeps its own budget, and provider pins are enforced in both loops.
 
 - `voie install` fills the `ACCOUNT` column for CLI agents (`subscription`) and APIs (`token`, or `none` for anonymous lanes) instead of leaving it blank.
 

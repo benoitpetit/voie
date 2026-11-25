@@ -504,3 +504,34 @@ func TestRouterFailureFallsBackToLocalSelection(t *testing.T) {
 		t.Fatalf("attempts = %+v, want the failed router attempt recorded first", response.Routing.Attempts)
 	}
 }
+
+func TestAutoStreamingUsesRoutingProfile(t *testing.T) {
+	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
+	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("a", a)
+	registry.Register("b", b)
+	service, err := NewService(registry, ServiceOptions{RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var text string
+	var final *RoutingInfo
+	err = service.CompleteStreamWithInfo(context.Background(), CompletionRequest{
+		Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}},
+	}, func(chunk string, routing *RoutingInfo) { text += chunk; final = routing })
+	if err != nil {
+		t.Fatalf("auto streaming error: %v", err)
+	}
+	if text == "" || final == nil || final.Strategy != StrategyAuto || final.Task != "coding" {
+		t.Fatalf("text=%q routing=%+v", text, final)
+	}
+	if len(final.Models) != 1 || (final.Models[0].Model != "model-a" && final.Models[0].Model != "model-b") {
+		t.Fatalf("routed models = %+v, want one auto-selected model", final.Models)
+	}
+}

@@ -218,7 +218,6 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	request.emitProgress(ProgressEvent{Stage: "accepted", Message: "Completion accepted: " + string(strategy), Status: "started"})
 	var provider Provider
 	var model string
-	var routing *RoutingInfo
 	var response *ChatCompletionResponse
 	var attempts []Attempt
 	switch strategy {
@@ -270,8 +269,6 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 		info := RoutingInfo{Strategy: strategy, Models: []RoutedModel{{Model: model, Provider: response.Provider, Status: "succeeded"}}}
 		if response.Routing != nil {
 			info = *response.Routing
-		} else if routing != nil {
-			info = *routing
 		}
 		updated, err := s.options.Conversations.AppendTurn(callCtx, request.ConversationID, version, userMessages, response.Choices[0].Message, info)
 		if err != nil {

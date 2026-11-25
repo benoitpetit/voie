@@ -626,3 +626,42 @@ func TestChatRejectsStrategyFlagConflictsEarly(t *testing.T) {
 		}
 	}
 }
+
+type cliEnsembleProvider struct{}
+
+func (*cliEnsembleProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "ensemble-test", Label: "Ensemble", Working: true,
+		SupportedModels: []string{"a", "b", "synth"}, SupportsStream: true}
+}
+func (*cliEnsembleProvider) SupportsModel(model string) bool {
+	return model == "a" || model == "b" || model == "synth"
+}
+func (*cliEnsembleProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "answer from " + model}}}}, nil
+}
+func (*cliEnsembleProvider) ChatCompletionStream(_ context.Context, _ []app.Message, model string, callback func(string)) error {
+	callback("answer from " + model)
+	return nil
+}
+
+func TestChatExecutesEnsembleAcrossCLI(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("ensemble-test", &cliEnsembleProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{SynthesisModel: "synth", Timeout: time.Second,
+		HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &cliTestRuntime{service: service}
+	var stdout, stderr bytes.Buffer
+	err = executeForTest(context.Background(), []string{
+		"chat", "--strategy", "ensemble", "--ensemble-mode", "independent",
+		"--ensemble-model", "a", "--ensemble-model", "b", "hello",
+	}, strings.NewReader(""), &stdout, &stderr, rt)
+	if err != nil {
+		t.Fatalf("ensemble chat error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "answer from synth") {
+		t.Fatalf("stdout = %q, want synthesized answer", stdout.String())
+	}
+}

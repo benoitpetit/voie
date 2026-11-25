@@ -229,3 +229,18 @@ func TestDocsDescribeModelDiscovery(t *testing.T) {
 	assertContains(t, "api-reference.md", api, "`tier`")
 	assertContains(t, "api-reference.md", api, "free_models")
 }
+
+func TestDocsDescribeExecutionStrategiesAndFallback(t *testing.T) {
+	cli := readDoc(t, "docs/cli.md")
+	for _, needle := range []string{"--strategy", "classic", "auto", "ensemble", "independent", "chain", "debate", "--fallback", "--no-fallback", "--fallback-retries", "--fallback-limit", "--fallback-model"} {
+		assertContains(t, "docs/cli.md", cli, needle)
+	}
+	api := readDoc(t, "api-reference.md")
+	for _, needle := range []string{"strategy", "fallback", "ensemble"} {
+		assertContains(t, "api-reference.md", api, needle)
+	}
+	architecture := readDoc(t, "docs/architecture.md")
+	for _, needle := range []string{"fallback", "classic", "auto", "ensemble"} {
+		assertContains(t, "docs/architecture.md", architecture, needle)
+	}
+}

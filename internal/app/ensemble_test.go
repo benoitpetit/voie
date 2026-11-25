@@ -491,3 +491,26 @@ func TestChainAgentsPrecedence(t *testing.T) {
 		t.Fatalf("explicit candidate_count = %d chain agents, want 3", options.chainAgents)
 	}
 }
+
+func TestEnsembleStreamingCoversEveryMode(t *testing.T) {
+	for _, mode := range []EnsembleMode{EnsembleIndependent, EnsembleChain, EnsembleDebate} {
+		t.Run(string(mode), func(t *testing.T) {
+			a := &fallbackProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}}
+			b := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}}
+			synth := &fallbackProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}}
+			service, _ := fallbackService(t, ServiceOptions{SynthesisModel: "synth"}, a, b, synth)
+			var text string
+			var final *RoutingInfo
+			err := service.CompleteStreamWithInfo(context.Background(), CompletionRequest{
+				Strategy: StrategyEnsemble, Messages: []Message{{Role: "user", Content: "hi"}},
+				Ensemble: &EnsembleRequestOptions{Mode: mode, Models: []string{"a-model", "b-model"}},
+			}, func(chunk string, routing *RoutingInfo) { text += chunk; final = routing })
+			if err != nil {
+				t.Fatalf("%s streaming error: %v", mode, err)
+			}
+			if text == "" || final == nil || final.EnsembleMode != mode {
+				t.Fatalf("%s text=%q routing=%+v", mode, text, final)
+			}
+		})
+	}
+}

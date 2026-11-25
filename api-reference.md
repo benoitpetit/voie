@@ -63,7 +63,7 @@ When supplying `ensemble.models` explicitly, list 2–5 distinct candidates; the
 {"model":"MODEL_ID","fallback":{"models":["MODEL_B"]},"messages":[{"role":"user","content":"Hello"}]}
 ```
 
-An optional `routing` object identifies the strategy, selected profile, per-model results, and the `attempts` array. For ensembles it also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`. Each `attempts` entry records one provider call: `model`, `provider`, `attempt` index, `outcome`, and `duration_ms` when known. `conversation_id` appears when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
+A `routing` object identifies the strategy, selected profile, per-model results, and the `attempts` array. For ensembles it also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`. Each `attempts` entry records one provider call: `model`, `provider`, `attempt` index, `outcome`, and `duration_ms` when known. `conversation_id` appears when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
 
 Automatic routing:
 
