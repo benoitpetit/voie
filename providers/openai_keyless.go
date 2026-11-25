@@ -133,6 +133,15 @@ func (p *openAIKeylessProvider) lookupModelID(model string) (string, bool) {
 	return "", false
 }
 
+// UpstreamModel returns the ID sent to the upstream service for a public ID.
+func (p *openAIKeylessProvider) UpstreamModel(model string) string {
+	upstream, err := p.resolve(model)
+	if err != nil {
+		return ""
+	}
+	return upstream
+}
+
 func (p *openAIKeylessProvider) SupportsModel(model string) bool {
 	_, ok := p.lookupModelID(model)
 	return ok

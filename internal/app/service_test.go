@@ -444,3 +444,46 @@ func TestGenericModelFallsBackToFirstWorkingProvider(t *testing.T) {
 		t.Fatalf("provider = %q, want duckai", response.Provider)
 	}
 }
+
+type upstreamAwareProvider struct {
+	info ProviderInfo
+}
+
+func (*upstreamAwareProvider) ChatCompletion(context.Context, []Message, string) (*ChatCompletionResponse, error) {
+	return &ChatCompletionResponse{}, nil
+}
+func (*upstreamAwareProvider) ChatCompletionStream(context.Context, []Message, string, func(string)) error {
+	return nil
+}
+func (p *upstreamAwareProvider) GetInfo() ProviderInfo   { return p.info }
+func (*upstreamAwareProvider) SupportsModel(string) bool { return true }
+func (*upstreamAwareProvider) UpstreamModel(model string) string {
+	if model == "or-free-alias" {
+		return "vendor/model:free"
+	}
+	return ""
+}
+
+func TestListModelsUsesUpstreamIDForPricingAndRoot(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"vendor/model:free","pricing":{"prompt":"0.000002","completion":"0.000006"}}]}`))
+	}))
+	defer server.Close()
+	pricing.SetSource(server.URL)
+	t.Cleanup(func() { pricing.SetSource("") })
+	registry := NewRegistry()
+	registry.Register("openrouter", &upstreamAwareProvider{info: ProviderInfo{
+		Name: "openrouter", Working: true, SupportedModels: []string{"or-free-alias"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := service.ListModelsFiltered("", "")
+	if len(models) != 1 {
+		t.Fatalf("models = %+v", models)
+	}
+	if models[0].Root != "vendor/model:free" || models[0].Price == nil || models[0].Price.PromptPerToken != "0.000002" {
+		t.Fatalf("model = %+v, want upstream root and price", models[0])
+	}
+}

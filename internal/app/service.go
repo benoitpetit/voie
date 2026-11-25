@@ -543,13 +543,19 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 				continue
 			}
 			seen[publicID] = true
+			upstreamID := id
+			if resolved, ok := provider.(UpstreamModelProvider); ok {
+				if value := resolved.UpstreamModel(id); value != "" {
+					upstreamID = value
+				}
+			}
 			model := ModelInfo{
 				ID: publicID, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
 				Tier: modelTier, Group: ownerInfo.Label,
-				Permission: []interface{}{}, Root: id,
+				Permission: []interface{}{}, Root: upstreamID,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
 			}
-			if upstreamPrice, ok := pricing.Lookup(ownerName, id); ok {
+			if upstreamPrice, ok := pricing.Lookup(ownerName, upstreamID); ok {
 				model.Price = &ModelPrice{
 					PromptPerToken: upstreamPrice.Prompt, CompletionPerToken: upstreamPrice.Completion,
 					Currency: "USD",

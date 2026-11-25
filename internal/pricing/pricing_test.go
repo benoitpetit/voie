@@ -21,3 +21,22 @@ func TestLookupFetchesPublicPrices(t *testing.T) {
 		t.Fatal("price lookup must not guess for other providers")
 	}
 }
+
+func TestLookupDoesNotRefetchOnEveryFailedCall(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	SetSource(server.URL)
+	t.Cleanup(func() { SetSource("") })
+	for i := 0; i < 16; i++ {
+		if _, ok := Lookup("openrouter", "vendor/model"); ok {
+			t.Fatal("price unexpectedly found")
+		}
+	}
+	if calls > 2 {
+		t.Fatalf("fetches = %d, want at most 2 on repeated failures", calls)
+	}
+}

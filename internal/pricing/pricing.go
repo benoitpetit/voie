@@ -5,6 +5,7 @@ package pricing
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,10 +15,11 @@ import (
 const defaultSource = "https://openrouter.ai/api/v1/models"
 
 var (
-	mu        sync.Mutex
-	source    = defaultSource
-	prices    map[string]Price
-	fetchedAt time.Time
+	mu          sync.Mutex
+	source      = defaultSource
+	prices      map[string]Price
+	fetchedAt   time.Time
+	lastFailure time.Time
 )
 
 // Price is the upstream USD price per token.
@@ -43,6 +45,7 @@ func SetSource(url string) {
 	source = url
 	prices = nil
 	fetchedAt = time.Time{}
+	lastFailure = time.Time{}
 }
 
 // Lookup returns the price for a provider's upstream model ID when a public
@@ -52,18 +55,30 @@ func Lookup(provider, upstream string) (Price, bool) {
 		return Price{}, false
 	}
 	mu.Lock()
-	defer mu.Unlock()
-	if time.Since(fetchedAt) > 6*time.Hour || prices == nil {
-		if source == "" {
-			return Price{}, false
-		}
-		loaded, err := fetch(source)
-		if err != nil {
-			return Price{}, false
-		}
-		prices = loaded
-		fetchedAt = time.Now()
+	if prices != nil && time.Since(fetchedAt) <= 6*time.Hour {
+		price, ok := prices[upstream]
+		mu.Unlock()
+		return price, ok
 	}
+	if !lastFailure.IsZero() && time.Since(lastFailure) <= time.Minute {
+		mu.Unlock()
+		return Price{}, false
+	}
+	url := source
+	mu.Unlock()
+	if url == "" {
+		return Price{}, false
+	}
+	loaded, err := fetch(url)
+	mu.Lock()
+	defer mu.Unlock()
+	if err != nil {
+		lastFailure = time.Now()
+		return Price{}, false
+	}
+	prices = loaded
+	fetchedAt = time.Now()
+	lastFailure = time.Time{}
 	price, ok := prices[upstream]
 	return price, ok
 }
@@ -75,6 +90,9 @@ func fetch(url string) (map[string]Price, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("price catalogue: HTTP %d", resp.StatusCode)
+	}
 	var payload response
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, err

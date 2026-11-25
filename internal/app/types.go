@@ -207,6 +207,11 @@ type FallbackPolicy struct {
 	Models            map[string][]string
 }
 
+// UpstreamModelProvider exposes the upstream model ID behind a public alias.
+type UpstreamModelProvider interface {
+	UpstreamModel(model string) string
+}
+
 type Provider interface {
 	ChatCompletion(ctx context.Context, messages []Message, model string) (*ChatCompletionResponse, error)
 	ChatCompletionStream(ctx context.Context, messages []Message, model string, callback func(chunk string)) error
