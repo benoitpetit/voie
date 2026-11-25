@@ -365,3 +365,19 @@ func TestGatewayProbeFailureKeepsDiskCatalogue(t *testing.T) {
 		t.Fatalf("models = %v, want the disk snapshot after a failed probe", models)
 	}
 }
+
+func TestAccountGatewaysWithoutFreeListArePaid(t *testing.T) {
+	for _, name := range []string{"omniroute", "copilot-api", "cursor-api-proxy", "windsurfapi"} {
+		spec, ok := ExternalGatewayByName(name)
+		if !ok {
+			t.Fatalf("%s spec missing", name)
+		}
+		if !gatewayNoFree(spec) {
+			t.Errorf("%s should have no verified free models", name)
+		}
+	}
+	spec, _ := ExternalGatewayByName("freellmpool")
+	if gatewayNoFree(spec) {
+		t.Error("freellmpool has a verified free lane")
+	}
+}

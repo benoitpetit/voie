@@ -121,4 +121,4 @@ Pass a returned ID as `conversation_id` to `chat_completion` to resume the conve
 
 ## Discovery metadata
 
-`list_models` results carry `tier` and, when a public price is known, `price`; results can be filtered with `tier` and `provider`. `list_providers` returns the full provider metadata: `working`, `ready`, `alive`, `free_models`, `supported_models`, `default_model`, `url`, `supports_stream`, `needs_auth`, `description` and `reverse_engineering`. A provider with no `free_models` key treats all of its listed models as free; a provider with `no_free_models` (internal) has none.
+`list_models` results carry `tier` and, when a public price is known, `price`; results can be filtered with `tier` and `provider`. `list_providers` returns the full provider metadata: `working`, `ready`, `alive`, `free_models`, `supported_models`, `default_model`, `url`, `supports_stream`, `needs_auth`, `description` and `reverse_engineering`. `free_models` is always present: a non-empty array lists verified free IDs, an empty array means none are free.

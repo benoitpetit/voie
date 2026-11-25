@@ -274,4 +274,4 @@ estimates unless the upstream reports them.
 
 ## Model and provider discovery fields
 
-Each item in `GET /v1/models` includes `tier` (`"free"` or `"paid"`), an optional `price` object (`currency`, `prompt_per_token`, `completion_per_token`) when a public price is known, and `group`. Filter with `?tier=free|paid` and `?provider=NAME`; an unknown provider returns `404`. Each item in `GET /v1/providers` also includes `ready`, `free_models` and `supports_stream`. When `free_models` is absent, all listed models of that provider are free; an explicitly empty free list means none are free.
+Each item in `GET /v1/models` includes `tier` (`"free"` or `"paid"`), an optional `price` object (`currency`, `prompt_per_token`, `completion_per_token`) when a public price is known, and `group`. Filter with `?tier=free|paid` and `?provider=NAME`; an unknown provider returns `404`. Each item in `GET /v1/providers` also includes `ready`, `free_models` and `supports_stream`. `free_models` is always present: a non-empty array lists verified free IDs, an empty array means none are free.

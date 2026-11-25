@@ -541,3 +541,23 @@ func TestProviderListingsUsePublicModelIDs(t *testing.T) {
 		t.Fatalf("metadata = %+v, want prefixed IDs", metadata)
 	}
 }
+
+func TestProviderInfoAlwaysExposesFreeModelsField(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("test", &testProvider{info: ProviderInfo{Name: "test", Working: true}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	providers, err := service.ListProviders(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(providers[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"free_models":[]`) {
+		t.Fatalf("provider JSON = %s, want explicit empty free_models", data)
+	}
+}

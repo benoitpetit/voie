@@ -768,6 +768,13 @@ func (p *ExternalGateway) working() bool {
 // serve inference and must stay out of the model catalogue.
 // providerConnected reports whether the user completed `voie connect` for a
 // provider. Installed-but-unconnected CLIs are not callable.
+func gatewayNoFree(spec ExternalGatewaySpec) bool {
+	if spec.FreeModels != nil {
+		return len(spec.FreeModels) == 0
+	}
+	return spec.AccountRequired != "none"
+}
+
 func providerConnected(name string) bool {
 	store, err := config.LoadCredentials()
 	return err == nil && strings.EqualFold(store.State(name), "connected")
@@ -795,7 +802,7 @@ func (p *ExternalGateway) GetInfo() app.ProviderInfo {
 		info.FreeModels = append(info.FreeModels, alias)
 	}
 	sort.Strings(info.FreeModels)
-	info.NoFreeModels = p.spec.FreeModels != nil && len(p.spec.FreeModels) == 0
+	info.NoFreeModels = gatewayNoFree(p.spec)
 	info.Working = p.callable()
 	// A gateway that is installed and passes its check is ready even when its
 	// loopback listener is stopped: gateways start on demand on the first call.

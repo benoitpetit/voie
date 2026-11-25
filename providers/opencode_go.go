@@ -61,6 +61,7 @@ func NewOpenCodeGo() *OpenCodeGo {
 // them none of the declared IDs can produce a completion.
 func (p *OpenCodeGo) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
+	info.NoFreeModels = true // Go models require a Go key or OAuth in the gateway
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(opencodeGatewayURL() + "/healthz")
 	if err != nil {

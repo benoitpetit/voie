@@ -127,7 +127,7 @@ type ProviderInfo struct {
 	NeedsAuth          bool     `json:"needs_auth"`
 	Description        string   `json:"description"`
 	ReverseEngineering bool     `json:"reverse_engineering"`
-	FreeModels         []string `json:"free_models,omitempty"`
+	FreeModels         []string `json:"free_models"`
 	NoFreeModels       bool     `json:"-"`
 }
 

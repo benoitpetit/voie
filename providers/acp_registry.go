@@ -114,6 +114,7 @@ func (p *ACPProvider) SupportsModel(model string) bool {
 
 func (p *ACPProvider) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
+	info.NoFreeModels = true // agent CLIs run on the user's own subscription
 	info.Working = p.working()
 	return info
 }
