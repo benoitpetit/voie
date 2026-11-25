@@ -561,3 +561,36 @@ func TestProviderInfoAlwaysExposesFreeModelsField(t *testing.T) {
 		t.Fatalf("provider JSON = %s, want explicit empty free_models", data)
 	}
 }
+
+func TestListModelsIgnoresZeroPrices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[` +
+			`{"id":"free/upstream","pricing":{"prompt":"0","completion":"0"}},` +
+			`{"id":"paid/upstream","pricing":{"prompt":"0.000002","completion":"0.000006"}}]}`))
+	}))
+	defer server.Close()
+	pricing.SetSource(server.URL)
+	t.Cleanup(func() { pricing.SetSource("") })
+	registry := NewRegistry()
+	registry.Register("openrouter", &testProvider{info: ProviderInfo{
+		Name: "openrouter", Working: true, SupportedModels: []string{"free/upstream", "paid/upstream"},
+		FreeModels: []string{"free/upstream"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := service.ListModelsFiltered("", "")
+	byID := map[string]ModelInfo{}
+	for _, model := range models {
+		byID[model.ID] = model
+	}
+	free := byID["or-free/upstream"]
+	paid := byID["or-paid/upstream"]
+	if free.Price != nil {
+		t.Fatalf("free model has a zero price: %+v", free.Price)
+	}
+	if paid.Price == nil || paid.Price.PromptPerToken != "0.000002" {
+		t.Fatalf("paid model price missing: %+v", paid)
+	}
+}
