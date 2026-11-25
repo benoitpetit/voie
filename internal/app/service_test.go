@@ -634,3 +634,29 @@ func TestListModelsLabelsSubscriptionPaidModels(t *testing.T) {
 		t.Fatalf("models = %+v, want subscribe price label", models)
 	}
 }
+
+func TestFreeModelsIgnoreRawCataloguePrices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"vendor/zero","pricing":{"prompt":"0.0000000000","completion":"0.0000000000"}},
+			{"id":"vendor/unpriced","pricing":null}
+		]}`))
+	}))
+	defer server.Close()
+	pricing.RegisterSource("orcarouter", server.URL, nil)
+	t.Cleanup(func() { pricing.RegisterSource("orcarouter", "", nil) })
+	registry := NewRegistry()
+	registry.Register("orcarouter", &testProvider{info: ProviderInfo{
+		Name: "orcarouter", Working: true, SupportedModels: []string{"vendor/zero", "vendor/unpriced"},
+		FreeModels: []string{"vendor/zero", "vendor/unpriced"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range service.ListModelsFiltered("", TierFree) {
+		if model.Price == nil || model.Price.PromptPerToken != "0" || model.Price.CompletionPerToken != "0" {
+			t.Errorf("%s price = %+v, want USD 0/0", model.ID, model.Price)
+		}
+	}
+}

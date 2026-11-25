@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -564,8 +565,15 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 			if ownerInfo.Subscription && modelTier == TierPaid {
 				model.Price = &ModelPrice{Label: "subscribe"}
 			} else if upstreamPrice, ok := pricing.Lookup(ownerName, upstreamID); ok {
+				prompt, completion := upstreamPrice.Prompt, upstreamPrice.Completion
+				if modelTier == TierFree {
+					// Upstream catalogues spell a zero price in many ways
+					// ("0", "0.0000000000", or an empty value). Normalize them
+					// so a free model always reads USD 0/0.
+					prompt, completion = freePrice(prompt), freePrice(completion)
+				}
 				model.Price = &ModelPrice{
-					PromptPerToken: upstreamPrice.Prompt, CompletionPerToken: upstreamPrice.Completion,
+					PromptPerToken: prompt, CompletionPerToken: completion,
 					Currency: "USD",
 				}
 			} else if modelTier == TierFree {
@@ -576,6 +584,19 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return models
+}
+
+// freePrice renders a catalogue price as the canonical zero when it is
+// either empty or numerically zero, leaving real prices untouched.
+func freePrice(value string) string {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return "0"
+	}
+	if amount, err := strconv.ParseFloat(text, 64); err == nil && amount == 0 {
+		return "0"
+	}
+	return value
 }
 
 func (s *Service) publicProviderInfo(info ProviderInfo) ProviderInfo {

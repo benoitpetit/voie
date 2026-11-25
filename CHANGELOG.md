@@ -17,6 +17,8 @@
 
 ### Fixed
 
+- Free models from authenticated catalogues (OrcaRouter) display `USD 0/0` even when upstream spells zero as `0.0000000000` or leaves it empty.
+
 - ACP bridges resolve npm-installed CLIs from `node_modules/.bin` and surface the agent child process diagnostics when a handshake fails.
 
 - `voie install` reports anonymous lanes (vlm-run, opencode) as available, matching `voie connect --list`.
