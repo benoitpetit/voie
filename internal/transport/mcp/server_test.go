@@ -508,3 +508,25 @@ func TestMCPFallbackModelsOverrideZeroBudget(t *testing.T) {
 		t.Fatalf("fallback result = %+v, err = %v", result, err)
 	}
 }
+
+func TestMCPChatCompletionStreamAggregatesChunks(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("ensemble-test", &mcpEnsembleProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{SynthesisModel: "synth", Timeout: time.Second,
+		HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{
+		"stream": true, "model": "a", "messages": []any{map[string]any{"role": "user", "content": "hi"}},
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("stream result = %+v, err = %v", result, err)
+	}
+	encoded, _ := json.Marshal(result.StructuredContent)
+	if !strings.Contains(string(encoded), "answer from a") {
+		t.Fatalf("structured = %s, want streamed text", encoded)
+	}
+}

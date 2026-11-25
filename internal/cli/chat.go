@@ -20,6 +20,7 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	var fallbackEnabled, fallbackDisabled bool
 	var fallbackRetries, fallbackLimit int
 	var fallbackModels []string
+	var stream bool
 	command := &cobra.Command{
 		Use:   "chat [prompt...]",
 		Short: "Generate a completion from a prompt",
@@ -88,7 +89,7 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 				return err
 			}
 			stderr := command.ErrOrStderr()
-			return runChatWithReporter(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), stderr, isTerminalWriter(stderr), service, model, provider, app.Strategy(strategy), task, models, ensemble, fallback, conversation)
+			return runChatWithReporter(command.Context(), args, command.InOrStdin(), command.OutOrStdout(), stderr, isTerminalWriter(stderr), service, model, provider, app.Strategy(strategy), task, models, ensemble, fallback, conversation, stream)
 		},
 	}
 	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required for classic)")
@@ -118,6 +119,7 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	command.Flags().IntVar(&fallbackLimit, "fallback-limit", 0, "maximum models tried after the primary (0-3)")
 	command.Flags().StringSliceVar(&fallbackModels, "fallback-model", nil, "fallback model IDs to try after the primary (repeatable, replaces the configured list)")
 	command.Flags().StringVar(&conversation, "conversation", "", "local conversation ID to resume")
+	command.Flags().BoolVar(&stream, "stream", false, "stream model chunks to stdout as they are produced")
 	configureChatHelp(command, &strategy)
 	return command
 }
@@ -166,14 +168,14 @@ func buildFallbackOverride(flags *pflag.FlagSet, enabled, disabled bool, retries
 }
 
 func runChat(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string) error {
-	return runChatWithOptions(ctx, args, stdin, stdout, service, model, provider, app.StrategyClassic, "", nil, nil, nil, "")
+	return runChatWithOptions(ctx, args, stdin, stdout, service, model, provider, app.StrategyClassic, "", nil, nil, nil, "", false)
 }
 
-func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string) error {
-	return runChatWithReporter(ctx, args, stdin, stdout, io.Discard, false, service, model, provider, strategy, task, models, ensemble, fallback, conversation)
+func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string, stream bool) error {
+	return runChatWithReporter(ctx, args, stdin, stdout, io.Discard, false, service, model, provider, strategy, task, models, ensemble, fallback, conversation, stream)
 }
 
-func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, isTerminal bool, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string) error {
+func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, isTerminal bool, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string, stream bool) error {
 	prompt := strings.TrimSpace(strings.Join(args, " "))
 	if prompt == "" {
 		if stdin == nil {

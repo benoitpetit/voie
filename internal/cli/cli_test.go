@@ -725,3 +725,22 @@ func TestChatHelpAdaptsToStrategyFlag(t *testing.T) {
 		}
 	}
 }
+
+func TestChatStreamWritesModelChunks(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("ensemble-test", &cliEnsembleProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{SynthesisModel: "synth", Timeout: time.Second,
+		HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &cliTestRuntime{service: service}
+	var stdout, stderr bytes.Buffer
+	err = executeForTest(context.Background(), []string{"chat", "--model", "a", "--stream", "hello"}, strings.NewReader(""), &stdout, &stderr, rt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "answer from a") {
+		t.Fatalf("stdout = %q, want streamed model chunk", stdout.String())
+	}
+}

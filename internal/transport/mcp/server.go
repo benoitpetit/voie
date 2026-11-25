@@ -65,6 +65,7 @@ type chatCompletionInput struct {
 	Ensemble       *app.EnsembleRequestOptions `json:"ensemble,omitempty" jsonschema:"ensemble options: mode, candidate_count from 2 to 5, exact models list, chain_agents for chain compatibility, and debate_turns from 0 to 5 for debate"`
 	Fallback       *app.FallbackOverride       `json:"fallback,omitempty" jsonschema:"override the global fallback policy for this request: enabled, max_retries, max_fallback_models, or an explicit models list that replaces configured candidates"`
 	ConversationID string                      `json:"conversation_id,omitempty" jsonschema:"optional local conversation ID"`
+	Stream         bool                        `json:"stream,omitempty" jsonschema:"optional; when true, collect streamed chunks into one result"`
 }
 
 type chatCompletionOutput struct {
@@ -151,9 +152,27 @@ func NewServer(service *app.Service) *mcp.Server {
 		return textToolResult("Providers (HTTP reachability):\n" + strings.Join(lines, "\n")), output, nil
 	}))
 	mcp.AddTool(server, &mcp.Tool{
-		Name: chatCompletionToolName, Description: "Generate a non-streaming completion using classic, automatic, or ensemble model routing.",
+		Name: chatCompletionToolName, Description: "Generate a completion using classic, automatic, or ensemble model routing. Set stream to collect streamed chunks into one result.",
 	}, logToolCall(chatCompletionToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
-		response, err := service.Complete(ctx, app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, Ensemble: input.Ensemble, Fallback: input.Fallback, ConversationID: input.ConversationID, Messages: input.Messages})
+		request := app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, Ensemble: input.Ensemble, Fallback: input.Fallback, ConversationID: input.ConversationID, Messages: input.Messages}
+		if input.Stream {
+			var text strings.Builder
+			var routing *app.RoutingInfo
+			err := service.CompleteStreamWithInfo(ctx, request, func(chunk string, info *app.RoutingInfo) {
+				text.WriteString(chunk)
+				routing = info
+			})
+			if err != nil {
+				return nil, chatCompletionOutput{}, err
+			}
+			output := chatCompletionOutput{Text: text.String(), Model: input.Model, Routing: routing}
+			if routing != nil && len(routing.Attempts) > 0 {
+				last := routing.Attempts[len(routing.Attempts)-1]
+				output.Model, output.Provider = last.Model, last.Provider
+			}
+			return textToolResult(output.Text), output, nil
+		}
+		response, err := service.Complete(ctx, request)
 		if err != nil {
 			return nil, chatCompletionOutput{}, err
 		}
