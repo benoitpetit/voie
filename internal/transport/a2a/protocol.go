@@ -122,11 +122,11 @@ type Artifact struct {
 
 // Task is the A2A unit of work.
 type Task struct {
-	ID        string      `json:"id"`
-	ContextID string      `json:"contextId"`
-	Status    TaskStatus  `json:"status"`
-	Artifacts []Artifact  `json:"artifacts,omitempty"`
-	History   []Message   `json:"history,omitempty"`
+	ID        string     `json:"id"`
+	ContextID string     `json:"contextId"`
+	Status    TaskStatus `json:"status"`
+	Artifacts []Artifact `json:"artifacts,omitempty"`
+	History   []Message  `json:"history,omitempty"`
 }
 
 // SendParams is the payload of SendMessage and SendStreamingMessage.
