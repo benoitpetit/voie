@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/install"
 	"github.com/benoitpetit/voie/providers"
 	"github.com/spf13/cobra"
 )
@@ -637,4 +638,21 @@ func TestInstallListShowsNoneForConnectedProvider(t *testing.T) {
 		return
 	}
 	t.Fatal("openrouter missing from install list")
+}
+
+func TestCLIStateFindsNpmPrefixedBinary(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := filepath.Join(install.BinaryDir(), "node_modules", ".bin")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codebuddy"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previous := lookPath
+	lookPath = func(string) (string, error) { return "", errors.New("not on PATH") }
+	t.Cleanup(func() { lookPath = previous })
+	if got := cliState("codebuddy"); got != "installed" {
+		t.Fatalf("cliState(codebuddy) = %q, want installed", got)
+	}
 }

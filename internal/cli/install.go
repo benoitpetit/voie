@@ -74,15 +74,7 @@ func runInstallList(out io.Writer, verbose bool) error {
 		if verbose {
 			return writeInstallRow(table, name, kind, label, port, status, account, command, hint)
 		}
-		next := "voie install " + name
-		if status == "connected" || strings.HasPrefix(status, "available") {
-			next = "NONE"
-		} else if kind == "api" {
-			next = "voie connect " + name
-		} else if strings.HasPrefix(status, "installed") {
-			next = "voie connect " + name
-		}
-		_, err := fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n", name, kind, status, account, next)
+		_, err := fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n", name, kind, status, account, installNext(kind, status, account, name))
 		return err
 	}
 	for _, spec := range providers.ExternalGateways {
@@ -124,6 +116,22 @@ func runInstallList(out io.Writer, verbose bool) error {
 	return nil
 }
 
+// installNext returns the single action a user still needs to take.
+func installNext(kind, status, account, name string) string {
+	if status == "connected" || strings.HasPrefix(status, "available") {
+		return "NONE"
+	}
+	// A keyless gateway needs no account once installed: it is callable
+	// immediately, so no connect step remains.
+	if kind == "gateway" && account == "none" && strings.HasPrefix(status, "installed") {
+		return "NONE"
+	}
+	if kind == "api" || strings.HasPrefix(status, "installed") {
+		return "voie connect " + name
+	}
+	return "voie install " + name
+}
+
 func writeInstallRow(table *tabwriter.Writer, name, kind, label string, port int, status, account, command, hint string) error {
 	portText := "-"
 	if port > 0 {
@@ -143,6 +151,9 @@ func cliState(name string) string {
 	}
 	if !known[name] {
 		return "not installed"
+	}
+	if install.BinaryPath(name) != "" {
+		return "installed"
 	}
 	if _, err := lookPath(cliBinary(name)); err == nil {
 		return "installed"
