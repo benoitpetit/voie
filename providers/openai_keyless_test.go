@@ -2,6 +2,7 @@ package providers
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"reflect"
@@ -210,4 +211,33 @@ func TestOpenAIKeylessNetworkFailureIsTransient(t *testing.T) {
 	_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
 		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
 	classifyFailure(t, err, app.FailureTransient, 0, "")
+}
+
+func assertUnavailableFailure(t *testing.T, err error) {
+	t.Helper()
+	var failure *app.ProviderFailure
+	if !errors.As(err, &failure) || failure.Category != app.FailureUnavailable {
+		t.Fatalf("error = %v, want FailureUnavailable", err)
+	}
+}
+
+func TestOpenAIKeylessMalformedJSONIsUnavailable(t *testing.T) {
+	useKeylessProviderResponse(t, http.StatusOK, `not json`)
+	_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
+		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
+	assertUnavailableFailure(t, err)
+}
+
+func TestOpenAIKeylessEmptyCompletionIsUnavailable(t *testing.T) {
+	useKeylessProviderResponse(t, http.StatusOK, `{"choices":[]}`)
+	_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
+		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
+	assertUnavailableFailure(t, err)
+}
+
+func TestOpenAIKeylessEmptyStreamIsUnavailable(t *testing.T) {
+	useKeylessProviderResponse(t, http.StatusOK, "data: [DONE]\n\n")
+	err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
+		ChatCompletionStream(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly", func(string) {})
+	assertUnavailableFailure(t, err)
 }

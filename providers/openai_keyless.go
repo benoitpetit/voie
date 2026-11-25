@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -225,14 +226,17 @@ func (p *openAIKeylessProvider) request(ctx context.Context, messages []Message,
 func (p *openAIKeylessProvider) decodeCompletion(body io.Reader, messages []Message, model string) (*ChatCompletionResponse, error) {
 	var parsed openAIKeylessCompletion
 	if err := json.NewDecoder(io.LimitReader(body, 8<<20)).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("%s: decode response: %w", p.cfg.Name, err)
+		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, err)
+		return nil, fmt.Errorf("%s: decode response: %w", p.cfg.Name, failure)
 	}
 	if len(parsed.Choices) == 0 {
-		return nil, fmt.Errorf("%s: empty response", p.cfg.Name)
+		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, errors.New("empty response"))
+		return nil, fmt.Errorf("%s: empty response: %w", p.cfg.Name, failure)
 	}
 	message := parsed.Choices[0].Message
 	if message.Content == "" && message.ToolCalls == nil {
-		return nil, fmt.Errorf("%s: empty response", p.cfg.Name)
+		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, errors.New("empty response"))
+		return nil, fmt.Errorf("%s: empty response: %w", p.cfg.Name, failure)
 	}
 	if p.cfg.ResponseHint != nil {
 		if err := p.cfg.ResponseHint(message.Content); err != nil {
@@ -246,7 +250,7 @@ func (p *openAIKeylessProvider) decodeCompletion(body io.Reader, messages []Mess
 	return response, nil
 }
 
-func (p *openAIKeylessProvider) decodeStream(ctx context.Context, body io.Reader, callback func(string)) error {
+func (p *openAIKeylessProvider) decodeStream(ctx context.Context, body io.Reader, model string, callback func(string)) error {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	var content strings.Builder
@@ -284,10 +288,11 @@ func (p *openAIKeylessProvider) decodeStream(ctx context.Context, body io.Reader
 		callback(delta.Content)
 	}
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("%s: read stream: %w", p.cfg.Name, err)
+		return app.WrapNetworkFailure(fmt.Errorf("%s: read stream: %w", p.cfg.Name, err), p.cfg.Name, model)
 	}
 	if content.Len() == 0 && !sawToolCalls {
-		return fmt.Errorf("%s: empty response", p.cfg.Name)
+		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, errors.New("empty response"))
+		return fmt.Errorf("%s: empty response: %w", p.cfg.Name, failure)
 	}
 	return nil
 }
@@ -323,5 +328,5 @@ func (p *openAIKeylessProvider) ChatCompletionStream(ctx context.Context, messag
 		return err
 	}
 	defer resp.Body.Close()
-	return p.decodeStream(ctx, resp.Body, callback)
+	return p.decodeStream(ctx, resp.Body, model, callback)
 }
