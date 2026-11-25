@@ -76,7 +76,7 @@ func runInstallList(out io.Writer, verbose bool) error {
 		}
 		next := "voie install " + name
 		if status == "connected" || strings.HasPrefix(status, "available") {
-			next = "-"
+			next = "NONE"
 		} else if kind == "api" {
 			next = "voie connect " + name
 		} else if strings.HasPrefix(status, "installed") {

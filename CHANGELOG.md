@@ -49,6 +49,8 @@
 
 ### Changed
 
+- Compact `voie install` list shows `NONE` in `NEXT` for providers that are already connected.
+
 - Removed the Cohere provider: its HuggingFace Space now requires sign-in, so the keyless endpoint can no longer serve requests.
 - Gateway installers now use `uv` instead of `pip` for Python packages, run entirely inside the gateway directory (install scripts can no longer overwrite files in the caller's repository), and generate secrets before dependency steps that need them.
 - Fixed a deadlock that made `voie connect` hang forever when a gateway never became healthy; it now reports the timeout and exits.
