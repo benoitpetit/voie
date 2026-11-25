@@ -469,3 +469,25 @@ func TestEnsembleSynthesisKeepsBudgetAfterReplacement(t *testing.T) {
 		t.Fatalf("calls c=%v synth2=%v, want one replacement and one synthesis fallback", c.calls, synth2.calls)
 	}
 }
+
+func TestChainAgentsPrecedence(t *testing.T) {
+	base := EnsemblePolicy{Mode: EnsembleChain, CandidateCount: 2, ChainAgents: 4}
+	service, _ := fallbackService(t, ServiceOptions{RoutingPolicy: RoutingPolicy{Ensemble: base}})
+	options, err := service.resolveEnsembleOptions(CompletionRequest{Strategy: StrategyEnsemble})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.chainAgents != 4 {
+		t.Fatalf("configured chain_agents = %d, want 4 over candidate_count 2", options.chainAgents)
+	}
+	count := 3
+	options, err = service.resolveEnsembleOptions(CompletionRequest{
+		Strategy: StrategyEnsemble, Ensemble: &EnsembleRequestOptions{CandidateCount: &count},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.chainAgents != 3 {
+		t.Fatalf("explicit candidate_count = %d chain agents, want 3", options.chainAgents)
+	}
+}

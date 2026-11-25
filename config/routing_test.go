@@ -197,3 +197,20 @@ func TestValidateRoutingPolicyFallbackRejectsInvalidModels(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadRoutingPolicyMapsEnsembleOptions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "routing.json")
+	data := `{"ensemble":{"mode":"debate","candidate_count":4,"chain_agents":3,"debate_turns":0}}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := LoadRoutingPolicy(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ensemble := policy.Ensemble
+	if ensemble.Mode != "debate" || ensemble.CandidateCount == nil || *ensemble.CandidateCount != 4 ||
+		ensemble.ChainAgents == nil || *ensemble.ChainAgents != 3 || ensemble.DebateTurns == nil || *ensemble.DebateTurns != 0 {
+		t.Fatalf("ensemble policy = %+v", ensemble)
+	}
+}
