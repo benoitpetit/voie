@@ -281,3 +281,7 @@ Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); pub
 OpenRouter also exposes its public catalogue of paid models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
 
 ACP-backed CLI providers publish the models advertised by the agent itself (cached for 24 h after a connection) alongside their `*-auto` alias; they run on your own subscription and show `subscribe` in the PRICE column. OrcaRouter publishes its authenticated model catalogue as `paid` with real per-token USD prices; unpriced router aliases stay `free`.
+
+## A2A endpoints
+
+`GET /.well-known/agent-card.json` returns the public Agent Card (no bearer token required). `POST /a2a` accepts JSON-RPC 2.0 methods `SendMessage`, `SendStreamingMessage` (SSE), `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask` and `GetExtendedAgentCard`; legacy aliases `message/send`, `message/stream`, `tasks/get`, `tasks/list`, `tasks/cancel` and `tasks/resubscribe` are accepted. `SendMessage` takes a message with text parts and optional `metadata` (`strategy`, `task`, `model`, `skill`, `ensemble`) and returns a Task with a text artifact. Connected remote agents appear as `a2a-<name>-<skill>` model IDs and respond to the standard chat endpoints as well.

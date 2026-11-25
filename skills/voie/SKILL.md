@@ -37,3 +37,7 @@ Run `voie version` or `voie --version` to read the embedded version. Run `voie u
 - `alive: true` means the provider URL returned an HTTP response. It does not confirm model inference works.
 
 Use `models --json` or MCP `list_models` for discovery. Do not keep a separate hard-coded model list in prompts or integrations.
+
+## A2A agents
+
+If an A2A endpoint is configured, discover `/.well-known/agent-card.json` first and choose a skill from `skills[]`. Send JSON-RPC `SendMessage` with a text part; reuse the returned `contextId` for follow-ups. Remote agents are also exposed as `a2a-<agent>-<skill>` model IDs in `list_models`, so the MCP/HTTP/CLI chat flow works unchanged. A2A is complementary to MCP: use A2A for agent-to-agent delegation and MCP for tools and resources.

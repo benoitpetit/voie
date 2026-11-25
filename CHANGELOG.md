@@ -4,6 +4,8 @@
 
 ### Added
 
+- A2A 1.0 server and client: public agent card with voie skills, JSON-RPC chat/task methods and streaming; named outbound agents exposed as `a2a-<agent>-<skill>` models; CLI `--stream`, MCP `stream`, shared model/error shapes; docs and skill updated.
+
 - Anticipatory tests for classic, auto and ensemble (independent/chain/debate) across service streaming, CLI, HTTP and MCP, plus docs contract coverage for strategies and fallback.
 
 - OrcaRouter exposes its authenticated model catalogue as `paid` with real per-token prices; unpriced aliases stay free. ACP subscription models now show `subscribe` instead of `price unknown`.

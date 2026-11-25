@@ -148,3 +148,7 @@ Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); pub
 OpenRouter also exposes its public catalogue of paid models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
 
 ACP-backed CLI providers publish the models advertised by the agent itself (cached for 24 h after a connection) alongside their `*-auto` alias; they run on your own subscription and show `subscribe` in the PRICE column. OrcaRouter publishes its authenticated model catalogue as `paid` with real per-token USD prices; unpriced router aliases stay `free`.
+
+## A2A agents
+
+`voie connect a2a:<name> --url https://agent.example [--token TOKEN]` discovers and caches the remote `/.well-known/agent-card.json`, and exposes its skills as `a2a-<name>-<skill>` model IDs. `voie models --provider a2a:<name>` lists them. `voie chat --model a2a-<name>-<skill> --stream PROMPT` streams chunks; the same messages are sent to the remote agent with JSON-RPC `SendMessage` (or `SendStreamingMessage`). The local HTTP server also accepts A2A calls at `POST /a2a` and publishes its own card at `/.well-known/agent-card.json`.

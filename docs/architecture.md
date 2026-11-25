@@ -82,3 +82,7 @@ Each completion shares the caller's context and the configured end-to-end `TIMEO
 The HTTP listener defaults to loopback. Binding to another address requires `API_TOKEN`, and all API routes require its bearer token. The HTTP server caps chat request bodies at 2 MiB and bounds header/body read time and idle connections; it leaves response writes unbounded so long-lived SSE streams can flush. `healthcheck` probes the local health route and is used by the container health check. MCP uses local stdio and does not open a network listener. All three modes are built into the root `voie` executable.
 
 The provider catalogue is runtime data. Use `voie models --json` or `GET /v1/models` rather than copying model counts into other integrations.
+
+## A2A transport
+
+A2A is a fourth thin adapter next to CLI, HTTP and MCP. `internal/transport/a2a` serves JSON-RPC `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask` and `GetExtendedAgentCard` at `/a2a`, and publishes `/.well-known/agent-card.json` publicly while the RPC endpoint keeps the HTTP bearer policy. Inbound tasks map `contextId` to voie conversations and record attempts. Outbound, `providers/a2a.go` turns a discovered card's skills into ordinary provider models and calls the remote agent with the same methods. No routing, fallback or conversation logic is duplicated.

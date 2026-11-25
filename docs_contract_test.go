@@ -248,3 +248,14 @@ func TestDocsDescribeExecutionStrategiesAndFallback(t *testing.T) {
 		t.Error("docs/architecture.md still describes explicit fallback lists as merged with configured pools")
 	}
 }
+
+func TestDocsDescribeA2A(t *testing.T) {
+	for _, file := range []string{"README.md", "docs/cli.md", "docs/mcp.md", "docs/architecture.md", "api-reference.md", "skills/voie/SKILL.md"} {
+		content := readDoc(t, file)
+		for _, needle := range []string{"A2A", "agent-card.json", "SendMessage"} {
+			if !strings.Contains(content, needle) {
+				t.Errorf("%s missing %q", file, needle)
+			}
+		}
+	}
+}

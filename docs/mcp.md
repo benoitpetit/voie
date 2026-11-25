@@ -128,3 +128,7 @@ Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); pub
 OpenRouter also exposes its public catalogue of paid models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
 
 ACP-backed CLI providers publish the models advertised by the agent itself (cached for 24 h after a connection) alongside their `*-auto` alias; they run on your own subscription and show `subscribe` in the PRICE column. OrcaRouter publishes its authenticated model catalogue as `paid` with real per-token USD prices; unpriced router aliases stay `free`.
+
+## A2A and MCP
+
+MCP is for tools and resources; A2A is for agent-to-agent work. voie supports both: `chat_completion` accepts `stream: true`, and `list_models` returns the same structured model objects (including the `price` object) as CLI and HTTP. Errors carry a stable `type` and `code`. An external A2A agent is reachable through the same registry as `a2a-<name>-<skill>` models; the local A2A card is at `/.well-known/agent-card.json` and JSON-RPC method `SendMessage` mirrors `chat_completion`.
