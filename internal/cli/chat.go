@@ -93,7 +93,7 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	}
 	command.Flags().StringVarP(&model, "model", "m", "", "model ID to use (required for classic)")
 	command.Flags().StringVarP(&provider, "provider", "p", "", "provider to use")
-	command.Flags().StringVar(&strategy, "strategy", "", "completion strategy: classic, auto, or ensemble")
+	command.Flags().StringVar(&strategy, "strategy", "", "completion strategy: classic (explicit model), auto (routing profile), or ensemble (multi-agent)")
 	command.Flags().StringVar(&task, "task", "", "routing profile for auto or automatically selected ensemble candidates")
 	if err := command.RegisterFlagCompletionFunc("task", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if service, err := getService(); err == nil {
@@ -104,7 +104,7 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 		panic(err)
 	}
 	command.Flags().StringSliceVar(&models, "models", nil, "legacy exact ensemble model list; prefer repeatable --ensemble-model")
-	command.Flags().StringSliceVar(&ensembleModels, "ensemble-model", nil, "exact agent model ID for an ensemble (repeatable)")
+	command.Flags().StringSliceVar(&ensembleModels, "ensemble-model", nil, "exact agent model ID for an ensemble (repeatable, at least two)")
 	command.Flags().IntVar(&candidateCount, "candidate-count", 0, "number of ensemble agents to select automatically (2-5)")
 	command.Flags().StringVar(&ensembleMode, "ensemble-mode", "", "ensemble algorithm: independent, chain, or debate")
 	if err := command.RegisterFlagCompletionFunc("ensemble-mode", cobra.FixedCompletions([]string{"independent", "chain", "debate"}, cobra.ShellCompDirectiveNoFileComp)); err != nil {
@@ -118,6 +118,7 @@ func newChatCommand(getService func() (*app.Service, error)) *cobra.Command {
 	command.Flags().IntVar(&fallbackLimit, "fallback-limit", 0, "maximum models tried after the primary (0-3)")
 	command.Flags().StringSliceVar(&fallbackModels, "fallback-model", nil, "fallback model IDs to try after the primary (repeatable, replaces the configured list)")
 	command.Flags().StringVar(&conversation, "conversation", "", "local conversation ID to resume")
+	configureChatHelp(command, &strategy)
 	return command
 }
 

@@ -61,6 +61,8 @@
 
 ### Changed
 
+- `voie chat --help` now documents classic, auto and ensemble with dedicated examples, and `--strategy <name> --help` shows only that strategy.
+
 - Compact `voie install` list shows `NONE` in `NEXT` for providers that are already connected.
 
 - Removed the Cohere provider: its HuggingFace Space now requires sign-in, so the keyless endpoint can no longer serve requests.

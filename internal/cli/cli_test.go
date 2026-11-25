@@ -681,3 +681,47 @@ func TestChatRejectsSingleLegacyEnsembleModelEarly(t *testing.T) {
 		t.Fatalf("error = %v, want early minimum-models error", err)
 	}
 }
+
+func TestChatHelpDocumentsEveryStrategy(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--help"}, nil, &stdout, &stderr, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"Classic:", "Auto:", "Ensemble:",
+		`voie chat --model MODEL_ID "Summarize this text"`,
+		`voie chat --strategy auto --task coding "Review this code"`,
+		`voie chat --strategy ensemble --ensemble-mode debate --debate-turns 2`,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("chat help missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestChatHelpAdaptsToStrategyFlag(t *testing.T) {
+	cases := map[string][]string{
+		"classic":  {"Classic:", `voie chat --model MODEL_ID "Summarize this text"`},
+		"auto":     {"Auto:", `voie chat --strategy auto --task coding "Review this code"`},
+		"ensemble": {"Ensemble:", `voie chat --strategy ensemble --ensemble-mode debate --debate-turns 2`},
+	}
+	for strategy, wants := range cases {
+		var stdout, stderr bytes.Buffer
+		if err := executeForTest(context.Background(), []string{"chat", "--strategy", strategy, "--help"}, nil, &stdout, &stderr, nil); err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range wants {
+			if !strings.Contains(stdout.String(), want) {
+				t.Errorf("--strategy %s help missing %q:\n%s", strategy, want, stdout.String())
+			}
+		}
+		for _, other := range []string{"Classic:", "Auto:", "Ensemble:"} {
+			if strings.Contains(other, strings.ToUpper(strategy[:1])+strategy[1:]+":") {
+				continue
+			}
+			if strings.Contains(stdout.String(), other) {
+				t.Errorf("--strategy %s help unexpectedly shows %s:\n%s", strategy, other, stdout.String())
+			}
+		}
+	}
+}
