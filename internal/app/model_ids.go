@@ -66,6 +66,11 @@ var modelPrefixes = map[string]string{
 // and must keep their exact spelling.
 var legacyUnprefixedIDs = map[string]bool{
 	"orfree": true, "orcafree": true, "vlmfree": true,
+	"omni-free": true, "qoder2-free": true, "devin2-free": true,
+	"copilot2-free": true, "cursor2-free": true, "wb2-free": true, "cli2-free": true,
+	"grfree": true, "gsfree": true, "nimfree": true, "zaifree": true,
+	"mistralfree": true, "cfaifree": true, "cohfree": true, "reqfree": true,
+	"ahfree": true, "anyfree": true, "beatfree": true, "sparkfree": true, "runfree": true,
 }
 
 // PrefixModelID returns the public model ID for a provider. IDs that already

@@ -79,3 +79,28 @@ func TestPPLXProxyModelIDsAreNamespaced(t *testing.T) {
 		t.Fatalf("already-prefixed ID changed: %q", got)
 	}
 }
+
+func TestDeclaredAliasesKeepTheirSpelling(t *testing.T) {
+	for _, tc := range []struct{ provider, id string }{
+		{"omniroute", "omni-free"},
+		{"qoder2api", "qoder2-free"},
+		{"windsurfapi", "devin2-free"},
+		{"copilot-api", "copilot2-free"},
+		{"cursor-api-proxy", "cursor2-free"},
+		{"workbuddy2api", "wb2-free"},
+		{"cli2api", "cli2-free"},
+		{"groq", "grfree"},
+		{"google-ai-studio", "gsfree"},
+		{"zai", "zaifree"},
+		{"mistral", "mistralfree"},
+		{"aihubmix", "ahfree"},
+		{"anyapi", "anyfree"},
+		{"beatapi", "beatfree"},
+		{"iflytek-spark", "sparkfree"},
+		{"runcrate", "runfree"},
+	} {
+		if got := app.PrefixModelID(tc.provider, tc.id); got != tc.id {
+			t.Errorf("%s/%s -> %q", tc.provider, tc.id, got)
+		}
+	}
+}
