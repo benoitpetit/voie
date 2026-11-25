@@ -75,6 +75,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 		check = validateToken
 	}
 	var token string
+	var url string
 	var fields []string
 	var list bool
 	var removeApp, keepApp bool
@@ -118,6 +119,17 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 					}
 					fmt.Fprintf(command.OutOrStdout(), "%s local CLI/gateway files removed\n", args[1])
 				}
+				return nil
+			}
+			if len(args) == 1 && strings.HasPrefix(args[0], "a2a:") {
+				name := strings.TrimPrefix(args[0], "a2a:")
+				if strings.TrimSpace(url) == "" {
+					return fmt.Errorf("a2a connection requires --url")
+				}
+				if err := providers.ConnectA2A(store, name, url, token); err != nil {
+					return err
+				}
+				fmt.Fprintf(command.OutOrStdout(), "a2a:%s connected; models are listed as a2a-%s-*\n", name, name)
 				return nil
 			}
 			if len(args) > 1 {
@@ -252,6 +264,7 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 	command.Flags().StringVar(&token, "token", "", "provider token (non-interactive)")
 	command.Flags().StringArrayVar(&fields, "field", nil, "additional credential as key=value (repeatable)")
 	command.Flags().BoolVar(&list, "list", false, "list connectable providers and their state")
+	command.Flags().StringVar(&url, "url", "", "A2A agent base URL (use with a2a:<name>)")
 	command.Flags().BoolVar(&removeApp, "remove-app", false, "also remove local CLI/gateway files (no prompt)")
 	command.Flags().BoolVar(&keepApp, "keep-app", false, "keep local CLI/gateway files (default)")
 	return command
@@ -448,6 +461,9 @@ func apiProviderState(store *config.Credentials, name string) string {
 func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered, showCancel bool) []string {
 	typeByName := make(map[string]string)
 	typeByName["openrouter"] = "token"
+	for _, agent := range store.A2AAgentNames() {
+		typeByName["a2a:"+agent] = "a2a"
+	}
 	typeByName["orcarouter"] = "token"
 	for _, name := range providers.TokenProviderNames() {
 		typeByName[name] = "token"
@@ -463,6 +479,9 @@ func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered,
 	}
 
 	names := append([]string(nil), connectableProviders...)
+	for _, agent := range store.A2AAgentNames() {
+		names = append(names, "a2a:"+agent)
+	}
 	sort.Strings(names)
 	if numbered {
 		fmt.Fprintln(table, "#\tNAME\tTYPE\tSTATE")
@@ -570,6 +589,9 @@ func ensureClineAuth(command *cobra.Command, clinePath string) error {
 }
 
 func isConnectable(name string) bool {
+	if strings.HasPrefix(name, "a2a:") {
+		return true
+	}
 	for _, provider := range connectableProviders {
 		if provider == name {
 			return true

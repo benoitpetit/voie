@@ -119,6 +119,18 @@ func runInstallList(out io.Writer, verbose bool) error {
 			return err
 		}
 	}
+	for _, agent := range store.A2AAgentNames() {
+		name := "a2a:" + agent
+		status := "not connected"
+		if strings.EqualFold(store.State(agent), "connected") {
+			status = "connected"
+		} else if store.Token(agent) != "" {
+			status = "connected"
+		}
+		if err := write(name, "a2a", name, 0, status, "none", "voie connect "+name, "-"); err != nil {
+			return err
+		}
+	}
 	if err := table.Flush(); err != nil {
 		return err
 	}

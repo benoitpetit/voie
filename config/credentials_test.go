@@ -125,3 +125,25 @@ func TestCredentialsWriteIsAtomicAndKeeps0600(t *testing.T) {
 		}
 	}
 }
+
+func TestA2AAgentURLPersists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetA2AAgent("one", "https://a.example"); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.A2AAgentURL("one"); got != "https://a.example" {
+		t.Fatalf("URL = %q", got)
+	}
+	names := reloaded.A2AAgentNames()
+	if len(names) != 1 || names[0] != "one" {
+		t.Fatalf("names = %v", names)
+	}
+}

@@ -31,11 +31,12 @@ func ProviderKeyEnv(provider string) string {
 type Credentials struct {
 	Tokens map[string]string `json:"providers"`
 	States map[string]string `json:"states,omitempty"`
+	A2A    map[string]string `json:"a2a,omitempty"`
 }
 
 // LoadCredentials reads the credential file. A missing file is an empty store.
 func LoadCredentials() (*Credentials, error) {
-	store := &Credentials{Tokens: make(map[string]string), States: make(map[string]string)}
+	store := &Credentials{Tokens: make(map[string]string), States: make(map[string]string), A2A: make(map[string]string)}
 	path := CredentialsPath()
 	if path == "" {
 		return store, nil
@@ -59,6 +60,9 @@ func LoadCredentials() (*Credentials, error) {
 	if store.States == nil {
 		store.States = make(map[string]string)
 	}
+	if store.A2A == nil {
+		store.A2A = make(map[string]string)
+	}
 	return store, nil
 }
 
@@ -81,6 +85,36 @@ func (c *Credentials) State(provider string) string {
 		return ""
 	}
 	return strings.TrimSpace(c.States[provider])
+}
+
+// A2AAgentURL returns the configured endpoint of a named A2A agent.
+func (c *Credentials) A2AAgentURL(name string) string {
+	if c == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.A2A[name])
+}
+
+// A2AAgentNames lists configured A2A agents in stable order.
+func (c *Credentials) A2AAgentNames() []string {
+	if c == nil {
+		return nil
+	}
+	names := make([]string, 0, len(c.A2A))
+	for name := range c.A2A {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// SetA2AAgent stores the endpoint of a named A2A agent.
+func (c *Credentials) SetA2AAgent(name, url string) error {
+	if c.A2A == nil {
+		c.A2A = make(map[string]string)
+	}
+	c.A2A[strings.TrimSpace(name)] = strings.TrimSpace(url)
+	return c.write()
 }
 
 // SetState records (or clears, with an empty value) a provider state.

@@ -6,6 +6,7 @@ import "strings"
 // Prefixes already present in upstream IDs (or-, oc2a-, blockrun-, ...) are
 // reused so the public catalogue does not change for those providers.
 var modelPrefixes = map[string]string{
+	"a2a":              "a2a",
 	"perplexity":       "pplx",
 	"pplx-proxy":       "pplx",
 	"duckai":           "dk",

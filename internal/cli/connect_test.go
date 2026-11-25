@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -701,5 +703,26 @@ func TestInstallListReportsErrorState(t *testing.T) {
 		if !found {
 			t.Fatalf("%s missing from install list", want)
 		}
+	}
+}
+
+func TestConnectNamedA2AAgent(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"remote","description":"remote agent","supportedInterfaces":[{"url":"http://example/a2a","protocolBinding":"JSONRPC","protocolVersion":"1.0"}],"capabilities":{"streaming":true},"skills":[{"id":"voie.chat.classic","name":"Classic","description":"chat","inputModes":["text/plain"],"outputModes":["text/plain"]}],"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"]}`))
+	}))
+	defer server.Close()
+	if _, _, err := runConnect(t, []string{"a2a:one", "--url", server.URL, "--token", "tok"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.A2AAgentURL("one") != server.URL || store.Raw("one") != "tok" {
+		t.Fatalf("credentials = %+v", store)
+	}
+	if ids := providers.A2AModelIDs("one"); len(ids) != 1 || ids[0] != "a2a-one-voie.chat.classic" {
+		t.Fatalf("models = %v", ids)
 	}
 }
