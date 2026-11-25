@@ -40,3 +40,17 @@ func TestLookupDoesNotRefetchOnEveryFailedCall(t *testing.T) {
 		t.Fatalf("fetches = %d, want at most 2 on repeated failures", calls)
 	}
 }
+
+func TestAllReturnsPublicCatalogue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"openai/gpt-5","pricing":{"prompt":"0.000002","completion":"0.000006"}}]}`))
+	}))
+	defer server.Close()
+	SetSource(server.URL)
+	t.Cleanup(func() { SetSource("") })
+	all := All()
+	price, ok := all["openai/gpt-5"]
+	if !ok || price.Prompt != "0.000002" {
+		t.Fatalf("All() = %v", all)
+	}
+}

@@ -4,6 +4,8 @@
 
 ### Added
 
+- OpenRouter paid models from the public catalogue, with real per-token prices; free aliases keep `USD 0/0`.
+
 - Optional `pplx-proxy` gateway for Perplexity with automatic session-cookie capture during `voie connect` and an actionable error when the cookie expires.
 
 - Free/paid model tiers: `voie models` shows `TIER` and `PRICE` columns with `--free`, `--paid`, `--all` and `--provider` filters; `GET /v1/models?tier=&provider=` and MCP `list_models` carry the same fields.

@@ -124,3 +124,5 @@ Pass a returned ID as `conversation_id` to `chat_completion` to resume the conve
 `list_models` results carry `tier` and, when a public price is known, `price`; results can be filtered with `tier` and `provider`. `list_providers` returns the full provider metadata: `working`, `ready`, `alive`, `free_models`, `supported_models`, `default_model`, `url`, `supports_stream`, `needs_auth`, `description` and `reverse_engineering`. `free_models` is always present: a non-empty array lists verified free IDs, an empty array means none are free.
 
 Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); public upstream prices replace that value when available. Paid models with no public price show `price unknown`.
+
+OpenRouter also exposes its public catalogue of subscription models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.

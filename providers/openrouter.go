@@ -3,10 +3,12 @@ package providers
 import (
 	"context"
 	"net/http"
+	"sort"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/catalog"
+	"github.com/benoitpetit/voie/internal/pricing"
 )
 
 // OpenRouter relays free OpenRouter models through its OpenAI-compatible API.
@@ -23,7 +25,13 @@ func NewOpenRouter() *OpenRouter {
 		CompletionsURL: "https://openrouter.ai/api/v1/chat/completions",
 		DefaultModel:   "orfree",
 		ModelIDs:       map[string]string{"orfree": "openrouter/free"},
-		ModelsSupplier: func() map[string]string { return catalog.Models("openrouter") },
+		ModelsSupplier: func() map[string]string {
+			models := catalog.Models("openrouter")
+			for id := range pricing.All() {
+				models[app.PrefixModelID("openrouter", id)] = id
+			}
+			return models
+		},
 		Description:    "Free OpenRouter models through a configured API token",
 		SupportsStream: true,
 		TokenSupplier: func() string {
@@ -40,6 +48,20 @@ func (p *OpenRouter) SupportsModel(model string) bool {
 
 func (p *OpenRouter) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
+	info.FreeModels = make([]string, 0)
+	seenFree := map[string]bool{}
+	for id := range catalog.Models("openrouter") {
+		info.FreeModels = append(info.FreeModels, id)
+		seenFree[id] = true
+	}
+	for _, upstream := range catalog.Models("openrouter") {
+		concrete := app.PrefixModelID("openrouter", upstream)
+		if !seenFree[concrete] {
+			info.FreeModels = append(info.FreeModels, concrete)
+			seenFree[concrete] = true
+		}
+	}
+	sort.Strings(info.FreeModels)
 	store, _ := config.LoadCredentials()
 	info.Working = store.Token("openrouter") != ""
 	return info

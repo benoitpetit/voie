@@ -270,3 +270,5 @@ Responses include `routing.attempts`: one entry per provider call with the model
 Only the `auto` lane of pplx-proxy is classified `free`; the subscription models it advertises are `paid` with `price unknown`. A `403` from Perplexity means the connected account tier cannot use that model — the upstream error message is surfaced verbatim.
 
 Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); public upstream prices replace that value when available. Paid models with no public price show `price unknown`.
+
+OpenRouter also exposes its public catalogue of subscription models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
