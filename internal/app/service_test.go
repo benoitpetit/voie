@@ -562,7 +562,7 @@ func TestProviderInfoAlwaysExposesFreeModelsField(t *testing.T) {
 	}
 }
 
-func TestListModelsIgnoresZeroPrices(t *testing.T) {
+func TestListModelsShowsZeroPricesForFreeModels(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"data":[` +
 			`{"id":"free/upstream","pricing":{"prompt":"0","completion":"0"}},` +
@@ -587,8 +587,8 @@ func TestListModelsIgnoresZeroPrices(t *testing.T) {
 	}
 	free := byID["or-free/upstream"]
 	paid := byID["or-paid/upstream"]
-	if free.Price != nil {
-		t.Fatalf("free model has a zero price: %+v", free.Price)
+	if free.Price == nil || free.Price.PromptPerToken != "0" || free.Price.CompletionPerToken != "0" {
+		t.Fatalf("free model should expose its zero price: %+v", free.Price)
 	}
 	if paid.Price == nil || paid.Price.PromptPerToken != "0.000002" {
 		t.Fatalf("paid model price missing: %+v", paid)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -501,15 +500,6 @@ func (s *Service) DeleteConversation(ctx context.Context, id string) error {
 }
 
 // HasProvider reports whether a provider name is registered.
-func hasNonZeroPrice(price pricing.Price) bool {
-	for _, value := range []string{price.Prompt, price.Completion} {
-		if parsed, err := strconv.ParseFloat(value, 64); err == nil && parsed > 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *Service) HasProvider(name string) bool {
 	return s.registry.Get(name) != nil
 }
@@ -571,7 +561,7 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 				Permission: []interface{}{}, Root: upstreamID,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
 			}
-			if upstreamPrice, ok := pricing.Lookup(ownerName, upstreamID); ok && hasNonZeroPrice(upstreamPrice) {
+			if upstreamPrice, ok := pricing.Lookup(ownerName, upstreamID); ok {
 				model.Price = &ModelPrice{
 					PromptPerToken: upstreamPrice.Prompt, CompletionPerToken: upstreamPrice.Completion,
 					Currency: "USD",
