@@ -11,6 +11,8 @@
 
 ### Fixed
 
+- Catalogue coherence: prices are looked up by upstream ID with failure backoff; public prefixes now select the owning provider; empty vs absent free lists, case-insensitive allowlists and subscription lanes are classified correctly; failed gateway probes keep the last known catalogue; provider metadata uses public model IDs on all surfaces; MCP `list_providers` exposes full metadata; declared aliases keep their names; `--all` conflicts and unknown provider filters are validated.
+
 - pplx-proxy: only the `auto` lane is marked free; subscription models are paid and upstream 403 messages are surfaced.
 
 - FreeLLM Pool listings now expose only routing aliases: concrete upstream IDs advertised by the gateway were frequently stale (HTTP 404 or cooldown). Mixed-case gateway model IDs also resolve correctly.
