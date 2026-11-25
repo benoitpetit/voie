@@ -65,6 +65,20 @@ func (r *Registry) GetForModel(model string) Provider {
 }
 
 func (r *Registry) lookup(model string) Provider {
+	// The public prefix identifies the owning provider. Honour it before any
+	// legacy global priority so dp-* and dk-* never cross routes.
+	if index := strings.Index(model, "-"); index > 0 {
+		prefix := model[:index]
+		for name, declared := range modelPrefixes {
+			if declared != prefix {
+				continue
+			}
+			provider := r.Get(name)
+			if provider != nil && (provider.SupportsModel(model) || provider.SupportsModel(model[index+1:])) {
+				return provider
+			}
+		}
+	}
 	// Prefer the previous routing precedence for aliases shared by providers.
 	priority := []string{"duckai", "perplexity", "deepai", "quillbot", "cohere", "yqcloud", "jimmy"}
 	seen := make(map[string]bool, len(priority))

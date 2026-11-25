@@ -487,3 +487,18 @@ func TestListModelsUsesUpstreamIDForPricingAndRoot(t *testing.T) {
 		t.Fatalf("model = %+v, want upstream root and price", models[0])
 	}
 }
+
+func TestPublicPrefixSelectsOwningProvider(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{"duckai", "deepai"} {
+		registry.Register(name, &testProvider{info: ProviderInfo{
+			Name: name, Working: true, SupportedModels: []string{"gpt-6-luna"},
+		}})
+	}
+	if got := registry.GetForModel("dp-gpt-6-luna"); got == nil || got.GetInfo().Name != "deepai" {
+		t.Fatalf("dp- model routed to %v, want deepai", got)
+	}
+	if got := registry.GetForModel("dk-gpt-6-luna"); got == nil || got.GetInfo().Name != "duckai" {
+		t.Fatalf("dk- model routed to %v, want duckai", got)
+	}
+}
