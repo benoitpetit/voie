@@ -418,6 +418,22 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 	return nil
 }
 
+// apiProviderState is shared by `voie connect --list` and `voie install` so
+// an anonymous lane is never reported as disconnected.
+func apiProviderState(store *config.Credentials, name string) string {
+	if strings.EqualFold(store.State(name), "connected") || store.Token(name) != "" {
+		return "connected"
+	}
+	switch name {
+	case "opencode-zen", "opencode-go":
+		return "available (anonymous / local key)"
+	case "vlm-run":
+		return "available (anonymous bearer)"
+	default:
+		return "not connected"
+	}
+}
+
 // connectPicker prints the same flat provider list for `connect --list` and
 // for the interactive selector. The selector adds a leading number column.
 func connectPicker(table *tabwriter.Writer, store *config.Credentials, numbered, showCancel bool) []string {

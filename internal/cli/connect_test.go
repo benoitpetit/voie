@@ -588,3 +588,24 @@ func TestConnectListShowsGatewayConnectedWithoutToken(t *testing.T) {
 	}
 	t.Fatal("pplx-proxy missing from connect --list")
 }
+
+func TestInstallListMatchesConnectStateForAnonymousProviders(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	command := newInstallCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs(nil)
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		if strings.Contains(line, "vlm-run") {
+			if !strings.Contains(line, "available (anonymous bearer)") {
+				t.Fatalf("install line = %q, want anonymous state", line)
+			}
+			return
+		}
+	}
+	t.Fatal("vlm-run missing from install list")
+}

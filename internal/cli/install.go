@@ -75,7 +75,7 @@ func runInstallList(out io.Writer, verbose bool) error {
 			return writeInstallRow(table, name, kind, label, port, status, account, command, hint)
 		}
 		next := "voie install " + name
-		if status == "connected" {
+		if status == "connected" || strings.HasPrefix(status, "available") {
 			next = "-"
 		} else if kind == "api" {
 			next = "voie connect " + name
@@ -110,10 +110,7 @@ func runInstallList(out io.Writer, verbose bool) error {
 	}
 	names := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
 	for _, name := range names {
-		status := "not connected"
-		if store.Token(name) != "" {
-			status = "connected"
-		}
+		status := apiProviderState(store, name)
 		if err := write(name, "api", name, 0, status, "-", "voie connect "+name, "-"); err != nil {
 			return err
 		}
