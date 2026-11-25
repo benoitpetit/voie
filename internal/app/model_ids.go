@@ -33,7 +33,6 @@ var modelPrefixes = map[string]string{
 	"runcrate":         "run",
 	"freellmpool":      "pool",
 	"free-llm-router":  "flr",
-	"trae2api":         "te",
 	"ollama":           "ollama",
 	"lmstudio":         "lms",
 	"llamacpp":         "llamacpp",

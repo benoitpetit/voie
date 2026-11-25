@@ -42,7 +42,7 @@
 ### Added
 
 - 16 token-based OpenAI-compatible providers (OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run, Runcrate) declared in one catalogue.
-- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for 17 opt-in third-party gateways.
+- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for 16 opt-in third-party gateways.
 - Model IDs carry a provider prefix and list their provider in `voie models`, `GET /v1/models` and MCP `list_models`.
 
 - `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing. Connecting Antigravity, Kiro or Cline installs their missing toolchain automatically; `voie install <provider>` does the same explicitly.
@@ -57,7 +57,7 @@
 - Gateway installers now use `uv` instead of `pip` for Python packages, run entirely inside the gateway directory (install scripts can no longer overwrite files in the caller's repository), and generate secrets before dependency steps that need them.
 - Fixed a deadlock that made `voie connect` hang forever when a gateway never became healthy; it now reports the timeout and exits.
 - Fixed startup paths for `free-llm-router` (local binary plus explicit port), `windsurfapi` (no root needed), `freellmapi` (generated `ENCRYPTION_KEY`), `workbuddy2api` (uv CLI) and Ollama's default alias (model present on the machine).
-- Only verified free models are listed: gateways whose lane is keyless/local keep their live discovery, while Qoder/Trae expose only their documented free `Auto` mode and 9routerx stays limited to its working free alias. Renamed `free-llm-router` models to `flr-` and `trae2api` models to `te-`.
+- Only verified free models are listed: gateways whose lane is keyless/local keep their live discovery, while Qoder exposes only its documented free `Auto` mode and 9routerx stays limited to its working free alias. Renamed `free-llm-router` models to `flr-`.
 - Reversed Perplexity's current web API: the ask payload is now wrapped in `params` with a new request reason and client hints, and answers arrive in nested `text_payload` workflow blocks. Only the anonymous `turbo` model is advertised; an optional `VOIE_PERPLEXITY_COOKIES` makes it reliable when anonymous traffic is throttled.
 - `voie connect` now keeps dashboard gateways running until the user validates in the terminal: it prints the local dashboard URL, waits for Enter, then stops the gateway. Gateway specs declare their dashboard URL. Copilot API and Cursor ACP Proxy offer their CLI login (`auth` / `login`) during connect instead.
 - FreeLLMAPI's first-run setup code is extracted from the container logs and printed during `voie connect`, so the first account can be created from a browser outside the container.
@@ -110,3 +110,7 @@
 ## v0.1.0 - 2026-11-05
 
 - Align browser-backed request capture with the CLI (rotation, stealth flags, redirect safety).
+
+### Removed
+
+- The `trae2api` reverse-proxy gateway and all Trae-specific model IDs; Trae is no longer a voie provider.

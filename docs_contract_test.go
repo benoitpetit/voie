@@ -74,7 +74,7 @@ func TestDocumentedProvidersMatchCode(t *testing.T) {
 	for _, name := range rt.Registry.GetProviderNames() {
 		names[name] = true
 	}
-	for _, want := range []string{"duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline", "groq", "google-ai-studio", "nvidia-nim", "zai", "mistral", "cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor", "runcrate", "9routerx", "freellmapi", "freellmpool", "free-llm-router", "trae2api", "ollama", "lmstudio", "llamacpp", "omniroute", "qoder2api", "windsurfapi", "copilot-api", "cursor-api-proxy", "codearts2api", "cli2api", "workbuddy2api"} {
+	for _, want := range []string{"duckai", "deepai", "quillbot", "yqcloud", "jimmy", "kilo", "ovh", "blockrun", "pollinations", "opencode-zen", "opencode-go", "openrouter", "orcarouter", "antigravity", "kiro", "cline", "groq", "google-ai-studio", "nvidia-nim", "zai", "mistral", "cloudflare-ai", "cohere-trial", "requesty", "aihubmix", "anyapi", "beatapi", "iflytek-spark", "vlm-run", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor", "runcrate", "9routerx", "freellmapi", "freellmpool", "free-llm-router", "ollama", "lmstudio", "llamacpp", "omniroute", "qoder2api", "windsurfapi", "copilot-api", "cursor-api-proxy", "codearts2api", "cli2api", "workbuddy2api"} {
 		if !names[want] {
 			t.Errorf("provider %q is not registered", want)
 		}
@@ -228,4 +228,20 @@ func TestDocsDescribeModelDiscovery(t *testing.T) {
 	api := readDoc(t, "api-reference.md")
 	assertContains(t, "api-reference.md", api, "`tier`")
 	assertContains(t, "api-reference.md", api, "free_models")
+}
+
+func TestTraeProvidersRemoved(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	rt, err := runtime.NewWithRegistry(cfg, providers.NewRegistry())
+	if err != nil {
+		t.Fatalf("runtime.NewWithRegistry: %v", err)
+	}
+	for _, name := range rt.Registry.GetProviderNames() {
+		if name == "trae" || name == "trae2api" {
+			t.Fatalf("provider %q must not be registered", name)
+		}
+	}
 }

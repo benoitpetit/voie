@@ -520,7 +520,7 @@ func TestDisconnectAsksBeforeRemovingGateway(t *testing.T) {
 
 func TestDisconnectKeepsAppWhenDeclined(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	dir, _ := providers.ExternalGatewayUninstall("trae2api")
+	dir, _ := providers.ExternalGatewayUninstall("freellmpool")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -532,7 +532,7 @@ func TestDisconnectKeepsAppWhenDeclined(t *testing.T) {
 	uninstallRunner = func(string, ...string) error { called = true; return nil }
 	t.Cleanup(func() { uninstallRunner = previousRunner })
 
-	if _, _, err := runConnect(t, []string{"disconnect", "trae2api"}, "", nil); err != nil {
+	if _, _, err := runConnect(t, []string{"disconnect", "freellmpool"}, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if called {
