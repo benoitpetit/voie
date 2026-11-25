@@ -81,7 +81,7 @@ func TestServiceAutoUsesRouterAmongEligibleModels(t *testing.T) {
 	}
 }
 
-func TestServiceAutoRejectsRouterChoiceOutsideProfileCandidates(t *testing.T) {
+func TestServiceAutoFallsBackFromIneligibleRouterChoice(t *testing.T) {
 	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"writing","model":"model-a","reason":"incorrect capability choice"}`}}
 	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
 	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
@@ -95,16 +95,19 @@ func TestServiceAutoRejectsRouterChoiceOutsideProfileCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "draft"}}})
-	if !errors.Is(err, ErrRouting) {
-		t.Fatalf("Complete() error = %v, want ErrRouting for an ineligible router choice", err)
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "draft"}}})
+	if err != nil {
+		t.Fatalf("ineligible router choice should fall back to local selection: %v", err)
 	}
-	if a.callCount() != 0 || b.callCount() != 0 || c.callCount() != 0 || router.callCount() != 1 {
-		t.Fatalf("calls router/a/b/c=%d/%d/%d/%d, want only the router call", router.callCount(), a.callCount(), b.callCount(), c.callCount())
+	if response.Provider != "b" || response.Model != "model-b" {
+		t.Fatalf("response = %+v, want locally selected model-b", response)
+	}
+	if a.callCount() != 0 || b.callCount() != 1 || c.callCount() != 0 || router.callCount() != 1 {
+		t.Fatalf("calls router/a/b/c=%d/%d/%d/%d, want router and local model-b", router.callCount(), a.callCount(), b.callCount(), c.callCount())
 	}
 }
 
-func TestServiceAutoRejectsUnknownOrDisabledRouterChoice(t *testing.T) {
+func TestServiceAutoFallsBackFromUnknownOrDisabledRouterChoice(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		selected string
@@ -134,18 +137,18 @@ func TestServiceAutoRejectsUnknownOrDisabledRouterChoice(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}}})
-			if !errors.Is(err, ErrRouting) {
-				t.Fatalf("Complete() error = %v, want ErrRouting", err)
+			response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}}})
+			if err != nil {
+				t.Fatalf("invalid router selection should fall back: %v", err)
 			}
-			if answer.callCount() != 0 {
-				t.Fatalf("answer provider called %d times for invalid router selection", answer.callCount())
+			if response.Provider != "answer" || answer.callCount() != 1 {
+				t.Fatalf("response = %+v, calls = %d, want locally selected answer provider", response, answer.callCount())
 			}
 		})
 	}
 }
 
-func TestServiceAutoRejectsMalformedRouterJSON(t *testing.T) {
+func TestServiceAutoFallsBackFromMalformedRouterJSON(t *testing.T) {
 	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": "not json"}}
 	answer := &routingStub{info: ProviderInfo{Name: "answer", Working: true, SupportedModels: []string{"model-a"}}}
 	backup := &routingStub{info: ProviderInfo{Name: "backup", Working: true, SupportedModels: []string{"model-b"}}}
@@ -160,16 +163,16 @@ func TestServiceAutoRejectsMalformedRouterJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "hello"}}})
-	if !errors.Is(err, ErrRouting) {
-		t.Fatalf("Complete() error = %v, want ErrRouting", err)
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "hello"}}})
+	if err != nil {
+		t.Fatalf("malformed router response should fall back: %v", err)
 	}
-	if answer.callCount() != 0 {
-		t.Fatalf("answer provider called %d times for malformed router response", answer.callCount())
+	if response.Provider != "answer" || answer.callCount() != 1 {
+		t.Fatalf("response = %+v, calls = %d, want locally selected answer provider", response, answer.callCount())
 	}
 }
 
-func TestServiceAutoRequiresConfiguredRouterForRouterProfile(t *testing.T) {
+func TestServiceAutoFallsBackWithoutConfiguredRouter(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register("a", &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}})
 	registry.Register("b", &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}})
@@ -179,9 +182,12 @@ func TestServiceAutoRequiresConfiguredRouterForRouterProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "hello"}}})
-	if !errors.Is(err, ErrRouting) {
-		t.Fatalf("Complete() error = %v, want ErrRouting", err)
+	response, err := service.Complete(context.Background(), CompletionRequest{Strategy: StrategyAuto, Task: "writing", Messages: []Message{{Role: "user", Content: "hello"}}})
+	if err != nil {
+		t.Fatalf("missing router should fall back to local selection: %v", err)
+	}
+	if response.Provider != "a" || response.Model != "model-a" {
+		t.Fatalf("response = %+v, want locally selected model-a", response)
 	}
 }
 
@@ -435,9 +441,12 @@ func TestRouterFailureAppearsInRoutingAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, decision, err := service.selectCandidates(context.Background(), CompletionRequest{Task: "writing"}, 1)
-	if err == nil {
-		t.Fatal("malformed router decision was accepted")
+	selected, decision, err := service.selectCandidates(context.Background(), CompletionRequest{Task: "writing"}, 1)
+	if err != nil {
+		t.Fatalf("malformed router decision should fall back locally: %v", err)
+	}
+	if len(selected) != 1 || selected[0].Model != "model-w" {
+		t.Fatalf("selected = %+v, want local model-w", selected)
 	}
 	if len(decision.Attempts) != 1 || decision.Attempts[0].Outcome != OutcomeFailed {
 		t.Fatalf("attempts = %+v, want one failed router attempt", decision.Attempts)
@@ -459,5 +468,39 @@ func TestModelDescriptorPrefersExactPublicID(t *testing.T) {
 	}
 	if got := service.modelDescriptor("dp-foo"); got.Description != "deep" {
 		t.Fatalf("dp-foo descriptor = %+v, want deep", got)
+	}
+}
+
+func TestRouterFailureFallsBackToLocalSelection(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": "not json"}}
+	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
+	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", a)
+	registry.Register("b", b)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := service.Complete(context.Background(), CompletionRequest{
+		Strategy: StrategyAuto, Task: "coding", Messages: []Message{{Role: "user", Content: "code"}},
+	})
+	if err != nil {
+		t.Fatalf("router failure should fall back to local selection: %v", err)
+	}
+	if response.Provider != "a" || response.Model != "model-a" {
+		t.Fatalf("response = %+v, want locally selected model-a", response)
+	}
+	if router.callCount() != 1 || a.callCount() != 1 {
+		t.Fatalf("calls router/a = %d/%d, want one each", router.callCount(), a.callCount())
+	}
+	if len(response.Routing.Attempts) == 0 || response.Routing.Attempts[0].Outcome != OutcomeFailed || response.Routing.Attempts[0].Model != "router-model" {
+		t.Fatalf("attempts = %+v, want the failed router attempt recorded first", response.Routing.Attempts)
 	}
 }

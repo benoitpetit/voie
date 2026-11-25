@@ -153,6 +153,21 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 		return []ModelCandidate{candidate}, RouteDecision{Task: taskHint, Model: candidate.Model, Models: []string{candidate.Model}, Reason: "only eligible model"}, nil
 	}
 	selectedCount := min(limit, len(candidates))
+	// Router selection is an optimization: if the router is unavailable or
+	// returns an unusable decision, keep the request alive with the same local
+	// candidates a local profile would have chosen.
+	localSelection := func(attempts ...Attempt) ([]ModelCandidate, RouteDecision, error) {
+		selected := append([]ModelCandidate(nil), candidates[:selectedCount]...)
+		decision := RouteDecision{Task: taskHint, Reason: "local selection after router failure", Models: make([]string, len(selected)), Attempts: attempts}
+		for i := range selected {
+			decision.Models[i] = selected[i].Model
+		}
+		if limit == 1 {
+			decision.Model = selected[0].Model
+			decision.Models = []string{selected[0].Model}
+		}
+		return selected, decision, nil
+	}
 	selection := SelectionMode(strings.ToLower(strings.TrimSpace(string(taskRule.Selection))))
 	if selection == "" {
 		selection = SelectionLocal
@@ -173,15 +188,15 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("profile %q has unsupported selection mode %q", taskHint, selection), nil)
 	}
 	if s.options.RouterModel == "" {
-		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("profile %q uses router selection but ROUTER_MODEL is not configured", taskHint), nil)
+		return localSelection()
 	}
 	router := s.registry.GetForModel(s.options.RouterModel)
 	if router == nil || !router.GetInfo().Working {
-		return nil, RouteDecision{}, appError(ErrRouting, fmt.Sprintf("router model %q is unavailable", s.options.RouterModel), nil)
+		return localSelection()
 	}
 	input, err := json.Marshal(routingPrompt{TaskHint: taskHint, Candidates: candidates, Messages: request.Messages})
 	if err != nil {
-		return nil, RouteDecision{}, appError(ErrRouting, "could not encode routing request", err)
+		return localSelection()
 	}
 	routerMessages := []Message{
 		{Role: "system", Content: routingSystemPrompt(selectedCount)},
@@ -190,46 +205,47 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 	routeStarted := time.Now()
 	response, err := router.ChatCompletion(ctx, routerMessages, s.options.RouterModel)
 	routeAttempt := Attempt{Model: s.options.RouterModel, Provider: router.GetInfo().Name, Attempt: 1, DurationMillis: time.Since(routeStarted).Milliseconds()}
-	failed := func(err error) ([]ModelCandidate, RouteDecision, error) {
-		routeAttempt.Outcome = OutcomeFailed
-		return nil, RouteDecision{Task: taskHint, Attempts: []Attempt{routeAttempt}}, err
-	}
 	if err != nil {
 		routeAttempt.Outcome = outcomeFor(err)
-		return failed(appError(ErrRouting, "router model request failed", err))
+		return localSelection(routeAttempt)
 	}
 	if response == nil || len(response.Choices) == 0 {
 		routeAttempt.Outcome = OutcomeFailed
-		return failed(appError(ErrRouting, "router model returned no decision", nil))
+		return localSelection(routeAttempt)
 	}
 	routeAttempt.Outcome = OutcomeSucceeded
 	decision, err := parseRouteDecision(response.Choices[0].Message.Content)
 	if err != nil {
-		return failed(appError(ErrRouting, "router model returned an invalid decision", err))
+		routeAttempt.Outcome = OutcomeFailed
+		return localSelection(routeAttempt)
 	}
 	decision.Task = strings.ToLower(strings.TrimSpace(decision.Task))
 	if decision.Task == "" {
 		decision.Task = taskHint
 	}
 	if decision.Task != taskHint {
-		return failed(appError(ErrRouting, "router task does not match the requested task", nil))
+		routeAttempt.Outcome = OutcomeFailed
+		return localSelection(routeAttempt)
 	}
 	decision.Attempts = append(decision.Attempts, routeAttempt)
 	selectedIDs := decision.Models
 	if selectedCount == 1 {
 		if decision.Model == "" || len(decision.Models) != 0 {
-			return failed(appError(ErrRouting, "router decision must contain exactly one model", nil))
+			routeAttempt.Outcome = OutcomeFailed
+			return localSelection(routeAttempt)
 		}
 		selectedIDs = []string{decision.Model}
 	} else if len(selectedIDs) != selectedCount || decision.Model != "" {
-		return failed(appError(ErrRouting, fmt.Sprintf("router decision must contain exactly %d models", selectedCount), nil))
+		routeAttempt.Outcome = OutcomeFailed
+		return localSelection(routeAttempt)
 	}
 	selected := make([]ModelCandidate, 0, len(selectedIDs))
 	seen := make(map[string]struct{}, len(selectedIDs))
 	for _, id := range selectedIDs {
 		key := strings.ToLower(strings.TrimSpace(id))
 		if _, duplicate := seen[key]; duplicate {
-			return failed(appError(ErrRouting, fmt.Sprintf("router selected model %q more than once", id), nil))
+			routeAttempt.Outcome = OutcomeFailed
+			return localSelection(routeAttempt)
 		}
 		seen[key] = struct{}{}
 		var match *ModelCandidate
@@ -240,7 +256,8 @@ func (s *Service) selectCandidatesExcluding(ctx context.Context, request Complet
 			}
 		}
 		if match == nil {
-			return failed(appError(ErrRouting, fmt.Sprintf("router selected ineligible model %q", id), nil))
+			routeAttempt.Outcome = OutcomeFailed
+			return localSelection(routeAttempt)
 		}
 		selected = append(selected, *match)
 	}
