@@ -1,6 +1,11 @@
 package cli
 
-import "testing"
+import (
+	"bytes"
+	"regexp"
+	"strings"
+	"testing"
+)
 
 func TestInstallNextIsNoneForReadyRows(t *testing.T) {
 	for _, tc := range []struct {
@@ -30,5 +35,45 @@ func TestInstallNextReconnectsOnError(t *testing.T) {
 	}
 	if got := installNext("gateway", "error", "upstream", "omniroute"); got != "voie connect omniroute" {
 		t.Fatalf("gateway error NEXT = %q", got)
+	}
+}
+
+func TestInstallListHasNoBlankAccountColumn(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var stdout, stderr bytes.Buffer
+	command := newInstallCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs(nil)
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"openrouter":  "token",
+		"groq":        "token",
+		"vlm-run":     "none",
+		"codebuddy":   "subscription",
+		"cline":       "subscription",
+		"freellmpool": "none",
+		"omniroute":   "dashboard+upstream",
+	}
+	found := map[string]bool{}
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		columns := regexp.MustCompile(`\s{2,}`).Split(strings.TrimSpace(line), -1)
+		if len(columns) < 5 || columns[0] == "NAME" {
+			continue
+		}
+		if columns[3] == "-" {
+			t.Errorf("row %s has no ACCOUNT type", columns[0])
+		}
+		if expected, ok := want[columns[0]]; ok && columns[3] != expected {
+			t.Errorf("%s ACCOUNT = %q, want %q", columns[0], columns[3], expected)
+		}
+		found[columns[0]] = true
+	}
+	for name := range want {
+		if !found[name] {
+			t.Errorf("%s missing from install list", name)
+		}
 	}
 }

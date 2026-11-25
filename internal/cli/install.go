@@ -104,14 +104,18 @@ func runInstallList(out io.Writer, verbose bool) error {
 				status = "error"
 			}
 		}
-		if err := write(name, "cli", name, 0, status, "-", "voie install "+name, "-"); err != nil {
+		if err := write(name, "cli", name, 0, status, "subscription", "voie install "+name, "-"); err != nil {
 			return err
 		}
 	}
 	names := append([]string{"openrouter", "orcarouter"}, providers.TokenProviderNames()...)
 	for _, name := range names {
 		status := apiProviderState(store, name)
-		if err := write(name, "api", name, 0, status, "-", "voie connect "+name, "-"); err != nil {
+		account := "token"
+		if strings.HasPrefix(status, "available") {
+			account = "none" // anonymous lane, no account needed
+		}
+		if err := write(name, "api", name, 0, status, account, "voie connect "+name, "-"); err != nil {
 			return err
 		}
 	}

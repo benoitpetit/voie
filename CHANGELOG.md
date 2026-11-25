@@ -17,6 +17,8 @@
 
 ### Fixed
 
+- `voie install` fills the `ACCOUNT` column for CLI agents (`subscription`) and APIs (`token`, or `none` for anonymous lanes) instead of leaving it blank.
+
 - `voie install` reports a failed saved session as `error` with `voie connect <name>` as the next step, instead of hiding it behind `connected`/`installed`.
 
 - `voie install` marks installed keyless gateways and npm-installed agent CLIs as ready (`NONE`) instead of asking for a needless connect/install step.
