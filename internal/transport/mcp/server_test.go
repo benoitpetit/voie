@@ -427,3 +427,21 @@ func TestMCPListModelsTierAndProviderFilters(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPListProvidersExposesFullMetadata(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	server := NewServer(service)
+	clientSession, closeSessions := connectTestClient(t, server)
+	defer closeSessions()
+	result, err := clientSession.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_providers", Arguments: map[string]any{}})
+	if err != nil || result.IsError {
+		t.Fatalf("list_providers = %+v %v", result, err)
+	}
+	encoded, _ := json.Marshal(result.StructuredContent)
+	text := string(encoded)
+	for _, field := range []string{"working", "supported_models", "supports_stream"} {
+		if !strings.Contains(text, field) {
+			t.Errorf("MCP provider metadata missing %q: %s", field, text)
+		}
+	}
+}

@@ -51,16 +51,8 @@ type modelsOutput struct {
 	Groups []modelGroup `json:"groups"`
 }
 
-type providerItem struct {
-	Name            string   `json:"name"`
-	Label           string   `json:"label"`
-	Alive           bool     `json:"alive"`
-	DefaultModel    string   `json:"default_model"`
-	SupportedModels []string `json:"supported_models"`
-}
-
 type providersOutput struct {
-	Providers []providerItem `json:"providers"`
+	Providers []app.ProviderInfo `json:"providers"`
 }
 
 type chatCompletionInput struct {
@@ -140,13 +132,10 @@ func NewServer(service *app.Service) *mcp.Server {
 		if err != nil {
 			return nil, providersOutput{}, err
 		}
-		output := providersOutput{Providers: make([]providerItem, 0, len(providers))}
+		output := providersOutput{Providers: make([]app.ProviderInfo, 0, len(providers))}
 		var lines []string
 		for _, provider := range providers {
-			output.Providers = append(output.Providers, providerItem{
-				Name: provider.Name, Label: provider.Label, Alive: provider.Alive,
-				DefaultModel: provider.DefaultModel, SupportedModels: provider.SupportedModels,
-			})
+			output.Providers = append(output.Providers, provider)
 			state := "unreachable"
 			if provider.Alive {
 				state = "reachable"
