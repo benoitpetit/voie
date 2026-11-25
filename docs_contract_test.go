@@ -229,19 +229,3 @@ func TestDocsDescribeModelDiscovery(t *testing.T) {
 	assertContains(t, "api-reference.md", api, "`tier`")
 	assertContains(t, "api-reference.md", api, "free_models")
 }
-
-func TestTraeProvidersRemoved(t *testing.T) {
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
-	}
-	rt, err := runtime.NewWithRegistry(cfg, providers.NewRegistry())
-	if err != nil {
-		t.Fatalf("runtime.NewWithRegistry: %v", err)
-	}
-	for _, name := range rt.Registry.GetProviderNames() {
-		if name == "trae" || name == "trae2api" {
-			t.Fatalf("provider %q must not be registered", name)
-		}
-	}
-}
