@@ -343,3 +343,25 @@ func TestGatewayFreeAllowlistIsCaseInsensitive(t *testing.T) {
 		t.Fatalf("free = %v, want the lowercase auto alias", free)
 	}
 }
+
+func TestGatewayProbeFailureKeepsDiskCatalogue(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	previous := gatewayBaseURL
+	gatewayBaseURL = func(ExternalGatewaySpec) string { return server.URL }
+	defer func() { gatewayBaseURL = previous }()
+	writeGatewayModelsCache(map[string]gatewayModelCacheEntry{
+		"omniroute": {At: time.Now().Add(-25 * time.Hour), Models: map[string]string{"om-good": "good-model"}},
+	})
+	gatewayModelsMu.Lock()
+	gatewayModelCaches = make(map[string]gatewayModelCacheEntry)
+	gatewayModelsMu.Unlock()
+
+	models := fetchGatewayModels("omniroute", server.URL, "")
+	if len(models) != 1 || models["om-good"] != "good-model" {
+		t.Fatalf("models = %v, want the disk snapshot after a failed probe", models)
+	}
+}

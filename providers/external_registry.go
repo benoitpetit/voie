@@ -433,7 +433,7 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 		// Dedicated transport: other tests replace http.DefaultTransport to
 		// stub provider calls, and the gateway probe must reach its own URL.
 		resp, err := (&http.Client{Timeout: 1500 * time.Millisecond, Transport: &http.Transport{}}).Do(req)
-		if err == nil {
+		if err == nil && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
 			var payload struct {
 				Data []struct {
 					ID string `json:"id"`
@@ -448,6 +448,10 @@ func fetchGatewayModels(name, baseURL, key string) map[string]string {
 			}
 			resp.Body.Close()
 		}
+	}
+	if len(models) == 0 && len(onDisk[name].Models) > 0 {
+		// A failed or empty probe must not hide a previously good catalogue.
+		models = onDisk[name].Models
 	}
 	models = filterGatewayCatalogue(name, normalizeGatewayModelKeys(name, models))
 	fresh := gatewayModelCacheEntry{At: time.Now(), Models: models}
