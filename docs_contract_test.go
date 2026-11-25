@@ -218,3 +218,12 @@ func TestDocsDescribeDisconnectCleanup(t *testing.T) {
 	readme := readDoc(t, "README.md")
 	assertContains(t, "README.md", readme, "--remove-app")
 }
+
+func TestDocsDescribeModelDiscovery(t *testing.T) {
+	mcp := readDoc(t, "docs/mcp.md")
+	assertContains(t, "docs/mcp.md", mcp, "tier")
+	assertContains(t, "docs/mcp.md", mcp, "free_models")
+	api := readDoc(t, "api-reference.md")
+	assertContains(t, "api-reference.md", api, "`tier`")
+	assertContains(t, "api-reference.md", api, "free_models")
+}

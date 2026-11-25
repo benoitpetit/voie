@@ -80,7 +80,7 @@ func (r *Registry) lookup(model string) Provider {
 		}
 	}
 	// Prefer the previous routing precedence for aliases shared by providers.
-	priority := []string{"duckai", "perplexity", "deepai", "quillbot", "cohere", "yqcloud", "jimmy"}
+	priority := []string{"duckai", "deepai", "quillbot", "yqcloud", "jimmy"}
 	seen := make(map[string]bool, len(priority))
 	for _, name := range priority {
 		seen[name] = true

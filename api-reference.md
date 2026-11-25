@@ -271,3 +271,7 @@ estimates unless the upstream reports them.
 ### GET /v1/models filters
 
 `GET /v1/models` accepts `?tier=free|paid` and `?provider=NAME`. An invalid `tier` returns `400`. Each model in `data` has a `tier` field (`free` or `paid`) and an optional `price` object with `currency`, `prompt_per_token` and `completion_per_token` when a public price is known; paid models with no public price display `price unknown` in human-facing surfaces.
+
+## Model and provider discovery fields
+
+Each item in `GET /v1/models` includes `tier` (`"free"` or `"paid"`), an optional `price` object (`currency`, `prompt_per_token`, `completion_per_token`) when a public price is known, and `group`. Filter with `?tier=free|paid` and `?provider=NAME`; an unknown provider returns `404`. Each item in `GET /v1/providers` also includes `ready`, `free_models` and `supports_stream`. When `free_models` is absent, all listed models of that provider are free; an explicitly empty free list means none are free.

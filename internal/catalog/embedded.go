@@ -147,9 +147,6 @@ var embeddedModels = map[string]map[string]string{
 	"iflytek-spark": {
 		"spark-lite": "lite",
 	},
-	"together": {
-		"tg-prism-ml-ternary-bonsai-27b": "Prism-ML/Ternary-Bonsai-27B",
-	},
 	"vlm-run": {
 		"vlm-qwen-qwen3-5-0-8b":                "qwen/qwen3.5-0.8b",
 		"vlm-google-diffusiongemma-26b-a4b-it": "google/diffusiongemma-26b-a4b-it",

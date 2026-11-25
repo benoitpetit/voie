@@ -540,6 +540,7 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 			if seen[publicID] {
 				continue
 			}
+			seen[publicID] = true
 			modelTier := TierPaid
 			if freeAll || free[strings.ToLower(id)] || free[strings.ToLower(publicID)] {
 				modelTier = TierFree
