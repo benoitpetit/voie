@@ -1,6 +1,9 @@
 package providers
 
-import "github.com/benoitpetit/voie/internal/app"
+import (
+	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/app"
+)
 
 func NewRegistry() *app.Registry {
 	registry := app.NewRegistry()
@@ -28,6 +31,11 @@ func NewRegistry() *app.Registry {
 	}
 	for _, spec := range ExternalGateways {
 		registry.Register(spec.Name, NewExternalGateway(spec))
+	}
+	if store, err := config.LoadCredentials(); err == nil {
+		for _, name := range store.A2AAgentNames() {
+			registry.Register("a2a:"+name, NewA2AProvider(name))
+		}
 	}
 	return registry
 }
