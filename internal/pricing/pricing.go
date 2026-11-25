@@ -1,25 +1,33 @@
-// Package pricing exposes publicly available upstream model prices. Only
-// OpenRouter publishes a public machine-readable catalogue; other providers
-// leave the price unknown rather than guessing.
+// Package pricing exposes publicly available upstream model prices. Prices
+// are only attached when a provider publishes a machine-readable catalogue;
+// other providers keep their price unknown rather than guessing.
 package pricing
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
 
 const defaultSource = "https://openrouter.ai/api/v1/models"
 
-var (
-	mu          sync.Mutex
-	source      = defaultSource
+type priceSource struct {
+	url   string
+	token func() string
+}
+
+type priceCache struct {
 	prices      map[string]Price
 	fetchedAt   time.Time
 	lastFailure time.Time
+}
+
+var (
+	mu      sync.Mutex
+	sources = map[string]priceSource{"openrouter": {url: defaultSource}}
+	caches  = map[string]*priceCache{}
 )
 
 // Price is the upstream USD price per token.
@@ -38,19 +46,29 @@ type response struct {
 	} `json:"data"`
 }
 
-// SetSource overrides the price catalogue URL. An empty URL disables lookup.
-func SetSource(url string) {
+// SetSource overrides the OpenRouter catalogue URL (used by tests).
+func SetSource(url string) { RegisterSource("openrouter", url, nil) }
+
+// RegisterSource declares an authenticated catalogue for a provider. An empty
+// URL disables lookups for that provider.
+func RegisterSource(provider, url string, token func() string) {
 	mu.Lock()
 	defer mu.Unlock()
-	source = url
-	prices = nil
-	fetchedAt = time.Time{}
-	lastFailure = time.Time{}
+	if url == "" {
+		delete(sources, provider)
+		delete(caches, provider)
+		return
+	}
+	sources[provider] = priceSource{url: url, token: token}
+	delete(caches, provider)
 }
 
-// All returns the public catalogue keyed by upstream model ID.
-func All() map[string]Price {
-	catalogue, ok := load()
+// All returns the public OpenRouter catalogue keyed by upstream model ID.
+func All() map[string]Price { return AllFor("openrouter") }
+
+// AllFor returns a provider's catalogue keyed by upstream model ID.
+func AllFor(provider string) map[string]Price {
+	catalogue, ok := loadFor(provider)
 	if !ok {
 		return map[string]Price{}
 	}
@@ -61,13 +79,9 @@ func All() map[string]Price {
 	return out
 }
 
-// Lookup returns the price for a provider's upstream model ID when a public
-// price catalogue is available.
+// Lookup returns the price for a provider's upstream model ID.
 func Lookup(provider, upstream string) (Price, bool) {
-	if !strings.EqualFold(provider, "openrouter") {
-		return Price{}, false
-	}
-	catalogue, ok := load()
+	catalogue, ok := loadFor(provider)
 	if !ok {
 		return Price{}, false
 	}
@@ -75,38 +89,55 @@ func Lookup(provider, upstream string) (Price, bool) {
 	return price, ok
 }
 
-func load() (map[string]Price, bool) {
+func loadFor(provider string) (map[string]Price, bool) {
 	mu.Lock()
-	if prices != nil && time.Since(fetchedAt) <= 6*time.Hour {
-		catalogue := prices
+	src, ok := sources[provider]
+	if !ok {
+		mu.Unlock()
+		return nil, false
+	}
+	cache := caches[provider]
+	if cache == nil {
+		cache = &priceCache{}
+		caches[provider] = cache
+	}
+	if cache.prices != nil && time.Since(cache.fetchedAt) <= 6*time.Hour {
+		catalogue := cache.prices
 		mu.Unlock()
 		return catalogue, true
 	}
-	if !lastFailure.IsZero() && time.Since(lastFailure) <= time.Minute {
+	if !cache.lastFailure.IsZero() && time.Since(cache.lastFailure) <= time.Minute {
 		mu.Unlock()
 		return nil, false
 	}
-	url := source
+	url, token := src.url, src.token
 	mu.Unlock()
-	if url == "" {
-		return nil, false
-	}
-	loaded, err := fetch(url)
+
+	loaded, err := fetch(url, token)
 	mu.Lock()
 	defer mu.Unlock()
 	if err != nil {
-		lastFailure = time.Now()
+		cache.lastFailure = time.Now()
 		return nil, false
 	}
-	prices = loaded
-	fetchedAt = time.Now()
-	lastFailure = time.Time{}
-	return prices, true
+	cache.prices = loaded
+	cache.fetchedAt = time.Now()
+	cache.lastFailure = time.Time{}
+	return cache.prices, true
 }
 
-func fetch(url string) (map[string]Price, error) {
+func fetch(url string, token func() string) (map[string]Price, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if token != nil {
+		if value := token(); value != "" {
+			req.Header.Set("Authorization", "Bearer "+value)
+		}
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

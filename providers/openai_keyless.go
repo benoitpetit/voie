@@ -38,6 +38,7 @@ type openAIKeylessConfig struct {
 	TokenSupplier          func() string               // resolves the bearer token per request
 	BodyHint               func(int, []byte) string    // optional upstream-specific error detail
 	ResponseHint           func(string) error          // optional answer validation (e.g. expired session)
+	Subscription           bool                        // billed through the user's own subscription
 	OmitDefaultMaxTokens   bool                        // gateway rejects unsupported generation controls
 	Ensure                 func(context.Context) error // optional lazy gateway startup
 }
@@ -120,6 +121,7 @@ func (p *openAIKeylessProvider) GetInfo() ProviderInfo {
 		NeedsAuth:          false,
 		Description:        p.cfg.Description,
 		ReverseEngineering: false,
+		Subscription:       p.cfg.Subscription,
 	}
 }
 

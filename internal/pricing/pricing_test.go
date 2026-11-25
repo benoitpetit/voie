@@ -54,3 +54,24 @@ func TestAllReturnsPublicCatalogue(t *testing.T) {
 		t.Fatalf("All() = %v", all)
 	}
 }
+
+func TestAuthenticatedSourceAndLookup(t *testing.T) {
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"data":[{"id":"vendor/paid","pricing":{"prompt":"0.00001","completion":"0.00005"}}]}`))
+	}))
+	defer server.Close()
+	RegisterSource("orcarouter", server.URL, func() string { return "tok-orca" })
+	t.Cleanup(func() { RegisterSource("orcarouter", "", nil) })
+	price, ok := Lookup("orcarouter", "vendor/paid")
+	if !ok || price.Prompt != "0.00001" {
+		t.Fatalf("price = %+v, %v", price, ok)
+	}
+	if gotAuth != "Bearer tok-orca" {
+		t.Fatalf("Authorization = %q", gotAuth)
+	}
+	if len(AllFor("orcarouter")) != 1 {
+		t.Fatal("AllFor did not return the authenticated catalogue")
+	}
+}

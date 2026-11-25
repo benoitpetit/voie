@@ -102,7 +102,9 @@ func NewServer(service *app.Service) *mcp.Server {
 				group = model.OwnedBy
 			}
 			item := modelItem{ID: model.ID, Provider: provider, OwnedBy: model.OwnedBy, Group: group, Tier: model.Tier}
-			if model.Price != nil && model.Price.PromptPerToken != "" {
+			if model.Price != nil && model.Price.Label != "" {
+				item.Price = model.Price.Label
+			} else if model.Price != nil && model.Price.PromptPerToken != "" {
 				item.Price = model.Price.Currency + " " + model.Price.PromptPerToken + "/" + model.Price.CompletionPerToken
 			} else if model.Tier == app.TierPaid {
 				item.Price = "price unknown"

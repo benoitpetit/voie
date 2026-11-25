@@ -561,7 +561,9 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 				Permission: []interface{}{}, Root: upstreamID,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
 			}
-			if upstreamPrice, ok := pricing.Lookup(ownerName, upstreamID); ok {
+			if ownerInfo.Subscription && modelTier == TierPaid {
+				model.Price = &ModelPrice{Label: "subscribe"}
+			} else if upstreamPrice, ok := pricing.Lookup(ownerName, upstreamID); ok {
 				model.Price = &ModelPrice{
 					PromptPerToken: upstreamPrice.Prompt, CompletionPerToken: upstreamPrice.Completion,
 					Currency: "USD",

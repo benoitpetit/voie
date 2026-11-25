@@ -551,3 +551,33 @@ func TestModelsAllConflictsAndUnknownProvider(t *testing.T) {
 		}
 	}
 }
+
+type subscribeTestProvider struct{}
+
+func (*subscribeTestProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "sub", Label: "Sub", Working: true,
+		SupportedModels: []string{"sub-auto"}, NoFreeModels: true, Subscription: true}
+}
+func (*subscribeTestProvider) SupportsModel(model string) bool { return model == "sub-auto" }
+func (*subscribeTestProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{}, nil
+}
+func (*subscribeTestProvider) ChatCompletionStream(context.Context, []app.Message, string, func(string)) error {
+	return nil
+}
+
+func TestModelsOutputShowsSubscribePrice(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("sub", &subscribeTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := runModels(&stdout, service, false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "subscribe") {
+		t.Fatalf("models output = %q, want subscribe label", stdout.String())
+	}
+}

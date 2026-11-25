@@ -4,6 +4,8 @@
 
 ### Added
 
+- OrcaRouter exposes its authenticated model catalogue as `paid` with real per-token prices; unpriced aliases stay free. ACP subscription models now show `subscribe` instead of `price unknown`.
+
 - ACP bridges discover the agent's real model catalogue during the handshake, cache it, and expose it in `voie models`; model switching falls back to `session/set_config_option` when needed.
 
 - OpenRouter paid models from the public catalogue, with real per-token prices; free aliases keep `USD 0/0`.

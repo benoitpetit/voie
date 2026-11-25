@@ -83,7 +83,8 @@ func NewACPProvider(spec ACPProviderSpec) *ACPProvider {
 			}
 			return models
 		},
-		Description:    spec.Label + " free models through a local ACP bridge",
+		Description:    spec.Label + " models through a local ACP bridge (your subscription)",
+		Subscription:   true,
 		SupportsStream: true,
 		TokenSupplier:  gateway.localKey,
 		Ensure:         gateway.Ensure,

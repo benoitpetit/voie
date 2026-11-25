@@ -3,13 +3,26 @@ package providers
 import (
 	"context"
 	"net/http"
+	"sort"
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/catalog"
+	"github.com/benoitpetit/voie/internal/pricing"
 )
 
-// OrcaRouter relays free OrcaRouter models through its OpenAI-compatible API.
+const orcaRouterModelsURL = "https://api.orcarouter.ai/v1/models"
+
+func init() {
+	// OrcaRouter publishes a private, token-authenticated price catalogue.
+	// Registering it here keeps price lookups and model discovery in sync.
+	pricing.RegisterSource("orcarouter", orcaRouterModelsURL, func() string {
+		current, _ := config.LoadCredentials()
+		return current.Token("orcarouter")
+	})
+}
+
+// OrcaRouter relays OrcaRouter models through its OpenAI-compatible API.
 type OrcaRouter struct {
 	*openAIKeylessProvider
 }
@@ -18,12 +31,22 @@ func NewOrcaRouter() *OrcaRouter {
 	return &OrcaRouter{newOpenAIKeylessProvider(openAIKeylessConfig{
 		Name:           "orcarouter",
 		Label:          "OrcaRouter",
-		URL:            "https://api.orcarouter.ai/v1/models",
+		URL:            orcaRouterModelsURL,
 		CompletionsURL: "https://api.orcarouter.ai/v1/chat/completions",
 		DefaultModel:   "orcafree",
 		ModelIDs:       map[string]string{"orcafree": "orcarouter/free"},
-		ModelsSupplier: func() map[string]string { return catalog.Models("orcarouter") },
-		Description:    "Free OrcaRouter models through a configured API token",
+		ModelsSupplier: func() map[string]string {
+			models := catalog.Models("orcarouter")
+			for id, price := range pricing.AllFor("orcarouter") {
+				// Unpriced router aliases stay in the verified free lane.
+				if price.Prompt == "" {
+					continue
+				}
+				models[app.PrefixModelID("orcarouter", id)] = id
+			}
+			return models
+		},
+		Description:    "OrcaRouter models through a configured API token",
 		SupportsStream: true,
 		TokenSupplier: func() string {
 			current, _ := config.LoadCredentials()
@@ -39,6 +62,26 @@ func (p *OrcaRouter) SupportsModel(model string) bool {
 
 func (p *OrcaRouter) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
+	seen := map[string]bool{}
+	free := make([]string, 0)
+	addFree := func(id string) {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			free = append(free, id)
+		}
+	}
+	for id := range catalog.Models("orcarouter") {
+		addFree(id)
+		addFree(app.PrefixModelID("orcarouter", id))
+	}
+	for id, price := range pricing.AllFor("orcarouter") {
+		if price.Prompt == "" || price.Prompt == "0" {
+			addFree(id)
+			addFree(app.PrefixModelID("orcarouter", id))
+		}
+	}
+	sort.Strings(free)
+	info.FreeModels = free
 	store, _ := config.LoadCredentials()
 	info.Working = store.Token("orcarouter") != ""
 	return info

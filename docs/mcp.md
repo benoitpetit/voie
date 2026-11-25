@@ -125,6 +125,6 @@ Pass a returned ID as `conversation_id` to `chat_completion` to resume the conve
 
 Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); public upstream prices replace that value when available. Paid models with no public price show `price unknown`.
 
-OpenRouter also exposes its public catalogue of subscription models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
+OpenRouter also exposes its public catalogue of paid models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
 
-ACP-backed CLI providers publish the models advertised by the agent itself (cached for 24 h after a connection) alongside their `*-auto` alias; those subscription models are labelled `paid`.
+ACP-backed CLI providers publish the models advertised by the agent itself (cached for 24 h after a connection) alongside their `*-auto` alias; they run on your own subscription and show `subscribe` in the PRICE column. OrcaRouter publishes its authenticated model catalogue as `paid` with real per-token USD prices; unpriced router aliases stay `free`.

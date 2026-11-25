@@ -618,3 +618,19 @@ func TestEveryFreeModelHasZeroPrice(t *testing.T) {
 		}
 	}
 }
+
+func TestListModelsLabelsSubscriptionPaidModels(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("codebuddy", &testProvider{info: ProviderInfo{
+		Name: "codebuddy", Working: true, SupportedModels: []string{"cb-auto"},
+		NoFreeModels: true, Subscription: true,
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := service.ListModelsFiltered("", TierPaid)
+	if len(models) != 1 || models[0].Price == nil || models[0].Price.Label != "subscribe" {
+		t.Fatalf("models = %+v, want subscribe price label", models)
+	}
+}

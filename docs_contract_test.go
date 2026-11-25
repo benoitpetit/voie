@@ -189,9 +189,11 @@ func TestDocsDescribeModelTiers(t *testing.T) {
 	mcp := readDoc(t, "docs/mcp.md")
 	assertContains(t, "docs/mcp.md", mcp, "tier")
 	assertContains(t, "docs/mcp.md", mcp, "price unknown")
+	assertContains(t, "docs/mcp.md", mcp, "subscribe")
 	api := readDoc(t, "api-reference.md")
 	assertContains(t, "api-reference.md", api, "tier")
 	assertContains(t, "api-reference.md", api, "price unknown")
+	assertContains(t, "api-reference.md", api, "subscribe")
 	assertContains(t, "README.md", readDoc(t, "README.md"), "TIER")
 }
 

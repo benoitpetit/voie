@@ -65,7 +65,9 @@ func runModels(stdout io.Writer, service *app.Service, jsonOutput bool, provider
 	for _, model := range models {
 		name, _ := model.Meta["provider"].(string)
 		price := "-"
-		if model.Price != nil && model.Price.PromptPerToken != "" {
+		if model.Price != nil && model.Price.Label != "" {
+			price = model.Price.Label
+		} else if model.Price != nil && model.Price.PromptPerToken != "" {
 			price = model.Price.Currency + " " + model.Price.PromptPerToken + "/" + model.Price.CompletionPerToken
 		} else if model.Tier == app.TierPaid {
 			price = "price unknown"

@@ -112,6 +112,9 @@ type ModelPrice struct {
 	PromptPerToken     string `json:"prompt_per_token,omitempty"`
 	CompletionPerToken string `json:"completion_per_token,omitempty"`
 	Currency           string `json:"currency,omitempty"`
+	// Label replaces the numeric price in listings, e.g. "subscribe" for
+	// models billed through the user's own agent subscription.
+	Label string `json:"label,omitempty"`
 }
 
 type ProviderInfo struct {
@@ -127,8 +130,11 @@ type ProviderInfo struct {
 	NeedsAuth          bool     `json:"needs_auth"`
 	Description        string   `json:"description"`
 	ReverseEngineering bool     `json:"reverse_engineering"`
-	FreeModels         []string `json:"free_models"`
-	NoFreeModels       bool     `json:"-"`
+	// Subscription marks providers billed through the user's own subscription
+	// rather than per-token upstream pricing.
+	Subscription bool     `json:"subscription,omitempty"`
+	FreeModels   []string `json:"free_models"`
+	NoFreeModels bool     `json:"-"`
 }
 
 type ModelInfo struct {
