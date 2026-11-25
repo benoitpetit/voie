@@ -594,3 +594,27 @@ func TestListModelsShowsZeroPricesForFreeModels(t *testing.T) {
 		t.Fatalf("paid model price missing: %+v", paid)
 	}
 }
+
+func TestEveryFreeModelHasZeroPrice(t *testing.T) {
+	pricing.SetSource("")
+	registry := NewRegistry()
+	registry.Register("duckai", &testProvider{info: ProviderInfo{
+		Name: "duckai", Working: true, SupportedModels: []string{"gpt-6-luna"},
+	}})
+	registry.Register("openrouter", &testProvider{info: ProviderInfo{
+		Name: "openrouter", Working: true, SupportedModels: []string{"or-free"},
+	}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := service.ListModelsFiltered("", TierFree)
+	if len(models) != 2 {
+		t.Fatalf("free models = %+v", models)
+	}
+	for _, model := range models {
+		if model.Price == nil || model.Price.PromptPerToken != "0" || model.Price.CompletionPerToken != "0" || model.Price.Currency != "USD" {
+			t.Fatalf("%s: price = %+v, want USD 0/0", model.ID, model.Price)
+		}
+	}
+}

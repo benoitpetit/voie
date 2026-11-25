@@ -142,3 +142,5 @@ The MCP transport writes protocol messages to stdout. `voie mcp` sends applicati
 `voie connect disconnect <provider>` removes the saved key and its connection state, so the provider's models disappear from `voie models`. For CLI agents and local gateways, voie asks whether to also delete the installed npm/uv package or the cloned gateway directory; answering no keeps the files. `--remove-app` removes them without a prompt (for scripts), and `--keep-app` keeps them without prompting.
 
 Only the `auto` lane of pplx-proxy is classified `free`; the subscription models it advertises are `paid` with `price unknown`. A `403` from Perplexity means the connected account tier cannot use that model — the upstream error message is surfaced verbatim.
+
+Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); public upstream prices replace that value when available. Paid models with no public price show `price unknown`.

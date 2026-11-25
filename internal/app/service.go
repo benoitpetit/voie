@@ -566,6 +566,8 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 					PromptPerToken: upstreamPrice.Prompt, CompletionPerToken: upstreamPrice.Completion,
 					Currency: "USD",
 				}
+			} else if modelTier == TierFree {
+				model.Price = &ModelPrice{PromptPerToken: "0", CompletionPerToken: "0", Currency: "USD"}
 			}
 			models = append(models, model)
 		}

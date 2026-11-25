@@ -11,7 +11,7 @@
 
 ### Fixed
 
-- Free models backed by a public price catalogue display their zero cost as `USD 0/0`.
+- Every free model displays `USD 0/0`; public upstream prices replace it when available.
 
 - Catalogue coherence: prices are looked up by upstream ID with failure backoff; public prefixes now select the owning provider; empty vs absent free lists, case-insensitive allowlists and subscription lanes are classified correctly; failed gateway probes keep the last known catalogue; provider metadata uses public model IDs on all surfaces; MCP `list_providers` exposes full metadata; declared aliases keep their names; `--all` conflicts and unknown provider filters are validated.
 
