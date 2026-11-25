@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -158,12 +159,24 @@ func (c *Client) SetModel(ctx context.Context, sessionID, model string) error {
 	if model == "" || model == "auto" {
 		return nil
 	}
-	_, err := c.call(ctx, "session/setConfigOption", map[string]any{
-		"sessionId": sessionID,
-		"configId":  "model",
-		"value":     model,
-	})
+	params := map[string]any{"sessionId": sessionID, "configId": "model", "value": model}
+	_, err := c.call(ctx, "session/setConfigOption", params)
+	if err != nil && isMethodNotFound(err) {
+		// Agents that do not implement the camelCase method may also ignore
+		// the snake_case fallback; never block the caller indefinitely.
+		fallbackCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+		_, err = c.call(fallbackCtx, "session/set_config_option", params)
+	}
 	return err
+}
+
+func isMethodNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "-32601") || strings.Contains(message, "method not found")
 }
 
 // Prompt sends one turn and collects agent message chunks until the turn ends.

@@ -222,3 +222,17 @@ func TestPromptReturnsWhenAgentExitsDuringGrace(t *testing.T) {
 		t.Fatal("Prompt hung after the agent closed stdout during the grace window")
 	}
 }
+
+func TestSetModelFallsBackToSnakeCaseMethod(t *testing.T) {
+	agent := newFakeAgent()
+	client := NewClient(agent, agent)
+	agent.push(`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"not found"}}`)
+	agent.push(`{"jsonrpc":"2.0","id":2,"result":{}}`)
+	if err := client.SetModel(context.Background(), "s1", "gpt-6-luna"); err != nil {
+		t.Fatalf("SetModel with snake_case fallback: %v", err)
+	}
+	sent := agent.sent()
+	if !strings.Contains(sent, "session/setConfigOption") || !strings.Contains(sent, "session/set_config_option") {
+		t.Fatalf("both method names must be tried: %s", sent)
+	}
+}
