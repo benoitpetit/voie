@@ -210,7 +210,8 @@ func (s *Service) completeEnsemble(ctx context.Context, request CompletionReques
 	if !policy.Enabled {
 		policy.MaxRetries, policy.MaxFallbackModels = 0, 0
 	}
-	policy.MaxFallbackModels = run.budget
+	// Synthesis keeps the configured fallback budget; replacement calls have
+	// already consumed their own share during the agent phase.
 	synthesisRequest := request
 	synthesisRequest.Messages = run.synthesis
 	fallbacks := s.ensembleSynthesisFallbacks(request, policy, run.model, run.used)

@@ -334,7 +334,7 @@ func (s *Service) CompleteStreamWithInfo(ctx context.Context, request Completion
 		if !synthesisPolicy.Enabled {
 			synthesisPolicy.MaxRetries, synthesisPolicy.MaxFallbackModels = 0, 0
 		}
-		synthesisPolicy.MaxFallbackModels = run.budget
+		// Synthesis uses the configured budget; replacements cannot starve it.
 		synthesisRequest := request
 		synthesisRequest.Messages = run.synthesis
 		synthesisRequest.OnProgress = func(event ProgressEvent) {

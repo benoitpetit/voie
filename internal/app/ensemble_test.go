@@ -436,3 +436,36 @@ func TestEnsembleFallbackHonorsExplicitCandidateOutsidePool(t *testing.T) {
 		t.Fatalf("ensembleFallbacks = %v, want explicit outsider first", got)
 	}
 }
+
+func TestEnsembleSynthesisKeepsBudgetAfterReplacement(t *testing.T) {
+	a := &fallbackProvider{
+		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}},
+		failFirst: map[string]int{"a-model": 10},
+		failures:  map[string]error{"a-model": permanentFailure("a", "a-model")},
+	}
+	b := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}}
+	c := &fallbackProvider{info: ProviderInfo{Name: "c", Working: true, SupportedModels: []string{"c-model"}}}
+	synth := &fallbackProvider{
+		info:      ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}},
+		failFirst: map[string]int{"synth": 10},
+		failures:  map[string]error{"synth": transientFailure("synth", "synth")},
+	}
+	synth2 := &fallbackProvider{info: ProviderInfo{Name: "synth2", Working: true, SupportedModels: []string{"synth2"}}}
+	service, _ := fallbackService(t, ServiceOptions{SynthesisModel: "synth",
+		Fallback: &FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1,
+			Models: map[string][]string{"synth": {"synth2"}}},
+	}, a, b, c, synth, synth2)
+	response, err := service.Complete(context.Background(), CompletionRequest{
+		Strategy: StrategyEnsemble, Models: []string{"a-model", "b-model"},
+		Messages: []Message{{Role: "user", Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("replacement must not starve synthesis fallback: %v", err)
+	}
+	if response.Model != "synth2" || response.Provider != "synth2" {
+		t.Fatalf("response = %+v, want synthesis fallback synth2", response)
+	}
+	if len(c.calls) != 1 || len(synth2.calls) != 1 {
+		t.Fatalf("calls c=%v synth2=%v, want one replacement and one synthesis fallback", c.calls, synth2.calls)
+	}
+}
