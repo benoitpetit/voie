@@ -523,3 +523,52 @@ func TestTypedDeadlineIsNotRetried(t *testing.T) {
 		t.Fatalf("calls = %v, want one attempt for a permanent deadline", calls)
 	}
 }
+
+func TestFallbackLoopsEnforceProviderPin(t *testing.T) {
+	newProviders := func() (*fallbackProvider, *fallbackProvider, *Service) {
+		a := &fallbackProvider{
+			info:            ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}},
+			failFirst:       map[string]int{"a-model": 10},
+			streamFailFirst: map[string]int{"a-model": 10},
+			failures:        map[string]error{"a-model": transientFailure("a", "a-model")},
+			streamFailures:  map[string]error{"a-model": transientFailure("a", "a-model")},
+		}
+		b := &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}}
+		service, _ := fallbackService(t, ServiceOptions{Fallback: &FallbackPolicy{Enabled: true, MaxRetries: 0, MaxFallbackModels: 1}}, a, b)
+		return a, b, service
+	}
+	request := CompletionRequest{Model: "a-model", Messages: []Message{{Role: "user", Content: "hi"}}}
+	t.Run("non-streaming", func(t *testing.T) {
+		a, b, service := newProviders()
+		if _, _, err := service.callWithFallbacks(context.Background(), request, a, "a-model", []string{"b-model"}, "a", 1, service.FallbackPolicy()); err == nil {
+			t.Fatal("pinned fallback unexpectedly succeeded on another provider")
+		}
+		if len(b.calls) != 0 {
+			t.Fatalf("pinned provider b called %v", b.calls)
+		}
+		a2, b2, service2 := newProviders()
+		if _, _, err := service2.callWithFallbacks(context.Background(), request, a2, "a-model", []string{"b-model"}, "", 1, service2.FallbackPolicy()); err != nil {
+			t.Fatalf("unpinned fallback failed: %v", err)
+		}
+		if len(b2.calls) != 1 {
+			t.Fatalf("unpinned provider b calls = %v, want one", b2.calls)
+		}
+	})
+	t.Run("streaming", func(t *testing.T) {
+		a, b, service := newProviders()
+		_, err := service.streamWithFallbacks(context.Background(), request, a, "a-model", []string{"b-model"}, "a", 1, service.FallbackPolicy(), func(string) {})
+		if err == nil {
+			t.Fatal("pinned streaming fallback unexpectedly succeeded on another provider")
+		}
+		if len(b.calls) != 0 {
+			t.Fatalf("pinned streaming provider b called %v", b.calls)
+		}
+		a2, b2, service2 := newProviders()
+		if _, err := service2.streamWithFallbacks(context.Background(), request, a2, "a-model", []string{"b-model"}, "", 1, service2.FallbackPolicy(), func(string) {}); err != nil {
+			t.Fatalf("unpinned streaming fallback failed: %v", err)
+		}
+		if len(b2.calls) != 1 {
+			t.Fatalf("unpinned streaming provider b calls = %v, want one", b2.calls)
+		}
+	})
+}

@@ -233,6 +233,9 @@ func (s *Service) callWithFallbacks(ctx context.Context, request CompletionReque
 			if provider == nil || !provider.GetInfo().Working {
 				continue
 			}
+			if pin != "" && !strings.EqualFold(provider.GetInfo().Name, pin) {
+				continue
+			}
 		}
 		providerName := provider.GetInfo().Name
 	retryLoop:
@@ -320,6 +323,9 @@ func (s *Service) streamWithFallbacks(ctx context.Context, request CompletionReq
 		if index > 0 {
 			provider = s.registry.GetForModel(candidate)
 			if provider == nil || !provider.GetInfo().Working {
+				continue
+			}
+			if pin != "" && !strings.EqualFold(provider.GetInfo().Name, pin) {
 				continue
 			}
 		}
