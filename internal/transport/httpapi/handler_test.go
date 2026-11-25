@@ -1288,3 +1288,22 @@ func TestHTTPChatExecutesEnsemble(t *testing.T) {
 		t.Fatalf("response = %+v routing = %+v", response, response.Routing)
 	}
 }
+
+func TestHTTPFallbackModelsOverrideZeroBudget(t *testing.T) {
+	registry := app.NewRegistry()
+	primary := &httpFallbackProvider{info: app.ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}, failingModel: "model-a", failures: 1,
+		failure: app.NewProviderFailure(app.FailureUnavailable, "a", "model-a", 404, errors.New("gone"))}
+	backup := &httpFallbackProvider{info: app.ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry.Register("a", primary)
+	registry.Register("b", backup)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Minute,
+		Fallback: &app.FallbackPolicy{Enabled: false, MaxRetries: 0, MaxFallbackModels: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service, &config.Config{})
+	status, response := httpChatRequest(t, handler, `{"model":"model-a","fallback":{"models":["model-b"]},"messages":[{"role":"user","content":"hi"}]}`)
+	if status != http.StatusOK || response.Model != "model-b" {
+		t.Fatalf("status=%d response=%+v, want model-b fallback with zero configured budget", status, response)
+	}
+}

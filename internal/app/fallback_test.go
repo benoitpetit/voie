@@ -311,7 +311,7 @@ func TestFallbackClassicRequestModelsReplaceConfigured(t *testing.T) {
 	}
 }
 
-func TestFallbackClassicNeverBypassesPinnedProvider(t *testing.T) {
+func TestFallbackRejectsPinnedCrossProviderCandidate(t *testing.T) {
 	a := &fallbackProvider{
 		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}},
 		failFirst: map[string]int{"a-model": 10},
@@ -323,15 +323,14 @@ func TestFallbackClassicNeverBypassesPinnedProvider(t *testing.T) {
 		Provider: "a", Model: "a-model", Messages: []Message{{Role: "user", Content: "hi"}},
 		Fallback: &FallbackOverride{Models: []string{"b-model"}},
 	})
-	if !errors.Is(err, ErrUpstream) {
-		t.Fatalf("error = %v, want ErrUpstream", err)
+	if err == nil || !strings.Contains(err.Error(), `not supported by provider "a"`) {
+		t.Fatalf("error = %v, want an explicit cross-provider rejection", err)
 	}
 	if len(b.calls) != 0 {
 		t.Fatalf("pinned provider bypassed: b calls = %v", b.calls)
 	}
-	var failure *ProviderFailure
-	if !errors.As(err, &failure) || failure.Provider != "a" {
-		t.Fatalf("error = %v, want original provider a failure", err)
+	if len(a.calls) != 0 {
+		t.Fatalf("request should be rejected before provider calls: a calls = %v", a.calls)
 	}
 }
 
@@ -571,4 +570,38 @@ func TestFallbackLoopsEnforceProviderPin(t *testing.T) {
 			t.Fatalf("unpinned streaming provider b calls = %v, want one", b2.calls)
 		}
 	})
+}
+
+func TestFallbackModelsEnableBudgetFromZero(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("a", &fallbackProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}})
+	registry.Register("b", &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}})
+	policy := FallbackPolicy{Enabled: false, MaxRetries: 0, MaxFallbackModels: 0}
+	service, err := NewService(registry, ServiceOptions{Fallback: &policy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := service.resolvePolicy(CompletionRequest{Fallback: &FallbackOverride{Models: []string{"b-model"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !resolved.Enabled || resolved.MaxRetries != 1 || resolved.MaxFallbackModels != 1 {
+		t.Fatalf("resolved = %+v, want enabled with 1/1 budgets", resolved)
+	}
+}
+
+func TestFallbackRejectsCrossProviderModelWhenProviderPinned(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register("a", &fallbackProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}})
+	registry.Register("b", &fallbackProvider{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"b-model"}}})
+	service, err := NewService(registry, ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.resolvePolicy(CompletionRequest{
+		Provider: "a", Fallback: &FallbackOverride{Models: []string{"b-model"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider") {
+		t.Fatalf("error = %v, want an explicit cross-provider fallback rejection", err)
+	}
 }

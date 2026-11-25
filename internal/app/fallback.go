@@ -19,17 +19,20 @@ func (s *Service) resolvePolicy(request CompletionRequest) (FallbackPolicy, erro
 	if override == nil {
 		return policy, nil
 	}
+	// Every fallback-specific field implies enablement unless the caller
+	// explicitly disabled it. This keeps CLI, HTTP and MCP behavior identical.
+	enabled := policy.Enabled
 	if override.Enabled != nil {
-		policy.Enabled = *override.Enabled
-		if policy.Enabled && override.MaxRetries == nil && override.MaxFallbackModels == nil &&
-			policy.MaxRetries == 0 && policy.MaxFallbackModels == 0 {
-			// `--fallback` must not be a no-op when the configured budgets
-			// are both zero; explicit zero overrides still win below.
-			policy.MaxRetries, policy.MaxFallbackModels = 1, 1
-		}
+		enabled = *override.Enabled
+	} else if override.Models != nil || override.MaxRetries != nil || override.MaxFallbackModels != nil {
+		enabled = true
 	}
-	if override.Models != nil && (override.Enabled == nil || *override.Enabled) {
-		policy.Enabled = true
+	policy.Enabled = enabled
+	if policy.Enabled && override.MaxRetries == nil && override.MaxFallbackModels == nil &&
+		policy.MaxRetries == 0 && policy.MaxFallbackModels == 0 {
+		// Enabling fallback must not be a no-op when the configured budgets
+		// are both zero; explicit zero overrides still win below.
+		policy.MaxRetries, policy.MaxFallbackModels = 1, 1
 	}
 	if override.MaxRetries != nil {
 		if *override.MaxRetries < 0 || *override.MaxRetries > 3 {
@@ -49,6 +52,12 @@ func (s *Service) resolvePolicy(request CompletionRequest) (FallbackPolicy, erro
 			id = strings.TrimSpace(id)
 			if s.registry.GetForModel(id) == nil {
 				return policy, appError(ErrUnknownModel, fmt.Sprintf("fallback model %q is not supported", id), nil)
+			}
+			if pinned := strings.ToLower(strings.TrimSpace(request.Provider)); pinned != "" {
+				provider := s.registry.Get(pinned)
+				if provider == nil || !supportsModel(provider, id) {
+					return policy, appError(ErrInvalidInput, fmt.Sprintf("fallback model %q is not supported by provider %q", id, pinned), nil)
+				}
 			}
 			if _, duplicate := seen[strings.ToLower(id)]; duplicate {
 				return policy, appError(ErrInvalidInput, fmt.Sprintf("fallback model %q is listed more than once", id), nil)

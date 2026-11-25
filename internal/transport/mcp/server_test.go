@@ -485,3 +485,26 @@ func TestMCPChatCompletionExecutesEnsemble(t *testing.T) {
 		t.Fatal("ensemble result has no structured content")
 	}
 }
+
+func TestMCPFallbackModelsOverrideZeroBudget(t *testing.T) {
+	registry := app.NewRegistry()
+	primary := &mcpFallbackProvider{info: app.ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}, failingModel: "model-a", failures: 1,
+		failure: app.NewProviderFailure(app.FailureUnavailable, "a", "model-a", 404, errors.New("gone"))}
+	backup := &mcpFallbackProvider{info: app.ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry.Register("a", primary)
+	registry.Register("b", backup)
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Second,
+		Fallback: &app.FallbackPolicy{Enabled: false, MaxRetries: 0, MaxFallbackModels: 0}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{
+		"model": "model-a", "fallback": map[string]any{"models": []any{"model-b"}},
+		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("fallback result = %+v, err = %v", result, err)
+	}
+}

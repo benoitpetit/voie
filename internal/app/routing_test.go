@@ -535,3 +535,62 @@ func TestAutoStreamingUsesRoutingProfile(t *testing.T) {
 		t.Fatalf("routed models = %+v, want one auto-selected model", final.Models)
 	}
 }
+
+func TestRouterSelectsMultipleModelsForEnsemble(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{
+		"router-model": `{"task":"coding","models":["model-a","model-b"],"reason":"two complementary models"}`,
+	}}
+	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
+	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", a)
+	registry.Register("b", b)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, decision, err := service.selectCandidates(context.Background(), CompletionRequest{Task: "coding"}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 2 || !strings.EqualFold(selected[0].Model, "model-a") || !strings.EqualFold(selected[1].Model, "model-b") {
+		t.Fatalf("selected = %+v, want model-a and model-b", selected)
+	}
+	if len(decision.Models) != 2 || len(decision.Attempts) != 1 || decision.Attempts[0].Outcome != OutcomeSucceeded {
+		t.Fatalf("decision = %+v", decision)
+	}
+}
+
+func TestInvalidMultiModelRouterDecisionFallsBackLocally(t *testing.T) {
+	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{
+		"router-model": `{"task":"coding","models":["model-a","model-b","model-c"],"reason":"too many"}`,
+	}}
+	a := &routingStub{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}}}
+	b := &routingStub{info: ProviderInfo{Name: "b", Working: true, SupportedModels: []string{"model-b"}}}
+	registry := NewRegistry()
+	registry.Register("router", router)
+	registry.Register("a", a)
+	registry.Register("b", b)
+	service, err := NewService(registry, ServiceOptions{RouterModel: "router-model", RoutingPolicy: RoutingPolicy{
+		Models: map[string]ModelDescriptor{
+			"model-a": {Capabilities: []string{"coding"}}, "model-b": {Capabilities: []string{"coding"}},
+		},
+		Tasks: map[string]TaskRule{"coding": {RequiredCapabilities: []string{"coding"}, Selection: SelectionRouter}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, decision, err := service.selectCandidates(context.Background(), CompletionRequest{Task: "coding"}, 2)
+	if err != nil {
+		t.Fatalf("invalid router decision should fall back locally: %v", err)
+	}
+	if len(selected) != 2 || len(decision.Attempts) != 1 || decision.Attempts[0].Outcome != OutcomeFailed {
+		t.Fatalf("selected = %+v decision = %+v, want two local models and one failed router attempt", selected, decision)
+	}
+}

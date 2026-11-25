@@ -403,11 +403,12 @@ func (s *Service) runIndependent(ctx context.Context, request CompletionRequest,
 		if next == "" {
 			break
 		}
-		state.budget--
 		candidate := s.candidateForModel(next, request.Provider)
 		if candidate.Model == "" {
+			state.budget--
 			continue
 		}
+		state.budget--
 		state.addUsed(candidate.Model)
 		replacementPolicy := policy
 		replacementPolicy.MaxRetries = 0
@@ -458,11 +459,12 @@ func (s *Service) runChain(ctx context.Context, request CompletionRequest, candi
 		if next == "" {
 			break
 		}
-		state.budget--
 		candidate := s.candidateForModel(next, request.Provider)
 		if candidate.Model == "" {
+			state.budget--
 			continue
 		}
+		state.budget--
 		state.addUsed(candidate.Model)
 		messages := request.Messages
 		if latest.response != nil {
@@ -574,9 +576,15 @@ func debateMessages(messages []Message, own ensembleResult, previous []ensembleR
 
 func (s *Service) nextEnsembleFallback(request CompletionRequest, policy FallbackPolicy, state *ensembleState) string {
 	for _, candidate := range s.ensembleFallbacks(request, policy, state.used) {
-		if !state.usedSet[candidate] {
-			return candidate
+		if state.usedSet[candidate] {
+			continue
 		}
+		// Never spend the replacement budget on a candidate the pinned
+		// provider cannot serve.
+		if s.candidateForModel(candidate, request.Provider).Model == "" {
+			continue
+		}
+		return candidate
 	}
 	return ""
 }
