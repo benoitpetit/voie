@@ -11,7 +11,19 @@ import (
 )
 
 func bearerAuth(token string, requireConversationScope bool, next http.Handler) http.Handler {
+	return bearerAuthExcept(token, requireConversationScope, next)
+}
+
+// bearerAuthExcept protects every path except the listed public ones. The A2A
+// Agent Card must be discoverable before a client has a token.
+func bearerAuthExcept(token string, requireConversationScope bool, next http.Handler, publicPaths ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, path := range publicPaths {
+			if r.URL.Path == path {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
 		if requireConversationScope && strings.TrimSpace(token) == "" {
 			writeError(w, http.StatusUnauthorized, "valid bearer token required")
 			return

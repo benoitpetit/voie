@@ -166,7 +166,7 @@ func (r *Runtime) Serve(ctx context.Context, host, port string) error {
 		return fmt.Errorf("invalid bind configuration: %w", err)
 	}
 	utils.Info("Starting %s %s HTTP server on %s", brand.Name, brand.Version, net.JoinHostPort(cfg.Host, cfg.Port))
-	utils.Info("HTTP routes: /, /health, /v1/chat/completions, /v1/models, /v1/providers")
+	utils.Info("HTTP routes: /, /health, /v1/chat/completions, /v1/models, /v1/providers, /v1/conversations, /a2a, /.well-known/agent-card.json")
 	utils.Info("Provider catalogue: %d providers, %d models", len(r.AppService.ListProviderMetadata()), len(r.AppService.ListModels()))
 	server := httpapi.NewServer(r.AppService, &cfg)
 	serverErrors := make(chan error, 1)

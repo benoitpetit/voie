@@ -1307,3 +1307,29 @@ func TestHTTPFallbackModelsOverrideZeroBudget(t *testing.T) {
 		t.Fatalf("status=%d response=%+v, want model-b fallback with zero configured budget", status, response)
 	}
 }
+
+func TestAgentCardIsPublicAndRPCIsProtected(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{APIToken: "secret"})
+
+	cardRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(cardRecorder, httptest.NewRequest(http.MethodGet, "/.well-known/agent-card.json", nil))
+	if cardRecorder.Code != http.StatusOK || !strings.Contains(cardRecorder.Body.String(), "voie.chat.classic") {
+		t.Fatalf("card status=%d body=%q", cardRecorder.Code, cardRecorder.Body.String())
+	}
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"GetExtendedAgentCard","params":{}}`
+	rpcRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(rpcRecorder, httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(body)))
+	if rpcRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated RPC status=%d, want 401", rpcRecorder.Code)
+	}
+
+	rpcRecorder = httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer secret")
+	handler.ServeHTTP(rpcRecorder, request)
+	if rpcRecorder.Code != http.StatusOK || !strings.Contains(rpcRecorder.Body.String(), "voie.chat.auto") {
+		t.Fatalf("authenticated RPC status=%d body=%q", rpcRecorder.Code, rpcRecorder.Body.String())
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/brand"
+	"github.com/benoitpetit/voie/internal/transport/a2a"
 	"github.com/benoitpetit/voie/utils"
 )
 
@@ -49,13 +51,21 @@ func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
 	mux.HandleFunc("/v1/providers", handler.providers)
 	mux.HandleFunc("/v1/conversations", handler.conversations)
 	mux.HandleFunc("/v1/conversations/", handler.conversation)
+	a2aHandler := a2a.NewHandler(service)
+	a2aHandler.SetPublicURL(os.Getenv("VOIE_A2A_PUBLIC_URL"))
+	mux.Handle("/a2a", a2aHandler)
+	mux.HandleFunc("/.well-known/agent-card.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		_ = json.NewEncoder(w).Encode(a2aHandler.Card())
+	})
 	var token string
 	var requireConversationScope bool
 	if cfg != nil {
 		token = cfg.APIToken
 		requireConversationScope = cfg.RequireConversationScope
 	}
-	return requestLogging(cors(bearerAuth(token, requireConversationScope, mux)))
+	return requestLogging(cors(bearerAuthExcept(token, requireConversationScope, mux, "/.well-known/agent-card.json")))
 }
 
 type apiHandler struct{ service *app.Service }
@@ -367,7 +377,7 @@ func (h *apiHandler) root(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"name": brand.Name, "version": brand.Version,
 		"description":     "A local OpenAI-compatible API for discovering and calling supported models.",
-		"endpoints":       map[string]string{"chat_completions": "POST /v1/chat/completions", "models": "GET  /v1/models", "providers": "GET  /v1/providers", "health": "GET  /health"},
+		"endpoints":       map[string]string{"chat_completions": "POST /v1/chat/completions", "models": "GET  /v1/models", "providers": "GET  /v1/providers", "health": "GET  /health", "a2a_rpc": "POST /a2a", "a2a_agent_card": "GET  /.well-known/agent-card.json"},
 		"providers_count": workingCount, "models_count": modelCount, "openai_compatible": true,
 	})
 }
