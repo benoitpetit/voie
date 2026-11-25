@@ -134,3 +134,14 @@ func TestProviderFailureReasonAppearsInMessage(t *testing.T) {
 		t.Fatalf("error = %q, want the static reason", failure.Error())
 	}
 }
+
+func TestDescribeErrorCarriesTypeAndCode(t *testing.T) {
+	info := DescribeError(appError(ErrUnknownModel, "unknown model x", nil))
+	if info.Type != "unknown_model" || info.Code != "unknown_model" || info.Message != "unknown model x" {
+		t.Fatalf("info = %+v", info)
+	}
+	failure := DescribeError(NewProviderFailure(FailureTransient, "a", "m", 503, errors.New("down")))
+	if !strings.Contains(failure.Type, "transient") || failure.Code == "" {
+		t.Fatalf("failure = %+v", failure)
+	}
+}

@@ -530,3 +530,38 @@ func TestMCPChatCompletionStreamAggregatesChunks(t *testing.T) {
 		t.Fatalf("structured = %s, want streamed text", encoded)
 	}
 }
+
+func TestMCPModelsUseSharedModelInfoShape(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_models", Arguments: map[string]any{}})
+	if err != nil || result.StructuredContent == nil {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	encoded, _ := json.Marshal(result.StructuredContent)
+	var output modelsOutput
+	if err := json.Unmarshal(encoded, &output); err != nil {
+		t.Fatal(err)
+	}
+	if len(output.Models) == 0 {
+		t.Fatal("no models")
+	}
+	if output.Models[0].Tier == "" || output.Models[0].Price == nil || output.Models[0].Price.Currency == "" {
+		t.Fatalf("model = %+v, want shared ModelInfo shape", output.Models[0])
+	}
+}
+
+func TestMCPErrorIncludesTypeAndCode(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "chat_completion", Arguments: map[string]any{"model": "missing", "messages": []any{map[string]any{"role": "user", "content": "hi"}}}})
+	if err != nil || !result.IsError || result.StructuredContent == nil {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	encoded, _ := json.Marshal(result.StructuredContent)
+	if !strings.Contains(string(encoded), `"type"`) || !strings.Contains(string(encoded), `"code"`) {
+		t.Fatalf("structured = %s, want error type and code", encoded)
+	}
+}

@@ -32,23 +32,18 @@ type listModelsInput struct {
 	Provider string `json:"provider,omitempty" jsonschema:"optional provider name filter"`
 }
 
-type modelItem struct {
-	ID       string        `json:"id"`
-	Provider string        `json:"provider"`
-	OwnedBy  string        `json:"owned_by"`
-	Group    string        `json:"group,omitempty"`
-	Tier     app.ModelTier `json:"tier"`
-	Price    string        `json:"price,omitempty"`
-}
+// modelItem is the shared app.ModelInfo so MCP, CLI and HTTP expose the same
+// tier/price object and metadata fields.
+type modelItem = app.ModelInfo
 
 type modelGroup struct {
-	Name   string      `json:"name"`
-	Models []modelItem `json:"models"`
+	Name   string          `json:"name"`
+	Models []app.ModelInfo `json:"models"`
 }
 
 type modelsOutput struct {
-	Models []modelItem  `json:"models"`
-	Groups []modelGroup `json:"groups"`
+	Models []app.ModelInfo `json:"models"`
+	Groups []modelGroup    `json:"groups"`
 }
 
 type providersOutput struct {
@@ -69,6 +64,7 @@ type chatCompletionInput struct {
 }
 
 type chatCompletionOutput struct {
+	Error          *app.ErrorInfo   `json:"error,omitempty"`
 	Text           string           `json:"text"`
 	Model          string           `json:"model"`
 	Provider       string           `json:"provider"`
@@ -94,22 +90,15 @@ func NewServer(service *app.Service) *mcp.Server {
 			return nil, modelsOutput{}, fmt.Errorf("unknown provider %q", provider)
 		}
 		models := service.ListModelsFiltered(provider, tier)
-		output := modelsOutput{Models: make([]modelItem, 0, len(models))}
-		byGroup := make(map[string][]modelItem)
+		output := modelsOutput{Models: make([]app.ModelInfo, 0, len(models))}
+		byGroup := make(map[string][]app.ModelInfo)
 		for _, model := range models {
-			provider, _ := model.Meta["provider"].(string)
 			group := model.Group
 			if group == "" {
 				group = model.OwnedBy
 			}
-			item := modelItem{ID: model.ID, Provider: provider, OwnedBy: model.OwnedBy, Group: group, Tier: model.Tier}
-			if model.Price != nil && model.Price.Label != "" {
-				item.Price = model.Price.Label
-			} else if model.Price != nil && model.Price.PromptPerToken != "" {
-				item.Price = model.Price.Currency + " " + model.Price.PromptPerToken + "/" + model.Price.CompletionPerToken
-			} else if model.Tier == app.TierPaid {
-				item.Price = "price unknown"
-			}
+			item := model
+			item.Group = group
 			output.Models = append(output.Models, item)
 			byGroup[group] = append(byGroup[group], item)
 		}
@@ -123,10 +112,15 @@ func NewServer(service *app.Service) *mcp.Server {
 			lines = append(lines, fmt.Sprintf("%s:", name))
 			for _, item := range byGroup[name] {
 				price := ""
-				if item.Price != "" {
-					price = " — " + item.Price
+				if item.Price != nil {
+					if item.Price.Label != "" {
+						price = " — " + item.Price.Label
+					} else if item.Price.PromptPerToken != "" {
+						price = " — " + item.Price.Currency + " " + item.Price.PromptPerToken + "/" + item.Price.CompletionPerToken
+					}
 				}
-				lines = append(lines, fmt.Sprintf("  %s (%s) [%s]%s", item.ID, item.Provider, item.Tier, price))
+				provider, _ := item.Meta["provider"].(string)
+				lines = append(lines, fmt.Sprintf("  %s (%s) [%s]%s", item.ID, provider, item.Tier, price))
 			}
 			output.Groups = append(output.Groups, modelGroup{Name: name, Models: byGroup[name]})
 		}
@@ -163,7 +157,7 @@ func NewServer(service *app.Service) *mcp.Server {
 				routing = info
 			})
 			if err != nil {
-				return nil, chatCompletionOutput{}, err
+				return mcpChatError(err)
 			}
 			output := chatCompletionOutput{Text: text.String(), Model: input.Model, Routing: routing}
 			if routing != nil && len(routing.Attempts) > 0 {
@@ -174,7 +168,7 @@ func NewServer(service *app.Service) *mcp.Server {
 		}
 		response, err := service.Complete(ctx, request)
 		if err != nil {
-			return nil, chatCompletionOutput{}, err
+			return mcpChatError(err)
 		}
 		output := chatCompletionOutput{
 			Text:           response.Choices[0].Message.Content,
@@ -228,6 +222,13 @@ func Run(ctx context.Context, service *app.Service) error {
 		return nil
 	}
 	return err
+}
+
+func mcpChatError(err error) (*mcp.CallToolResult, chatCompletionOutput, error) {
+	info := app.DescribeError(err)
+	result := textToolResult(info.Message)
+	result.IsError = true
+	return result, chatCompletionOutput{Error: &info}, nil
 }
 
 func textToolResult(text string) *mcp.CallToolResult {

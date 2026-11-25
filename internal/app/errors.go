@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -34,6 +35,19 @@ const (
 // FailureCategory classifies a provider boundary failure for retry and
 // fallback decisions at the application layer.
 type FailureCategory int
+
+func (c FailureCategory) Name() string {
+	switch c {
+	case FailureTransient:
+		return "transient"
+	case FailureUnavailable:
+		return "unavailable"
+	case FailurePermanent:
+		return "permanent"
+	default:
+		return "unknown"
+	}
+}
 
 const (
 	// FailureTransient is retryable on the same model: network failures,
@@ -108,6 +122,37 @@ func WrapNetworkFailure(err error, provider, model string) error {
 		return NewProviderFailure(FailurePermanent, provider, model, 0, err)
 	}
 	return NewProviderFailure(FailureTransient, provider, model, 0, err)
+}
+
+// ErrorInfo is the shared error vocabulary exposed by CLI, MCP and A2A.
+type ErrorInfo struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+}
+
+// DescribeError maps a Go error to a stable type/code pair without leaking
+// provider response bodies.
+func DescribeError(err error) ErrorInfo {
+	info := ErrorInfo{Message: err.Error(), Type: "error", Code: "internal"}
+	var failure *ProviderFailure
+	if errors.As(err, &failure) {
+		info.Type = "provider_" + failure.Category.Name()
+		info.Code = info.Type
+		return info
+	}
+	var appErr *Error
+	if errors.As(err, &appErr) && appErr.Kind != nil {
+		info.Type = errorCodeName(appErr.Kind.Error())
+		info.Code = info.Type
+	}
+	return info
+}
+
+func errorCodeName(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer(" ", "_", "-", "_", "/", "_")
+	return replacer.Replace(value)
 }
 
 type Error struct {

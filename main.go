@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/benoitpetit/voie/config"
+	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/internal/cli"
 	"github.com/benoitpetit/voie/internal/runtime"
 	"github.com/benoitpetit/voie/utils"
@@ -15,9 +16,14 @@ import (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, formatError(err))
 		os.Exit(1)
 	}
+}
+
+func formatError(err error) string {
+	info := app.DescribeError(err)
+	return fmt.Sprintf("%s: %s: %s", info.Type, info.Code, info.Message)
 }
 
 func run(args []string) error {
