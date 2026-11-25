@@ -656,3 +656,50 @@ func TestCLIStateFindsNpmPrefixedBinary(t *testing.T) {
 		t.Fatalf("cliState(codebuddy) = %q, want installed", got)
 	}
 }
+
+func TestInstallListReportsErrorState(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := filepath.Join(install.BinaryDir(), "node_modules", ".bin")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "codebuddy"), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("openrouter", "tok"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetState("openrouter", "bridge error"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetState("codebuddy", "bridge error"); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	command := newInstallCommand()
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs(nil)
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"openrouter", "codebuddy"} {
+		found := false
+		for _, line := range strings.Split(stdout.String(), "\n") {
+			if !strings.HasPrefix(line, want) {
+				continue
+			}
+			found = true
+			if !strings.Contains(line, " error ") || !strings.Contains(line, "voie connect "+want) {
+				t.Fatalf("%s line = %q, want error status and reconnect NEXT", want, line)
+			}
+		}
+		if !found {
+			t.Fatalf("%s missing from install list", want)
+		}
+	}
+}

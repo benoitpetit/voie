@@ -20,3 +20,15 @@ func TestInstallNextIsNoneForReadyRows(t *testing.T) {
 		}
 	}
 }
+
+func TestInstallNextReconnectsOnError(t *testing.T) {
+	if got := installNext("api", "error", "-", "openrouter"); got != "voie connect openrouter" {
+		t.Fatalf("api error NEXT = %q", got)
+	}
+	if got := installNext("cli", "error", "-", "codebuddy"); got != "voie connect codebuddy" {
+		t.Fatalf("cli error NEXT = %q", got)
+	}
+	if got := installNext("gateway", "error", "upstream", "omniroute"); got != "voie connect omniroute" {
+		t.Fatalf("gateway error NEXT = %q", got)
+	}
+}

@@ -420,7 +420,16 @@ func connectExternalGateway(command *cobra.Command, spec providers.ExternalGatew
 
 // apiProviderState is shared by `voie connect --list` and `voie install` so
 // an anonymous lane is never reported as disconnected.
+// markedError reports a persisted non-connected state such as "bridge error".
+func markedError(store *config.Credentials, name string) bool {
+	state := store.State(name)
+	return state != "" && !strings.EqualFold(state, "connected")
+}
+
 func apiProviderState(store *config.Credentials, name string) string {
+	if markedError(store, name) {
+		return "error"
+	}
 	if strings.EqualFold(store.State(name), "connected") || store.Token(name) != "" {
 		return "connected"
 	}

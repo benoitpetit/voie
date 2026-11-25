@@ -85,6 +85,9 @@ func runInstallList(out io.Writer, verbose bool) error {
 			if strings.EqualFold(store.State(spec.Name), "connected") {
 				status = "connected"
 			}
+			if markedError(store, spec.Name) {
+				status = "error"
+			}
 		}
 		account, _ := providers.ExternalGatewayAccount(spec.Name)
 		if err := write(spec.Name, "gateway", spec.Label, spec.Port, status, account.Required, command, providers.ExternalGatewaySetupHint(spec.Name)); err != nil {
@@ -93,8 +96,13 @@ func runInstallList(out io.Writer, verbose bool) error {
 	}
 	for _, name := range []string{"cline", "kiro", "antigravity", "codebuddy", "minimax-code", "devin", "qoder", "copilot-cli", "cursor"} {
 		status := cliState(name)
-		if status == "installed" && strings.EqualFold(store.State(name), "connected") {
-			status = "connected"
+		if status == "installed" {
+			if strings.EqualFold(store.State(name), "connected") {
+				status = "connected"
+			}
+			if markedError(store, name) {
+				status = "error"
+			}
 		}
 		if err := write(name, "cli", name, 0, status, "-", "voie install "+name, "-"); err != nil {
 			return err
@@ -118,6 +126,9 @@ func runInstallList(out io.Writer, verbose bool) error {
 
 // installNext returns the single action a user still needs to take.
 func installNext(kind, status, account, name string) string {
+	if status == "error" {
+		return "voie connect " + name
+	}
 	if status == "connected" || strings.HasPrefix(status, "available") {
 		return "NONE"
 	}

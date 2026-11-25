@@ -17,6 +17,8 @@
 
 ### Fixed
 
+- `voie install` reports a failed saved session as `error` with `voie connect <name>` as the next step, instead of hiding it behind `connected`/`installed`.
+
 - `voie install` marks installed keyless gateways and npm-installed agent CLIs as ready (`NONE`) instead of asking for a needless connect/install step.
 
 - Free models from authenticated catalogues (OrcaRouter) display `USD 0/0` even when upstream spells zero as `0.0000000000` or leaves it empty.
