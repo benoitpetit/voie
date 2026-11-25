@@ -227,15 +227,18 @@ func (p *openAIKeylessProvider) decodeCompletion(body io.Reader, messages []Mess
 	var parsed openAIKeylessCompletion
 	if err := json.NewDecoder(io.LimitReader(body, 8<<20)).Decode(&parsed); err != nil {
 		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, err)
+		failure.Reason = "malformed response"
 		return nil, fmt.Errorf("%s: decode response: %w", p.cfg.Name, failure)
 	}
 	if len(parsed.Choices) == 0 {
 		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, errors.New("empty response"))
+		failure.Reason = "empty response"
 		return nil, fmt.Errorf("%s: empty response: %w", p.cfg.Name, failure)
 	}
 	message := parsed.Choices[0].Message
 	if message.Content == "" && message.ToolCalls == nil {
 		failure := app.NewProviderFailure(app.FailureUnavailable, p.cfg.Name, model, 0, errors.New("empty response"))
+		failure.Reason = "empty response"
 		return nil, fmt.Errorf("%s: empty response: %w", p.cfg.Name, failure)
 	}
 	if p.cfg.ResponseHint != nil {

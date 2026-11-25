@@ -665,3 +665,19 @@ func TestChatExecutesEnsembleAcrossCLI(t *testing.T) {
 		t.Fatalf("stdout = %q, want synthesized answer", stdout.String())
 	}
 }
+
+func TestChatRejectsInvalidStrategyBeforeModel(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := executeForTest(context.Background(), []string{"chat", "--strategy", "bogus", "hello"}, strings.NewReader(""), &stdout, &stderr, mustCLITestRuntime(t))
+	if err == nil || !strings.Contains(err.Error(), "strategy must be classic, auto, or ensemble") {
+		t.Fatalf("error = %v, want invalid strategy error", err)
+	}
+}
+
+func TestChatRejectsSingleLegacyEnsembleModelEarly(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := executeForTest(context.Background(), []string{"chat", "--strategy", "ensemble", "--models", "model", "hello"}, strings.NewReader(""), &stdout, &stderr, mustCLITestRuntime(t))
+	if err == nil || !strings.Contains(err.Error(), "ensemble requires at least two models") {
+		t.Fatalf("error = %v, want early minimum-models error", err)
+	}
+}

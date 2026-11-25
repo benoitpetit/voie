@@ -127,3 +127,10 @@ func TestFailureCategoryAndOutcomeStrings(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderFailureReasonAppearsInMessage(t *testing.T) {
+	failure := &ProviderFailure{Category: FailureUnavailable, Provider: "p", Model: "m", Reason: "malformed response"}
+	if !strings.Contains(failure.Error(), "malformed response") {
+		t.Fatalf("error = %q, want the static reason", failure.Error())
+	}
+}

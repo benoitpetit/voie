@@ -241,3 +241,13 @@ func TestOpenAIKeylessEmptyStreamIsUnavailable(t *testing.T) {
 		ChatCompletionStream(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly", func(string) {})
 	assertUnavailableFailure(t, err)
 }
+
+func TestMalformedResponseTypedFailureCarriesReason(t *testing.T) {
+	useKeylessProviderResponse(t, http.StatusOK, `not json`)
+	_, err := newOpenAIKeylessProvider(keylessStubConfig(), &http.Client{}).
+		ChatCompletion(testProviderContext(), []Message{{Role: "user", Content: "Hi"}}, "friendly")
+	var failure *app.ProviderFailure
+	if !errors.As(err, &failure) || !strings.Contains(failure.Error(), "malformed response") {
+		t.Fatalf("typed failure = %+v, want a static malformed response reason", failure)
+	}
+}

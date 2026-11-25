@@ -19,6 +19,8 @@
 
 ### Fixed
 
+- Final audit follow-ups: fallback docs describe explicit lists as replacements, CLI rejects invalid strategies and single legacy ensemble models early, and typed upstream failures carry a static reason without leaking response bodies.
+
 - Execution audit: fallback flags always take effect, explicit fallback lists win in auto/ensemble, typed deadlines and malformed responses are classified coherently, router failures fall back to local selection, ensemble synthesis keeps its own budget, and provider pins are enforced in both loops.
 
 - `voie install` fills the `ACCOUNT` column for CLI agents (`subscription`) and APIs (`token`, or `none` for anonymous lanes) instead of leaving it blank.

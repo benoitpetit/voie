@@ -243,4 +243,8 @@ func TestDocsDescribeExecutionStrategiesAndFallback(t *testing.T) {
 	for _, needle := range []string{"fallback", "classic", "auto", "ensemble"} {
 		assertContains(t, "docs/architecture.md", architecture, needle)
 	}
+	assertContains(t, "docs/architecture.md", architecture, "explicit request list replaces")
+	if strings.Contains(architecture, "the request's explicit list, the configured per-model list") {
+		t.Error("docs/architecture.md still describes explicit fallback lists as merged with configured pools")
+	}
 }

@@ -68,12 +68,19 @@ type ProviderFailure struct {
 	Status   int // upstream HTTP status; 0 for network failures
 	Provider string
 	Model    string
-	Cause    error
+	// Reason is a short static explanation for status-0 failures. It never
+	// carries upstream content.
+	Reason string
+	Cause  error
 }
 
 func (e *ProviderFailure) Error() string {
 	if e.Status == 0 {
-		return fmt.Sprintf("provider %q: network failure for model %q", e.Provider, e.Model)
+		reason := e.Reason
+		if reason == "" {
+			reason = "network failure"
+		}
+		return fmt.Sprintf("provider %q: %s for model %q", e.Provider, reason, e.Model)
 	}
 	return fmt.Sprintf("provider %q returned HTTP %d for model %q", e.Provider, e.Status, e.Model)
 }
