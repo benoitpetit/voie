@@ -744,3 +744,34 @@ func TestChatStreamWritesModelChunks(t *testing.T) {
 		t.Fatalf("stdout = %q, want streamed model chunk", stdout.String())
 	}
 }
+
+type cliStreamProbeProvider struct{}
+
+func (*cliStreamProbeProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "probe", Working: true, SupportedModels: []string{"m"}, SupportsStream: true}
+}
+func (*cliStreamProbeProvider) SupportsModel(model string) bool { return model == "m" }
+func (*cliStreamProbeProvider) ChatCompletion(context.Context, []app.Message, string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "plain path"}}}}, nil
+}
+func (*cliStreamProbeProvider) ChatCompletionStream(_ context.Context, _ []app.Message, _ string, callback func(string)) error {
+	callback("stream path")
+	return nil
+}
+
+func TestChatStreamActuallyUsesStreamingPath(t *testing.T) {
+	registry := app.NewRegistry()
+	registry.Register("probe", &cliStreamProbeProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Timeout: time.Second, HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := &cliTestRuntime{service: service}
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--model", "m", "--stream", "hi"}, strings.NewReader(""), &stdout, &stderr, rt); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "stream path") || strings.Contains(stdout.String(), "plain path") {
+		t.Fatalf("stdout = %q, want streaming path only", stdout.String())
+	}
+}

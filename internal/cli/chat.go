@@ -191,7 +191,24 @@ func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, st
 		return fmt.Errorf("chat prompt must not be empty")
 	}
 	reporter := newProgressReporter(stderr, isTerminal)
-	response, err := service.Complete(ctx, app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, Ensemble: ensemble, Fallback: fallback, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}, OnProgress: reporter.Handle})
+	request := app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, Ensemble: ensemble, Fallback: fallback, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}, OnProgress: reporter.Handle}
+	if stream {
+		var text string
+		err := service.CompleteStreamWithInfo(ctx, request, func(chunk string, _ *app.RoutingInfo) {
+			text += chunk
+			_, _ = fmt.Fprint(stdout, chunk)
+		})
+		reporter.Finish(err)
+		if err != nil {
+			return err
+		}
+		if text == "" {
+			return app.ErrUpstream
+		}
+		_, err = fmt.Fprintln(stdout)
+		return err
+	}
+	response, err := service.Complete(ctx, request)
 	reporter.Finish(err)
 	if err != nil {
 		return err

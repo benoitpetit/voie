@@ -57,7 +57,15 @@ func NewHandler(service *app.Service, cfg *config.Config) http.Handler {
 	mux.HandleFunc("/.well-known/agent-card.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
-		_ = json.NewEncoder(w).Encode(a2aHandler.Card())
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		card := a2a.AgentCardFor(scheme + "://" + r.Host)
+		if configured := os.Getenv("VOIE_A2A_PUBLIC_URL"); configured != "" {
+			card = a2a.AgentCardFor(strings.TrimRight(configured, "/"))
+		}
+		_ = json.NewEncoder(w).Encode(card)
 	})
 	var token string
 	var requireConversationScope bool

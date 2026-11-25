@@ -108,6 +108,12 @@ func (c *Credentials) A2AAgentNames() []string {
 	return names
 }
 
+// DeleteA2AAgent removes a named A2A agent endpoint.
+func (c *Credentials) DeleteA2AAgent(name string) error {
+	delete(c.A2A, strings.TrimSpace(name))
+	return c.write()
+}
+
 // SetA2AAgent stores the endpoint of a named A2A agent.
 func (c *Credentials) SetA2AAgent(name, url string) error {
 	if c.A2A == nil {

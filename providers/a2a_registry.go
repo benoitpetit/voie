@@ -108,6 +108,19 @@ func ConnectA2A(store *config.Credentials, name, url, token string) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
+// RemoveA2ACard deletes the cached card of a disconnected agent.
+func RemoveA2ACard(name string) error {
+	path := a2aCardPath(name)
+	if path == "" {
+		return nil
+	}
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
 // ReadA2ACard returns the cached card of a connected agent.
 func ReadA2ACard(name string) (a2a.AgentCard, error) {
 	path := a2aCardPath(name)

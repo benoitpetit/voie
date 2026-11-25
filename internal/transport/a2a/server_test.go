@@ -8,14 +8,16 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/benoitpetit/voie/internal/app"
+	sqlitestore "github.com/benoitpetit/voie/internal/storage/sqlite"
 )
 
 type a2aTestProvider struct{}
 
 func (*a2aTestProvider) GetInfo() app.ProviderInfo {
-	return app.ProviderInfo{Name: "test", Working: true, SupportedModels: []string{"m"}, SupportsStream: true}
+	return app.ProviderInfo{Name: "test", Working: true, DefaultModel: "m", SupportedModels: []string{"m"}, SupportsStream: true}
 }
 func (*a2aTestProvider) SupportsModel(model string) bool { return model == "m" }
 func (*a2aTestProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
@@ -135,5 +137,45 @@ func TestCancelTaskMarksWorkingTaskCanceled(t *testing.T) {
 	status, _ := task["status"].(map[string]any)
 	if status["state"] != "TASK_STATE_CANCELED" {
 		t.Fatalf("status = %+v, want canceled", status)
+	}
+}
+
+func TestContextIdRoundTripUsesRealConversation(t *testing.T) {
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conv.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	registry := app.NewRegistry()
+	registry.Register("test", &a2aTestProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{Conversations: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(service)
+	first := rpcRequest(t, handler, `{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"role":"ROLE_USER","parts":[{"text":"first"}],"metadata":{"skill":"voie.chat.classic"}}}}`)
+	if first["error"] != nil {
+		t.Fatalf("first error = %v", first["error"])
+	}
+	task, _ := first["result"].(map[string]any)
+	contextID, _ := task["contextId"].(string)
+	if contextID == "" {
+		t.Fatalf("no contextId in %+v", task)
+	}
+	second := rpcRequest(t, handler, `{"jsonrpc":"2.0","id":2,"method":"SendMessage","params":{"message":{"role":"ROLE_USER","parts":[{"text":"second"}],"contextId":"`+contextID+`","metadata":{"skill":"voie.chat.classic"}}}}`)
+	if second["error"] != nil {
+		t.Fatalf("second error = %v", second["error"])
+	}
+}
+
+func TestSubscribeToTaskStreamsTerminalState(t *testing.T) {
+	h := NewHandler(a2aTestService(t))
+	h.store.create("done", "", context.Background(), func() {})
+	h.store.setStatus("done", "TASK_STATE_COMPLETED")
+	recorder := httptest.NewRecorder()
+	h.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"SubscribeToTask","params":{"id":"done"}}`)))
+	body := recorder.Body.String()
+	if !strings.Contains(body, "statusUpdate") || !strings.Contains(body, "TASK_STATE_COMPLETED") {
+		t.Fatalf("subscription = %q", body)
 	}
 }

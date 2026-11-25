@@ -110,7 +110,7 @@ func (p *A2AProvider) call(ctx context.Context, method, model string, messages [
 		"jsonrpc": "2.0", "id": 1, "method": method,
 		"params": map[string]any{"message": map[string]any{
 			"role": "ROLE_USER", "parts": parts,
-			"metadata": map[string]any{"skill": skill, "model": model},
+			"metadata": map[string]any{"skill": skill},
 		}},
 	}
 	body, err := json.Marshal(payload)
@@ -176,8 +176,8 @@ func (p *A2AProvider) ChatCompletionStream(ctx context.Context, messages []app.M
 	payload := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "SendStreamingMessage",
 		"params": map[string]any{"message": map[string]any{
-			"role": "ROLE_USER", "parts": []any{map[string]any{"text": a2aLastUserMessage(messages), "mediaType": "text/plain"}},
-			"metadata": map[string]any{"skill": skill, "model": model},
+			"role": "ROLE_USER", "parts": a2aParts(messages),
+			"metadata": map[string]any{"skill": skill},
 		}},
 	}
 	body, _ := json.Marshal(payload)
@@ -236,13 +236,17 @@ func (p *A2AProvider) ChatCompletionStream(ctx context.Context, messages []app.M
 	return nil
 }
 
-func a2aLastUserMessage(messages []app.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == "user" || messages[i].Role == "" {
-			return messages[i].Content
+// a2aParts maps all voie messages to A2A text parts. The local public model
+// ID is never forwarded: it is not meaningful to the remote agent.
+func a2aParts(messages []app.Message) []any {
+	parts := make([]any, 0, len(messages))
+	for _, message := range messages {
+		if message.Content == "" {
+			continue
 		}
+		parts = append(parts, map[string]any{"text": message.Content, "mediaType": "text/plain"})
 	}
-	return ""
+	return parts
 }
 
 var _ app.Provider = (*A2AProvider)(nil)

@@ -106,6 +106,22 @@ func newConnectCommand(check tokenChecker) *cobra.Command {
 				if !isConnectable(args[1]) {
 					return fmt.Errorf("unknown provider %q", args[1])
 				}
+				if name, ok := strings.CutPrefix(args[1], "a2a:"); ok {
+					if err := store.Delete(name); err != nil {
+						return fmt.Errorf("disconnect %s: %w", args[1], err)
+					}
+					if err := store.SetState(name, ""); err != nil {
+						return fmt.Errorf("disconnect %s state: %w", args[1], err)
+					}
+					if err := store.DeleteA2AAgent(name); err != nil {
+						return fmt.Errorf("disconnect %s endpoint: %w", args[1], err)
+					}
+					if err := providers.RemoveA2ACard(name); err != nil {
+						return fmt.Errorf("disconnect %s card: %w", args[1], err)
+					}
+					fmt.Fprintf(command.OutOrStdout(), "%s disconnected; the saved key, endpoint and card have been removed.\n", args[1])
+					return nil
+				}
 				if err := store.Delete(args[1]); err != nil {
 					return fmt.Errorf("disconnect %s: %w", args[1], err)
 				}

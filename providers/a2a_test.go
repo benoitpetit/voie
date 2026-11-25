@@ -11,6 +11,7 @@ import (
 
 	"github.com/benoitpetit/voie/config"
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/internal/transport/a2a"
 )
 
 func a2aRPCServer(t *testing.T) *httptest.Server {
@@ -107,5 +108,54 @@ func TestA2AProviderInfoAndRegistry(t *testing.T) {
 	registry := NewRegistry()
 	if registry.Get("a2a:one") == nil {
 		t.Fatal("configured A2A agent not registered")
+	}
+}
+
+type voieEchoProvider struct{}
+
+func (*voieEchoProvider) GetInfo() app.ProviderInfo {
+	return app.ProviderInfo{Name: "local", Working: true, DefaultModel: "m", SupportedModels: []string{"m"}, SupportsStream: true}
+}
+func (*voieEchoProvider) SupportsModel(model string) bool { return model == "m" }
+func (*voieEchoProvider) ChatCompletion(_ context.Context, _ []app.Message, model string) (*app.ChatCompletionResponse, error) {
+	return &app.ChatCompletionResponse{Choices: []app.Choice{{Message: app.Message{Role: "assistant", Content: "echo " + model}}}}, nil
+}
+func (*voieEchoProvider) ChatCompletionStream(_ context.Context, _ []app.Message, model string, callback func(string)) error {
+	callback("echo " + model)
+	return nil
+}
+
+func TestA2AProviderCallsVoieInbound(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	registry := app.NewRegistry()
+	registry.Register("local", &voieEchoProvider{})
+	service, err := app.NewService(registry, app.ServiceOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a2a.NewHandler(service)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/agent-card.json" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(h.Card())
+			return
+		}
+		h.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ConnectA2A(store, "local", server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	provider := NewA2AProvider("local")
+	response, err := provider.ChatCompletion(context.Background(), []app.Message{{Role: "user", Content: "hi"}}, "a2a-local-voie.chat.classic")
+	if err != nil {
+		t.Fatalf("voie-to-voie A2A call failed: %v", err)
+	}
+	if len(response.Choices) != 1 || response.Choices[0].Message.Content == "" {
+		t.Fatalf("response = %+v", response)
 	}
 }

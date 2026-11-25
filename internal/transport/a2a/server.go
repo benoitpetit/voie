@@ -121,7 +121,11 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request, request RPCRe
 		if !ok {
 			return nil, &RPCError{Code: codeTaskNotFound, Message: "task not found"}, false
 		}
-		return task, nil, false
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		flusher, _ := w.(http.Flusher)
+		writeSSE(w, flusher, statusEvent(task.ID, task.ContextID, task.Status.State))
+		return nil, nil, true
 	default:
 		return nil, &RPCError{Code: codeMethodNotFound, Message: "method not found: " + request.Method}, false
 	}
@@ -136,6 +140,13 @@ func (h *Handler) send(ctx context.Context, message Message, owner string, onChu
 	request, err := h.completionRequest(message)
 	if err != nil {
 		return Task{}, err
+	}
+	contextID, realConversation, ctxErr := h.ensureContext(ctx, message)
+	if ctxErr != nil {
+		return Task{}, &RPCError{Code: codeUnavailable, Message: ctxErr.Error()}
+	}
+	if realConversation {
+		request.ConversationID = contextID
 	}
 	id := message.MessageID
 	if id == "" {
@@ -171,10 +182,6 @@ func (h *Handler) send(ctx context.Context, message Message, owner string, onChu
 		h.store.setStatus(id, "TASK_STATE_FAILED")
 		return Task{}, &RPCError{Code: codeUnavailable, Message: "upstream returned no text"}
 	}
-	contextID := message.ContextID
-	if contextID == "" {
-		contextID = id
-	}
 	task := Task{
 		ID:        id,
 		ContextID: contextID,
@@ -190,13 +197,16 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, message Message
 	if rpcErr != nil {
 		return rpcErr
 	}
+	contextID, realConversation, ctxErr := h.ensureContext(r.Context(), message)
+	if ctxErr != nil {
+		return &RPCError{Code: codeUnavailable, Message: ctxErr.Error()}
+	}
+	if realConversation {
+		request.ConversationID = contextID
+	}
 	taskID := message.MessageID
 	if taskID == "" {
 		taskID = uuid.NewString()
-	}
-	contextID := message.ContextID
-	if contextID == "" {
-		contextID = taskID
 	}
 	callCtx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -253,6 +263,21 @@ func writeSSE(w http.ResponseWriter, flusher http.Flusher, value any) {
 	}
 }
 
+// ensureContext resolves a client contextId to a real voie conversation,
+// creating one when the client did not supply one.
+func (h *Handler) ensureContext(ctx context.Context, message Message) (string, bool, error) {
+	if id := strings.TrimSpace(message.ContextID); id != "" {
+		return id, true, nil
+	}
+	conversation, err := h.service.CreateConversation(ctx)
+	if err != nil {
+		// A service without conversation storage still needs a stable id, but
+		// must not force it into CompletionRequest.ConversationID.
+		return uuid.NewString(), false, nil
+	}
+	return conversation.ID, true, nil
+}
+
 func (h *Handler) completionRequest(message Message) (app.CompletionRequest, *RPCError) {
 	meta := message.Metadata
 	strategy := metaString(meta, "strategy")
@@ -263,8 +288,8 @@ func (h *Handler) completionRequest(message Message) (app.CompletionRequest, *RP
 		strategy = string(app.StrategyClassic)
 	}
 	model := metaString(meta, "model")
-	if strings.EqualFold(strategy, string(app.StrategyClassic)) && model == "" {
-		return app.CompletionRequest{}, &RPCError{Code: codeInvalidParams, Message: "classic requests require metadata.model"}
+	if strings.EqualFold(strategy, string(app.StrategyClassic)) && model == "" && metaString(meta, "skill") == "" {
+		return app.CompletionRequest{}, &RPCError{Code: codeInvalidParams, Message: "classic requests require metadata.model or skill"}
 	}
 	request := app.CompletionRequest{Strategy: app.Strategy(strategy), Model: model, Task: metaString(meta, "task"), ConversationID: message.ContextID}
 	if raw, ok := meta["ensemble"]; ok {

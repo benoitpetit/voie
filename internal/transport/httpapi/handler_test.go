@@ -1333,3 +1333,28 @@ func TestAgentCardIsPublicAndRPCIsProtected(t *testing.T) {
 		t.Fatalf("authenticated RPC status=%d body=%q", rpcRecorder.Code, rpcRecorder.Body.String())
 	}
 }
+
+func TestA2ARPCRequiresConversationScope(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{APIToken: "secret", RequireConversationScope: true})
+	body := `{"jsonrpc":"2.0","id":1,"method":"GetExtendedAgentCard","params":{}}`
+	request := httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer secret")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want scope required", recorder.Code)
+	}
+}
+
+func TestAgentCardUsesRequestHost(t *testing.T) {
+	service, _ := httpTestService(t)
+	handler := NewHandler(service, &config.Config{})
+	request := httptest.NewRequest(http.MethodGet, "/.well-known/agent-card.json", nil)
+	request.Host = "voie.example:9443"
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if !strings.Contains(recorder.Body.String(), "http://voie.example:9443/a2a") {
+		t.Fatalf("card = %q, want request host", recorder.Body.String())
+	}
+}

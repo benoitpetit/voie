@@ -45,7 +45,7 @@ func bearerAuthExcept(token string, requireConversationScope bool, next http.Han
 			writeError(w, http.StatusBadRequest, "invalid conversation scope")
 			return
 		}
-		if requireConversationScope && strings.HasPrefix(r.URL.Path, "/v1/") && scope == "" {
+		if requireConversationScope && (strings.HasPrefix(r.URL.Path, "/v1/") || r.URL.Path == "/a2a") && scope == "" {
 			writeError(w, http.StatusUnauthorized, "conversation scope required")
 			return
 		}

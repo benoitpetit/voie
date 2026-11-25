@@ -726,3 +726,27 @@ func TestConnectNamedA2AAgent(t *testing.T) {
 		t.Fatalf("models = %v", ids)
 	}
 }
+
+func TestDisconnectA2ARemovesAgentAndCard(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"name":"remote","supportedInterfaces":[{"url":"http://example/a2a","protocolBinding":"JSONRPC","protocolVersion":"1.0"}],"capabilities":{"streaming":true},"skills":[{"id":"voie.chat.classic","name":"Classic","description":"chat","inputModes":["text/plain"],"outputModes":["text/plain"]}]}`))
+	}))
+	defer server.Close()
+	if _, _, err := runConnect(t, []string{"a2a:one", "--url", server.URL, "--token", "tok"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runConnect(t, []string{"disconnect", "a2a:one"}, "", nil); err != nil {
+		t.Fatal(err)
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store.A2AAgentURL("one") != "" || store.Raw("one") != "" || store.State("one") != "" {
+		t.Fatalf("credentials not cleared: %+v", store)
+	}
+	if _, err := os.Stat(filepath.Join(providers.A2ACardDir(), "one.json")); !os.IsNotExist(err) {
+		t.Fatalf("card cache not removed: %v", err)
+	}
+}
