@@ -766,6 +766,13 @@ func (p *ExternalGateway) working() bool {
 // callable adds the account/connect requirement on top of the install state.
 // An installed gateway whose upstream account has not been connected cannot
 // serve inference and must stay out of the model catalogue.
+// providerConnected reports whether the user completed `voie connect` for a
+// provider. Installed-but-unconnected CLIs are not callable.
+func providerConnected(name string) bool {
+	store, err := config.LoadCredentials()
+	return err == nil && strings.EqualFold(store.State(name), "connected")
+}
+
 func (p *ExternalGateway) callable() bool {
 	if p.spec.AccountRequired != "none" {
 		store, err := config.LoadCredentials()

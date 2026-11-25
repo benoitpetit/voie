@@ -92,7 +92,7 @@ func (p *ACPProvider) working() bool {
 	}
 	// The bridge is started lazily on the first request; requiring a live
 	// loopback listener here would hide the model before that call can start it.
-	return true
+	return providerConnected(p.spec.Name)
 }
 
 // StartACPBridge starts (or reuses) the bridge and reports whether it became

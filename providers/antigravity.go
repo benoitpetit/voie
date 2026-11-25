@@ -110,7 +110,7 @@ func (p *Antigravity) SupportsModel(model string) bool {
 
 func (p *Antigravity) GetInfo() app.ProviderInfo {
 	info := p.openAIKeylessProvider.GetInfo()
-	info.Working = p.gateway.Available()
+	info.Working = providerConnected("antigravity") && p.gateway.Available()
 	return info
 }
 

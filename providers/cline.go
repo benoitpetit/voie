@@ -57,6 +57,9 @@ func (p *Cline) working() bool {
 	// Visibility follows the installed CLI; the bridge itself is started
 	// lazily on the first request (Ensure). Requiring a live bridge here would
 	// hide the model before the first call can start it.
+	if !providerConnected("cline") {
+		return false
+	}
 	if install.BinaryPath("cline") != "" {
 		return true
 	}

@@ -80,6 +80,9 @@ func NewKiro() *Kiro {
 }
 
 func (p *Kiro) working() bool {
+	if !providerConnected("kiro") {
+		return false
+	}
 	if _, err := exec.LookPath("kiro-cli"); err != nil {
 		return false
 	}

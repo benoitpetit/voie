@@ -1,7 +1,11 @@
 package providers
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/benoitpetit/voie/config"
 )
 
 func TestACPProvidersAreRegistered(t *testing.T) {
@@ -38,5 +42,36 @@ func TestACPProviderConfig(t *testing.T) {
 	}
 	if got := provider.cfg.ModelIDs["cb-auto"]; got != "auto" {
 		t.Errorf("alias model = %q", got)
+	}
+}
+
+func TestCLIProviderRequiresConnectBeforeCallable(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "codebuddy"), []byte(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	var spec ACPProviderSpec
+	for _, candidate := range ACPProviders {
+		if candidate.Name == "codebuddy" {
+			spec = candidate
+		}
+	}
+	if spec.Name == "" {
+		t.Fatal("codebuddy spec missing")
+	}
+	if NewACPProvider(spec).GetInfo().Working {
+		t.Fatal("installed CLI reported callable before connect")
+	}
+	store, err := config.LoadCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetState("codebuddy", "connected"); err != nil {
+		t.Fatal(err)
+	}
+	if !NewACPProvider(spec).GetInfo().Working {
+		t.Fatal("connected CLI should be callable")
 	}
 }
