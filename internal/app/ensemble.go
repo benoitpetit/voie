@@ -596,8 +596,20 @@ func (s *Service) candidateForModel(model, providerFilter string) ModelCandidate
 }
 
 func (s *Service) ensembleFallbacks(request CompletionRequest, policy FallbackPolicy, used []string) []string {
-	if request.Fallback != nil && request.Fallback.Models != nil && len(request.Fallback.Models) == 0 {
-		return nil
+	if request.Fallback != nil && request.Fallback.Models != nil {
+		if len(request.Fallback.Models) == 0 {
+			return nil
+		}
+		out, seen := make([]string, 0, len(request.Fallback.Models)), make(map[string]bool)
+		for _, id := range request.Fallback.Models {
+			key := strings.ToLower(strings.TrimSpace(id))
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, key)
+		}
+		return out
 	}
 	excluded := make(map[string]bool, len(used)+2)
 	for _, id := range used {

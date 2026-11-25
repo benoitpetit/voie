@@ -272,7 +272,7 @@ func TestServiceAutoFallbackRequestListPrecedence(t *testing.T) {
 	assertRouterClassifiedOnce(t, router)
 }
 
-func TestServiceAutoFallbackDiscardsIneligibleExplicitCandidate(t *testing.T) {
+func TestServiceAutoFallbackHonorsExplicitCandidateOutsideProfile(t *testing.T) {
 	router := &routingStub{info: ProviderInfo{Name: "router", Working: true, SupportedModels: []string{"router-model"}}, responses: map[string]string{"router-model": `{"task":"coding","model":"model-a","reason":"primary"}`}}
 	pa := &fallbackProvider{
 		info:      ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"model-a"}},
@@ -302,11 +302,11 @@ func TestServiceAutoFallbackDiscardsIneligibleExplicitCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Provider != "b" {
-		t.Fatalf("response provider = %q, want b after discarding ineligible candidate", response.Provider)
+	if response.Provider != "w" {
+		t.Fatalf("response provider = %q, want w from the explicit fallback list", response.Provider)
 	}
-	if len(pw.calls) != 0 || len(pb.calls) != 1 {
-		t.Fatalf("calls w=%v b=%v, want ineligible candidate discarded", pw.calls, pb.calls)
+	if len(pw.calls) != 1 || len(pb.calls) != 0 {
+		t.Fatalf("calls w=%v b=%v, want explicit candidate used before configured pool", pw.calls, pb.calls)
 	}
 	assertRouterClassifiedOnce(t, router)
 }

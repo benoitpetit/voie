@@ -122,7 +122,7 @@ func TestEnsembleFallbacksDeterministicAndExcludesUsedAndSynth(t *testing.T) {
 	}, a, b, c, d, synth)
 	policy := service.FallbackPolicy()
 	got := service.ensembleFallbacks(CompletionRequest{Fallback: &FallbackOverride{Models: []string{"c-model", "b-model"}}}, policy, []string{"a-model"})
-	want := []string{"c-model", "b-model", "d-model"}
+	want := []string{"c-model", "b-model"} // an explicit list replaces the configured pool
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ensembleFallbacks = %v, want %v", got, want)
 	}
@@ -415,5 +415,24 @@ func TestBudgetNotConsumedByInvalidCandidate(t *testing.T) {
 	}
 	if state.budget != 1 {
 		t.Fatalf("budget = %d, want 1 (pinned-out candidate must not consume budget)", state.budget)
+	}
+}
+
+func TestEnsembleFallbackHonorsExplicitCandidateOutsidePool(t *testing.T) {
+	a := &fallbackProvider{info: ProviderInfo{Name: "a", Working: true, SupportedModels: []string{"a-model"}}}
+	w := &fallbackProvider{info: ProviderInfo{Name: "w", Working: true, SupportedModels: []string{"outsider"}}}
+	synth := &fallbackProvider{info: ProviderInfo{Name: "synth", Working: true, SupportedModels: []string{"synth"}}}
+	service, _ := fallbackService(t, ServiceOptions{SynthesisModel: "synth",
+		Fallback: &FallbackPolicy{Enabled: true, MaxRetries: 1, MaxFallbackModels: 1},
+		RoutingPolicy: RoutingPolicy{Models: map[string]ModelDescriptor{
+			"a-model": {Capabilities: []string{"coding"}}, "synth": {Capabilities: []string{"coding"}},
+		}},
+	}, a, w, synth)
+	policy := service.FallbackPolicy()
+	got := service.ensembleFallbacks(CompletionRequest{
+		Task: "coding", Fallback: &FallbackOverride{Models: []string{"outsider"}},
+	}, policy, []string{"a-model"})
+	if len(got) == 0 || strings.ToLower(got[0]) != "outsider" {
+		t.Fatalf("ensembleFallbacks = %v, want explicit outsider first", got)
 	}
 }

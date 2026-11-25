@@ -68,8 +68,22 @@ func (s *Service) selectAutomatic(ctx context.Context, request CompletionRequest
 // the router applied, and the primary and router are never eligible. An
 // explicitly empty request list clears eligibility.
 func (s *Service) autoFallbacks(request CompletionRequest, primaryModel string, policy FallbackPolicy) ([]string, error) {
-	if request.Fallback != nil && request.Fallback.Models != nil && len(request.Fallback.Models) == 0 {
-		return nil, nil
+	if request.Fallback != nil && request.Fallback.Models != nil {
+		if len(request.Fallback.Models) == 0 {
+			return nil, nil
+		}
+		// An explicit list replaces the configured pool in all strategies;
+		// do not silently drop candidates outside the profile.
+		out, seen := make([]string, 0, len(request.Fallback.Models)), make(map[string]bool)
+		for _, id := range request.Fallback.Models {
+			key := strings.ToLower(strings.TrimSpace(id))
+			if key == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, key)
+		}
+		return out, nil
 	}
 	task, taskRule, err := s.resolveProfile(request.Task)
 	if err != nil {
