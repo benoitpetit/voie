@@ -153,8 +153,17 @@ func NewServer(service *app.Service) *mcp.Server {
 	}))
 	mcp.AddTool(server, &mcp.Tool{
 		Name: chatCompletionToolName, Description: "Generate a completion using classic, automatic, or ensemble model routing. Set stream to collect streamed chunks into one result.",
-	}, logToolCall(chatCompletionToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
+	}, logToolCall(chatCompletionToolName, func(ctx context.Context, callRequest *mcp.CallToolRequest, input chatCompletionInput) (*mcp.CallToolResult, chatCompletionOutput, error) {
 		request := app.CompletionRequest{Model: input.Model, Provider: input.Provider, Strategy: input.Strategy, Task: input.Task, Models: input.Models, Ensemble: input.Ensemble, Fallback: input.Fallback, ConversationID: input.ConversationID, Messages: input.Messages}
+		if token := callRequest.Params.GetProgressToken(); token != nil {
+			var step float64
+			request.OnProgress = func(event app.ProgressEvent) {
+				_ = callRequest.Session.NotifyProgress(ctx, &mcp.ProgressNotificationParams{
+					ProgressToken: token, Message: event.Stage + ": " + event.Message, Progress: step,
+				})
+				step++
+			}
+		}
 		if input.Stream {
 			var text strings.Builder
 			var routing *app.RoutingInfo

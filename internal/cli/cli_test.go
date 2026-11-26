@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -803,5 +804,17 @@ func TestConversationsListSupportsPaginationFlags(t *testing.T) {
 	}
 	if strings.Count(stdout.String(), "\n") != 1 {
 		t.Fatalf("output = %q, want one conversation", stdout.String())
+	}
+}
+
+func TestChatProgressCarriesRequestID(t *testing.T) {
+	rt, _ := newCLITestRuntime(t)
+	var stdout, stderr bytes.Buffer
+	if err := executeForTest(context.Background(), []string{"chat", "--model", "model", "hello"}, strings.NewReader(""), &stdout, &stderr, rt); err != nil {
+		t.Fatal(err)
+	}
+	matched, err := regexp.MatchString(`\[[a-f0-9]{8}\] accepted:`, stderr.String())
+	if err != nil || !matched {
+		t.Fatalf("stderr = %q, want request id prefix", stderr.String())
 	}
 }

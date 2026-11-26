@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/benoitpetit/voie/internal/app"
+	"github.com/benoitpetit/voie/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -190,7 +191,12 @@ func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, st
 	if prompt == "" {
 		return fmt.Errorf("chat prompt must not be empty")
 	}
-	reporter := newProgressReporter(stderr, isTerminal)
+	requestID := app.RequestID(ctx)
+	if requestID == "" {
+		requestID = utils.GenerateID()[:8]
+		ctx = app.WithRequestID(ctx, requestID)
+	}
+	reporter := &requestIDReporter{base: newProgressReporter(stderr, isTerminal), id: requestID}
 	request := app.CompletionRequest{Model: model, Provider: provider, Strategy: strategy, Task: task, Models: models, Ensemble: ensemble, Fallback: fallback, ConversationID: conversation, Messages: []app.Message{{Role: "user", Content: prompt}}, OnProgress: reporter.Handle}
 	if stream {
 		var text string

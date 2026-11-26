@@ -4,6 +4,8 @@
 
 ### Added
 
+- MCP progress notifications with `progressToken`, shared `request_id` correlation across surfaces, and outbound A2A `contextId` propagation via the request context.
+
 - A2A 1.0 server and client: public agent card with voie skills, JSON-RPC chat/task methods and streaming; named outbound agents exposed as `a2a-<agent>-<skill>` models; CLI `--stream`, MCP `stream`, shared model/error shapes; docs and skill updated.
 
 - Anticipatory tests for classic, auto and ensemble (independent/chain/debate) across service streaming, CLI, HTTP and MCP, plus docs contract coverage for strategies and fallback.

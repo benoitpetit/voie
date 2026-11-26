@@ -106,12 +106,16 @@ func (p *A2AProvider) call(ctx context.Context, method, model string, messages [
 		}
 		parts = append(parts, map[string]any{"text": message.Content, "mediaType": "text/plain"})
 	}
+	message := map[string]any{
+		"role": "ROLE_USER", "parts": parts,
+		"metadata": map[string]any{"skill": skill},
+	}
+	if conversationID := app.ConversationID(ctx); conversationID != "" {
+		message["contextId"] = conversationID
+	}
 	payload := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": method,
-		"params": map[string]any{"message": map[string]any{
-			"role": "ROLE_USER", "parts": parts,
-			"metadata": map[string]any{"skill": skill},
-		}},
+		"params": map[string]any{"message": message},
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -173,12 +177,16 @@ func (p *A2AProvider) ChatCompletionStream(ctx context.Context, messages []app.M
 	if !ok {
 		return fmt.Errorf("a2a:%s: unsupported model %q", p.name, model)
 	}
+	message := map[string]any{
+		"role": "ROLE_USER", "parts": a2aParts(messages),
+		"metadata": map[string]any{"skill": skill},
+	}
+	if conversationID := app.ConversationID(ctx); conversationID != "" {
+		message["contextId"] = conversationID
+	}
 	payload := map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "SendStreamingMessage",
-		"params": map[string]any{"message": map[string]any{
-			"role": "ROLE_USER", "parts": a2aParts(messages),
-			"metadata": map[string]any{"skill": skill},
-		}},
+		"params": map[string]any{"message": message},
 	}
 	body, _ := json.Marshal(payload)
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))

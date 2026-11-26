@@ -600,3 +600,39 @@ func TestMCPHealthTool(t *testing.T) {
 		t.Fatalf("health = %+v err = %v", result, err)
 	}
 }
+
+func TestMCPStreamingEmitsProgressNotifications(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	server := NewServer(service)
+	a, b := mcp.NewInMemoryTransports()
+	if _, err := server.Connect(context.Background(), a, nil); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var notifications []string
+	client := mcp.NewClient(&mcp.Implementation{Name: "progress-client", Version: "1"}, &mcp.ClientOptions{
+		ProgressNotificationHandler: func(_ context.Context, req *mcp.ProgressNotificationClientRequest) {
+			mu.Lock()
+			notifications = append(notifications, req.Params.Message)
+			mu.Unlock()
+		},
+	})
+	session, err := client.Connect(context.Background(), b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	_, err = session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "chat_completion",
+		Arguments: map[string]any{"stream": true, "messages": []any{map[string]any{"role": "user", "content": "hi"}}},
+		Meta:      mcp.Meta{"progressToken": "p1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(notifications) == 0 {
+		t.Fatal("no progress notifications emitted")
+	}
+}

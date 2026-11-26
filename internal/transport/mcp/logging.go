@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/utils"
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -12,6 +13,7 @@ func logToolCall[In, Out any](name string, handler mcp.ToolHandlerFor[In, Out]) 
 	return func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 		id := utils.GenerateID()[:8]
 		started := time.Now()
+		ctx = app.WithRequestID(ctx, id)
 		utils.Info("mcp request_id=%s tool=%s status=started", id, name)
 		result, output, err := handler(ctx, request, input)
 		status := "succeeded"

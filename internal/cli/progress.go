@@ -16,6 +16,10 @@ type progressReporter interface {
 type lineProgressReporter struct{ output io.Writer }
 
 func (r *lineProgressReporter) Handle(event app.ProgressEvent) {
+	if event.RequestID != "" {
+		_, _ = fmt.Fprintf(r.output, "[%s] %s: %s\n", event.RequestID, event.Stage, event.Message)
+		return
+	}
 	_, _ = fmt.Fprintf(r.output, "[%s] %s\n", event.Stage, event.Message)
 }
 func (*lineProgressReporter) Finish(error) {}
@@ -52,3 +56,16 @@ func newProgressReporter(stderr io.Writer, isTerminal bool) progressReporter {
 	}
 	return &lineProgressReporter{output: stderr}
 }
+
+// requestIDReporter attaches the surface request id to every progress event.
+type requestIDReporter struct {
+	base progressReporter
+	id   string
+}
+
+func (r *requestIDReporter) Handle(event app.ProgressEvent) {
+	event.RequestID = r.id
+	r.base.Handle(event)
+}
+
+func (r *requestIDReporter) Finish(err error) { r.base.Finish(err) }

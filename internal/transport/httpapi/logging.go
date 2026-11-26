@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"github.com/benoitpetit/voie/internal/app"
 	"github.com/benoitpetit/voie/utils"
 )
 
@@ -50,6 +51,6 @@ func requestLogging(next http.Handler) http.Handler {
 		defer func() {
 			requestLog.End(tracked.loggedStatus(), "request_id=%s %s %s", requestLog.ID, r.Method, r.URL.Path)
 		}()
-		next.ServeHTTP(tracked, r)
+		next.ServeHTTP(tracked, r.WithContext(app.WithRequestID(r.Context(), requestLog.ID)))
 	})
 }

@@ -279,3 +279,9 @@ func TestDocsStateSurfaceSpecificDifferences(t *testing.T) {
 		assertContains(t, "docs/mcp.md", mcp, needle)
 	}
 }
+
+func TestDocsDescribeRemainingCorrelationFeatures(t *testing.T) {
+	assertContains(t, "docs/mcp.md", readDoc(t, "docs/mcp.md"), "progressToken")
+	assertContains(t, "docs/cli.md", readDoc(t, "docs/cli.md"), "request_id")
+	assertContains(t, "docs/architecture.md", readDoc(t, "docs/architecture.md"), "contextId")
+}

@@ -159,3 +159,5 @@ ACP-backed CLI providers publish the models advertised by the agent itself (cach
 
 OpenAI request fields (`temperature`, `max_tokens`, `top_p`, `stop`, `tools`, `tool_choice`, `stream_options`) are HTTP-only; the CLI exposes routing, strategy, fallback and streaming flags instead. Classic requests require an explicit `--model` here, while HTTP/MCP can fall back to `DEFAULT_PROVIDER` or the first working provider for the generic `openai` model.
 
+Progress lines on stderr are prefixed with a short `request_id`, the same correlation id used by HTTP request logs and MCP tool logs.
+

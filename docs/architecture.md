@@ -86,3 +86,6 @@ The provider catalogue is runtime data. Use `voie models --json` or `GET /v1/mod
 ## A2A transport
 
 A2A is a fourth thin adapter next to CLI, HTTP and MCP. `internal/transport/a2a` serves JSON-RPC `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask` and `GetExtendedAgentCard` at `/a2a`, and publishes `/.well-known/agent-card.json` publicly while the RPC endpoint keeps the HTTP bearer policy. Inbound tasks map `contextId` to voie conversations and record attempts. Outbound, `providers/a2a.go` turns a discovered card's skills into ordinary provider models and calls the remote agent with the same methods. No routing, fallback or conversation logic is duplicated.
+
+Outbound A2A calls propagate the active conversation as `contextId` through the request context, so a remote voie agent can resume the same local conversation without a change to the `app.Provider` interface.
+

@@ -139,3 +139,5 @@ MCP is for tools and resources; A2A is for agent-to-agent work. voie supports bo
 
 OpenAI request fields are HTTP-only. `chat_completion` without `stream` is non-streaming; with `stream: true` it collects chunks into a single result. Classic calls that omit `model` rely on the shared service default provider.
 
+When a client supplies `_meta.progressToken`, streaming `chat_completion` emits MCP progress notifications for routing and model stages; the final result still contains the aggregated text.
+

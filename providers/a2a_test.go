@@ -159,3 +159,37 @@ func TestA2AProviderCallsVoieInbound(t *testing.T) {
 		t.Fatalf("response = %+v", response)
 	}
 }
+
+func TestA2AProviderSendsConversationContext(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var received string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/agent-card.json" || r.URL.Path == "/" {
+			_, _ = w.Write([]byte(`{"name":"remote","supportedInterfaces":[{"url":"http://example/a2a","protocolBinding":"JSONRPC","protocolVersion":"1.0"}],"capabilities":{},"skills":[{"id":"voie.chat.classic","name":"Classic","description":"chat","inputModes":["text/plain"],"outputModes":["text/plain"]}]}`))
+			return
+		}
+		var request struct {
+			Params struct {
+				Message struct {
+					ContextID string `json:"contextId"`
+				} `json:"message"`
+			} `json:"params"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		received = request.Params.Message.ContextID
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{"id": "t", "status": map[string]any{"state": "TASK_STATE_COMPLETED"}, "artifacts": []any{map[string]any{"parts": []any{map[string]any{"text": "ok"}}}}}})
+	}))
+	defer server.Close()
+	store, _ := config.LoadCredentials()
+	if err := ConnectA2A(store, "one", server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	provider := NewA2AProvider("one")
+	ctx := app.WithConversationID(context.Background(), "conv-1")
+	if _, err := provider.ChatCompletion(ctx, []app.Message{{Role: "user", Content: "hi"}}, "a2a-one-voie.chat.classic"); err != nil {
+		t.Fatal(err)
+	}
+	if received != "conv-1" {
+		t.Fatalf("remote contextId = %q, want conv-1", received)
+	}
+}

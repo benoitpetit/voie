@@ -31,11 +31,12 @@ type CompletionRequest struct {
 }
 
 type ProgressEvent struct {
-	Stage    string
-	Message  string
-	Model    string
-	Provider string
-	Status   string
+	RequestID string
+	Stage     string
+	Message   string
+	Model     string
+	Provider  string
+	Status    string
 }
 
 type progressEmitter struct {
@@ -211,6 +212,8 @@ func (s *Service) Complete(ctx context.Context, request CompletionRequest) (*Cha
 	callCtx, cancel := s.completionContext(ctx)
 	defer cancel()
 	callCtx = WithRequestOptions(callCtx, request.Options)
+	callCtx = WithConversationID(callCtx, request.ConversationID)
+	callCtx = WithConversationID(callCtx, request.ConversationID)
 	_, version, userMessages, err := s.prepareConversation(callCtx, &request)
 	if err != nil {
 		return nil, err
