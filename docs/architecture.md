@@ -71,7 +71,7 @@ Fallback candidates resolve deterministically: an explicit request list replaces
 
 `ROUTER_MODEL`, `SYNTHESIS_MODEL`, `ROUTING_CONFIG_PATH`, `CONVERSATION_DB_PATH`, and `CONVERSATION_TTL` are shared by HTTP, CLI, and MCP. See the API and interface guides for request examples.
 
-The service owns model and provider selection. An explicit model must resolve to a registered ID or alias. A provider/model mismatch is rejected. The generic `openai` ID, or an omitted API model, uses the configured `DEFAULT_PROVIDER`; when none is configured it resolves to Perplexity's declared `turbo` default. A provider specified with the generic ID uses that provider's declared default model.
+The service owns model and provider selection. An explicit model must resolve to a registered ID or alias. A provider/model mismatch is rejected. The generic `openai` ID, or an omitted API model, uses the configured `DEFAULT_PROVIDER`; when none is configured it resolves to the first registered provider that reports itself working. A provider specified with the generic ID uses that provider's declared default model.
 
 Each completion shares the caller's context and the configured end-to-end `TIMEOUT`. Providers create context-aware HTTP requests, and Duck.ai passes cancellation to its browser capture and HTTP request.
 

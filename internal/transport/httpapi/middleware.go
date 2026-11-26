@@ -10,10 +10,6 @@ import (
 	"github.com/benoitpetit/voie/internal/app"
 )
 
-func bearerAuth(token string, requireConversationScope bool, next http.Handler) http.Handler {
-	return bearerAuthExcept(token, requireConversationScope, next)
-}
-
 // bearerAuthExcept protects every path except the listed public ones. The A2A
 // Agent Card must be discoverable before a client has a token.
 func bearerAuthExcept(token string, requireConversationScope bool, next http.Handler, publicPaths ...string) http.Handler {

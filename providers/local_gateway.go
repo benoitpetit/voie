@@ -247,16 +247,6 @@ func (g *LocalGateway) Ensure(ctx context.Context) error {
 	return fail(fmt.Errorf("timed out after 15s"))
 }
 
-func runningGateways() map[string]*exec.Cmd {
-	gatewayMu.Lock()
-	defer gatewayMu.Unlock()
-	copy := make(map[string]*exec.Cmd, len(gatewayProcess))
-	for name, running := range gatewayProcess {
-		copy[name] = running.cmd
-	}
-	return copy
-}
-
 // ShutdownGateways terminates every gateway started by this process.
 func ShutdownGateways() {
 	gatewayMu.Lock()

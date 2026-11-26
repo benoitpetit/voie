@@ -11,8 +11,8 @@ func TestLookupFetchesPublicPrices(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"foo/bar","pricing":{"prompt":"0.000001","completion":"0.000002"}}]}`))
 	}))
 	defer server.Close()
-	SetSource(server.URL)
-	t.Cleanup(func() { SetSource("") })
+	RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { RegisterSource("openrouter", "", nil) })
 	price, ok := Lookup("openrouter", "foo/bar")
 	if !ok || price.Prompt != "0.000001" || price.Completion != "0.000002" {
 		t.Fatalf("price = %+v, %v", price, ok)
@@ -29,8 +29,8 @@ func TestLookupDoesNotRefetchOnEveryFailedCall(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
-	SetSource(server.URL)
-	t.Cleanup(func() { SetSource("") })
+	RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { RegisterSource("openrouter", "", nil) })
 	for i := 0; i < 16; i++ {
 		if _, ok := Lookup("openrouter", "vendor/model"); ok {
 			t.Fatal("price unexpectedly found")
@@ -46,8 +46,8 @@ func TestAllReturnsPublicCatalogue(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"openai/gpt-5","pricing":{"prompt":"0.000002","completion":"0.000006"}}]}`))
 	}))
 	defer server.Close()
-	SetSource(server.URL)
-	t.Cleanup(func() { SetSource("") })
+	RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { RegisterSource("openrouter", "", nil) })
 	all := All()
 	price, ok := all["openai/gpt-5"]
 	if !ok || price.Prompt != "0.000002" {

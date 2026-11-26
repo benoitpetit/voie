@@ -124,7 +124,7 @@ func TestScopeHeaderWithoutTokenIsValidatedAndApplied(t *testing.T) {
 		seen = app.ConversationScope(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := bearerAuth("", false, next)
+	handler := bearerAuthExcept("", false, next)
 
 	request := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	request.Header.Set("X-Voie-Conversation-Scope", "bad")

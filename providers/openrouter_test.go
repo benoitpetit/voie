@@ -13,8 +13,8 @@ func TestOpenRouterExposesPublicPaidModels(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"openai/gpt-5","pricing":{"prompt":"0.000002","completion":"0.000006"}},{"id":"openrouter/free","pricing":{"prompt":"0","completion":"0"}}]}`))
 	}))
 	defer server.Close()
-	pricing.SetSource(server.URL)
-	t.Cleanup(func() { pricing.SetSource("") })
+	pricing.RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { pricing.RegisterSource("openrouter", "", nil) })
 	info := NewOpenRouter().GetInfo()
 	found := false
 	for _, id := range info.SupportedModels {

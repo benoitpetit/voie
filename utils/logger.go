@@ -5,11 +5,8 @@ import (
 	"io"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/benoitpetit/voie/internal/brand"
 )
 
 type Level int
@@ -113,15 +110,6 @@ func Warn(format string, v ...interface{}) {
 	}
 }
 
-func Error(format string, v ...interface{}) {
-	if enabled(ERROR) {
-		mu.Lock()
-		defer mu.Unlock()
-		defer func() { _ = recover() }()
-		logger.Print(formatLog(ERROR, format, v...))
-	}
-}
-
 func Debug(format string, v ...interface{}) {
 	if enabled(DEBUG) {
 		mu.Lock()
@@ -166,53 +154,7 @@ func (rl *RequestLogger) End(statusCode int, format string, v ...interface{}) {
 	})
 }
 
-func (rl *RequestLogger) Error(err error) {
-	rl.mu.Lock()
-	duration := time.Since(rl.StartTime)
-	rl.mu.Unlock()
-
-	safeLog(func() { Error("[%s] %s %s failed after %s: %v", rl.ID, rl.Method, rl.Path, duration, err) })
-}
-
 func safeLog(log func()) {
 	defer func() { _ = recover() }()
 	log()
-}
-
-func LogProviderRequest(provider, model string) {
-	Debug("→ %s | model=%s", provider, model)
-}
-
-func LogProviderResponse(provider string, duration time.Duration, contentLen int) {
-	Debug("← %s | duration=%s chars=%d", provider, duration, contentLen)
-}
-
-func LogServerStart(port string) {
-	Info("%s v%s starting on :%s", brand.Name, brand.Version, port)
-	Info("%s", "="+strings.Repeat("=", 50))
-}
-
-func LogProviders(providers map[string]map[string]interface{}) {
-	Info("📦 Registered providers:")
-	for name, info := range providers {
-		Info("   • %s (%s)", name, info["label"])
-	}
-}
-
-func LogEndpoints(port string) {
-	Info("%s", "="+strings.Repeat("=", 50))
-	Info("📍 Available endpoints:")
-	Info("   POST  /v1/chat/completions")
-	Info("   GET   /v1/models")
-	Info("   GET   /v1/providers")
-	Info("   GET   /health")
-	Info("%s", "="+strings.Repeat("=", 50))
-}
-
-func LogBanner() {
-	banner := brand.Banner()
-	if !noColor {
-		banner = "\033[37m" + banner + "\033[0m"
-	}
-	logger.Print(banner)
 }

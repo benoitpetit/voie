@@ -159,7 +159,7 @@ func TestDisconnectRemovesToken(t *testing.T) {
 
 func TestConnectCollectsAllProviderFields(t *testing.T) {
 	fields := providers.ConnectFields("cloudflare-ai")
-	if len(fields) != 2 || fields[0].Key != "cloudflare-ai" || fields[1].Key != providers.CloudflareAccountKey() {
+	if len(fields) != 2 || fields[0].Key != "cloudflare-ai" || fields[1].Key == "" {
 		t.Fatalf("Cloudflare fields = %+v", fields)
 	}
 	for _, provider := range []string{"groq", "openrouter", "codebuddy"} {
@@ -171,8 +171,9 @@ func TestConnectCollectsAllProviderFields(t *testing.T) {
 
 func TestConnectAcceptsExtraField(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	accountKey := providers.ConnectFields("cloudflare-ai")[1].Key
 	_, _, err := runConnect(t, []string{
-		"cloudflare-ai", "--token", "cf-token", "--field", providers.CloudflareAccountKey() + "=account-123",
+		"cloudflare-ai", "--token", "cf-token", "--field", accountKey + "=account-123",
 	}, "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +182,7 @@ func TestConnectAcceptsExtraField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := store.Raw(providers.CloudflareAccountKey()); got != "account-123" {
+	if got := store.Raw(accountKey); got != "account-123" {
 		t.Errorf("saved account = %q", got)
 	}
 }

@@ -716,16 +716,6 @@ func duckAIBrowserMajorVersion(executable string) int {
 	return 0
 }
 
-func duckAIPageRateLimited(pageText string) bool {
-	text := strings.ToLower(pageText)
-	for _, phrase := range duckAIPageRateLimitPhrases {
-		if strings.Contains(text, phrase) {
-			return true
-		}
-	}
-	return false
-}
-
 func duckAIPageRateLimitJS(bodyVariable string) string {
 	phrases := make([]string, 0, len(duckAIPageRateLimitPhrases))
 	for _, phrase := range duckAIPageRateLimitPhrases {

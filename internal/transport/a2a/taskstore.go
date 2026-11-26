@@ -77,15 +77,6 @@ func (s *taskStore) setTask(id string, task Task) {
 	}
 }
 
-func (s *taskStore) appendArtifact(id string, artifact Artifact) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if entry := s.find(id, ""); entry != nil {
-		entry.task.Artifacts = append(entry.task.Artifacts, artifact)
-		entry.updated = time.Now()
-	}
-}
-
 func (s *taskStore) appendHistory(id string, message Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

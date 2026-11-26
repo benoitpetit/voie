@@ -128,8 +128,11 @@ func TestGatewayShutdownTerminatesProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	ShutdownGateways()
-	if len(runningGateways()) != 0 {
-		t.Errorf("running gateways after shutdown = %d", len(runningGateways()))
+	gatewayMu.Lock()
+	running := len(gatewayProcess)
+	gatewayMu.Unlock()
+	if running != 0 {
+		t.Errorf("running gateways after shutdown = %d", running)
 	}
 }
 

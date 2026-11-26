@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/benoitpetit/voie/internal/brand"
 )
 
 func TestSetOutputRoutesLogsToConfiguredWriter(t *testing.T) {
@@ -59,17 +57,5 @@ func TestRequestLoggerIncludesIdentityAndDefaultsToMonochrome(t *testing.T) {
 	}
 	if time.Since(request.StartTime) < 0 {
 		t.Fatal("request logger elapsed duration is invalid")
-	}
-}
-
-func TestLogServerStartUsesBuildBrandAndVersion(t *testing.T) {
-	var output bytes.Buffer
-	SetOutput(&output)
-	LogServerStart("8080")
-	SetOutput(os.Stdout)
-
-	want := brand.Name + " v" + brand.Version + " starting on :8080"
-	if !strings.Contains(output.String(), want) {
-		t.Fatalf("server start log = %q, want it to contain %q", output.String(), want)
 	}
 }

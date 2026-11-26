@@ -1,6 +1,6 @@
 # MCP guide
 
-`voie mcp` runs a local MCP server over stdin/stdout. Before protocol processing begins, it logs the server name, build version, and registered tools (`list_models`, `list_providers`, `chat_completion`, `create_conversation`, `list_conversations`, `get_conversation`, and `delete_conversation`) to stderr. stdout remains reserved for MCP protocol messages.
+`voie mcp` runs a local MCP server over stdin/stdout. Before protocol processing begins, it logs the server name, build version, and registered tools (`list_models`, `list_providers`, `chat_completion`, `create_conversation`, `list_conversations`, `get_conversation`, `delete_conversation`, and `health`) to stderr. stdout remains reserved for MCP protocol messages.
 
 Every interface forwards the request to a third-party provider; there is no local inference and no local model weight.
 

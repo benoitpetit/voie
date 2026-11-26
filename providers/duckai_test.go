@@ -314,24 +314,15 @@ func TestSelectDuckAIBrowserFallsBackToNewestWhenAllAreAtUsageLimit(t *testing.T
 	}
 }
 
-func TestDuckAIPageRateLimitMessages(t *testing.T) {
-	for _, message := range []string{
-		"Too many requests. Please take a short break and try again.",
-		"ERR_RATE_LIMIT",
-		"ERR_USER_LIMIT",
-		"Daily limit reached",
-		"6-hour usage limit reached",
-		"Weekly usage limit reached",
-		"Monthly limit reached",
-		"Limite quotidienne atteinte",
-		"Limite hebdomadaire atteinte",
-	} {
-		if !duckAIPageRateLimited(message) {
-			t.Errorf("duckAIPageRateLimited(%q) = false, want true", message)
+func TestDuckAIPageRateLimitScriptUsesEveryPhrase(t *testing.T) {
+	script := duckAIPageRateLimitJS("body")
+	for _, phrase := range duckAIPageRateLimitPhrases {
+		if !strings.Contains(script, phrase) {
+			t.Errorf("rate-limit script is missing %q", phrase)
 		}
 	}
-	if duckAIPageRateLimited("Your chat is ready. Ask anything.") {
-		t.Fatal("normal chat page was classified as rate limited")
+	if !strings.Contains(script, "body.includes") {
+		t.Fatalf("rate-limit script does not inspect the page body: %s", script)
 	}
 }
 

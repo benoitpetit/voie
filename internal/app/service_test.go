@@ -409,8 +409,8 @@ func TestListModelsAddsPublicPriceWhenAvailable(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"foo/bar","pricing":{"prompt":"0.000001","completion":"0.000002"}}]}`))
 	}))
 	defer server.Close()
-	pricing.SetSource(server.URL)
-	t.Cleanup(func() { pricing.SetSource("") })
+	pricing.RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { pricing.RegisterSource("openrouter", "", nil) })
 	registry := NewRegistry()
 	registry.Register("openrouter", &testProvider{info: ProviderInfo{
 		Name: "openrouter", Working: true, SupportedModels: []string{"foo/bar"},
@@ -469,8 +469,8 @@ func TestListModelsUsesUpstreamIDForPricingAndRoot(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":[{"id":"vendor/model:free","pricing":{"prompt":"0.000002","completion":"0.000006"}}]}`))
 	}))
 	defer server.Close()
-	pricing.SetSource(server.URL)
-	t.Cleanup(func() { pricing.SetSource("") })
+	pricing.RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { pricing.RegisterSource("openrouter", "", nil) })
 	registry := NewRegistry()
 	registry.Register("openrouter", &upstreamAwareProvider{info: ProviderInfo{
 		Name: "openrouter", Working: true, SupportedModels: []string{"or-free-alias"},
@@ -569,8 +569,8 @@ func TestListModelsShowsZeroPricesForFreeModels(t *testing.T) {
 			`{"id":"paid/upstream","pricing":{"prompt":"0.000002","completion":"0.000006"}}]}`))
 	}))
 	defer server.Close()
-	pricing.SetSource(server.URL)
-	t.Cleanup(func() { pricing.SetSource("") })
+	pricing.RegisterSource("openrouter", server.URL, nil)
+	t.Cleanup(func() { pricing.RegisterSource("openrouter", "", nil) })
 	registry := NewRegistry()
 	registry.Register("openrouter", &testProvider{info: ProviderInfo{
 		Name: "openrouter", Working: true, SupportedModels: []string{"free/upstream", "paid/upstream"},
@@ -596,7 +596,7 @@ func TestListModelsShowsZeroPricesForFreeModels(t *testing.T) {
 }
 
 func TestEveryFreeModelHasZeroPrice(t *testing.T) {
-	pricing.SetSource("")
+	pricing.RegisterSource("openrouter", "", nil)
 	registry := NewRegistry()
 	registry.Register("duckai", &testProvider{info: ProviderInfo{
 		Name: "duckai", Working: true, SupportedModels: []string{"gpt-6-luna"},

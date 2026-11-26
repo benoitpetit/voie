@@ -46,9 +46,6 @@ type response struct {
 	} `json:"data"`
 }
 
-// SetSource overrides the OpenRouter catalogue URL (used by tests).
-func SetSource(url string) { RegisterSource("openrouter", url, nil) }
-
 // RegisterSource declares an authenticated catalogue for a provider. An empty
 // URL disables lookups for that provider.
 func RegisterSource(provider, url string, token func() string) {

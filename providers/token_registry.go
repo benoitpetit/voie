@@ -66,9 +66,6 @@ func cloudflareURL(path string) string {
 	return "https://api.cloudflare.com/client/v4/accounts/" + account + "/ai/v1/" + path
 }
 
-// CloudflareAccountKey exposes the credentials key used by `voie connect`.
-func CloudflareAccountKey() string { return cloudflareAccountKey }
-
 // ConnectField is one value `voie connect` must collect for a provider.
 type ConnectField struct {
 	Key     string // credentials key
@@ -212,15 +209,6 @@ func TokenProviderModelsURL(name string) string {
 	for _, spec := range TokenProviders {
 		if spec.Name == name {
 			return spec.ModelsURL
-		}
-	}
-	return ""
-}
-
-func TokenProviderKeyEnv(name string) string {
-	for _, spec := range TokenProviders {
-		if spec.Name == name {
-			return spec.EnvVar
 		}
 	}
 	return ""

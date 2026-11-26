@@ -168,14 +168,6 @@ func buildFallbackOverride(flags *pflag.FlagSet, enabled, disabled bool, retries
 	return override, nil
 }
 
-func runChat(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string) error {
-	return runChatWithOptions(ctx, args, stdin, stdout, service, model, provider, app.StrategyClassic, "", nil, nil, nil, "", false)
-}
-
-func runChatWithOptions(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string, stream bool) error {
-	return runChatWithReporter(ctx, args, stdin, stdout, io.Discard, false, service, model, provider, strategy, task, models, ensemble, fallback, conversation, stream)
-}
-
 func runChatWithReporter(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, isTerminal bool, service *app.Service, model, provider string, strategy app.Strategy, task string, models []string, ensemble *app.EnsembleRequestOptions, fallback *app.FallbackOverride, conversation string, stream bool) error {
 	prompt := strings.TrimSpace(strings.Join(args, " "))
 	if prompt == "" {

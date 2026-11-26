@@ -20,7 +20,7 @@ Cross-origin browser requests are rejected. Requests without an `Origin` header 
 
 ## `POST /v1/chat/completions`
 
-Creates a completion. Classic requests use a supported `model` ID or alias; `auto` and `ensemble` choose models from a routing profile. The generic `openai` model or an omitted classic model uses `DEFAULT_PROVIDER` when configured, otherwise Perplexity's `turbo` default. An explicit `provider` must support the requested model or every explicit ensemble candidate.
+Creates a completion. Classic requests use a supported `model` ID or alias; `auto` and `ensemble` choose models from a routing profile. The generic `openai` model or an omitted classic model uses `DEFAULT_PROVIDER` when configured, otherwise the first registered provider that reports itself working. An explicit `provider` must support the requested model or every explicit ensemble candidate.
 
 ### Request
 

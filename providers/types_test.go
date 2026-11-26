@@ -3,7 +3,7 @@ package providers
 import "testing"
 
 func TestRegistryRoutesDuckAIModels(t *testing.T) {
-	registry := NewProviderRegistry()
+	registry := NewRegistry()
 	provider := registry.Get("duckai")
 	if provider == nil {
 		t.Fatal("registry.Get(duckai) = nil")
@@ -62,7 +62,7 @@ func TestRegistryRoutesDuckAIModels(t *testing.T) {
 }
 
 func TestRemovedCohereModelsAreNotRouted(t *testing.T) {
-	registry := NewProviderRegistry()
+	registry := NewRegistry()
 	if registry.Get("cohere") != nil {
 		t.Fatal("cohere must not be registered")
 	}

@@ -8,7 +8,7 @@ voie does not run models. Inference stays on the services it forwards to. Some p
 
 Point an OpenAI SDK at `http://127.0.0.1:8080/v1` and call any ID returned by `voie models`. Keyless models work with no account; token-backed models require `voie connect <provider>` first. Read the catalogue with `voie models --json` or `GET /v1/models` against a running server.
 
-The registry currently has 52 providers in five groups: keyless public endpoints, token-based OpenAI-compatible APIs, local gateways/CLI bridges, and opt-in third-party reverse-engineered gateways. Only providers that are actually usable appear in `voie models` and in routing. Availability can change without notice, and providers may rate-limit or block automated access. Some log prompts upstream; others state that they do not use data for training.
+The registry currently has 52 providers in five groups: keyless public endpoints, token-based OpenAI-compatible APIs, coding agents over ACP, local gateways/CLI bridges, and opt-in third-party reverse-engineered gateways. Only providers that are actually usable appear in `voie models` and in routing. Availability can change without notice, and providers may rate-limit or block automated access. Some log prompts upstream; others state that they do not use data for training.
 
 The opencode providers use a local OpenAI-compatible gateway at `http://127.0.0.1:8090`. Its loopback key is set in the gateway (default `voie-local`) and mirrored in voie's configuration; callers still supply no key. Free IDs are capped by the upstream daily quota. Go IDs (`oc2ago-*`) need a Go API key or a Go OAuth connection in the gateway; see [Local gateway setup](docs/local-gateway.md).
 
@@ -202,7 +202,7 @@ Configure your MCP client to launch the same executable with the `mcp` argument.
 }
 ```
 
-The server provides `list_models`, `list_providers`, `chat_completion`, and conversation management tools. `chat_completion` supports classic, automatic, and ensemble strategies. See [docs/mcp.md](docs/mcp.md) for result shapes and setup details.
+The server provides `list_models`, `list_providers`, `chat_completion`, `health`, and conversation management tools. `chat_completion` supports classic, automatic, and ensemble strategies. See [docs/mcp.md](docs/mcp.md) for result shapes and setup details.
 
 The portable Agent Skill is in [`skills/voie/SKILL.md`](skills/voie/SKILL.md). Copy the `skills/voie` folder into an agent's supported skills directory to install it.
 
