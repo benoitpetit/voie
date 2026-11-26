@@ -271,7 +271,7 @@ func TestDocsDescribeFinalSurfaceContracts(t *testing.T) {
 
 func TestDocsStateSurfaceSpecificDifferences(t *testing.T) {
 	cli := readDoc(t, "docs/cli.md")
-	for _, needle := range []string{"HTTP-only", "classic requires --model"} {
+	for _, needle := range []string{"HTTP-only", "Classic requests require an explicit"} {
 		assertContains(t, "docs/cli.md", cli, needle)
 	}
 	mcp := readDoc(t, "docs/mcp.md")
