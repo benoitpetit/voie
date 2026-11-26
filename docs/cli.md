@@ -155,3 +155,7 @@ ACP-backed CLI providers publish the models advertised by the agent itself (cach
 
 `voie conversations list` accepts `--limit` and `--offset` for paginated local history; it defaults to `100, 0` like the HTTP and MCP surfaces.
 
+## Surface-specific differences
+
+OpenAI request fields (`temperature`, `max_tokens`, `top_p`, `stop`, `tools`, `tool_choice`, `stream_options`) are HTTP-only; the CLI exposes routing, strategy, fallback and streaming flags instead. Classic requests require an explicit `--model` here, while HTTP/MCP can fall back to `DEFAULT_PROVIDER` or the first working provider for the generic `openai` model.
+

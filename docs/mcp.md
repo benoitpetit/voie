@@ -135,3 +135,7 @@ MCP is for tools and resources; A2A is for agent-to-agent work. voie supports bo
 
 `list_conversations` accepts optional `limit` and `offset` (default `100, 0`). The `health` tool reports local readiness, provider count and model count without probing upstream inference.
 
+## Surface-specific differences
+
+OpenAI request fields are HTTP-only. `chat_completion` without `stream` is non-streaming; with `stream: true` it collects chunks into a single result. Classic calls that omit `model` rely on the shared service default provider.
+

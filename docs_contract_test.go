@@ -268,3 +268,14 @@ func TestDocsDescribeFinalSurfaceContracts(t *testing.T) {
 		assertContains(t, "docs/cli.md", readDoc(t, "docs/cli.md"), needle)
 	}
 }
+
+func TestDocsStateSurfaceSpecificDifferences(t *testing.T) {
+	cli := readDoc(t, "docs/cli.md")
+	for _, needle := range []string{"HTTP-only", "classic requires --model"} {
+		assertContains(t, "docs/cli.md", cli, needle)
+	}
+	mcp := readDoc(t, "docs/mcp.md")
+	for _, needle := range []string{"HTTP-only", "non-streaming"} {
+		assertContains(t, "docs/mcp.md", mcp, needle)
+	}
+}
