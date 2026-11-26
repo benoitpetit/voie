@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/benoitpetit/voie/config"
 )
@@ -54,5 +55,28 @@ func TestA2AModelIDsAreDistinctPerAgent(t *testing.T) {
 	one, two := A2AModelIDs("one"), A2AModelIDs("two")
 	if len(one) != 1 || len(two) != 1 || one[0] == two[0] {
 		t.Fatalf("model IDs collide: %v / %v", one, two)
+	}
+}
+
+func TestCardCacheRefreshesAfterTTL(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	fetches := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fetches++
+		_, _ = w.Write([]byte(`{"name":"remote","supportedInterfaces":[{"url":"http://example/a2a","protocolBinding":"JSONRPC","protocolVersion":"1.0"}],"capabilities":{},"skills":[{"id":"voie.chat.classic","name":"Classic","description":"chat","inputModes":["text/plain"],"outputModes":["text/plain"]}]}`))
+	}))
+	defer server.Close()
+	store, _ := config.LoadCredentials()
+	if err := ConnectA2A(store, "one", server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(A2ACardDir(), "one.json")
+	old := time.Now().Add(-25 * time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	ids := A2AModelIDs("one")
+	if len(ids) != 1 || fetches != 2 {
+		t.Fatalf("ids = %v fetches = %d, want refresh", ids, fetches)
 	}
 }

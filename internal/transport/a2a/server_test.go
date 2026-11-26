@@ -179,3 +179,60 @@ func TestSubscribeToTaskStreamsTerminalState(t *testing.T) {
 		t.Fatalf("subscription = %q", body)
 	}
 }
+
+func TestNonTextPartIsRejected(t *testing.T) {
+	handler := NewHandler(a2aTestService(t))
+	result := rpcRequest(t, handler, `{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":{"role":"ROLE_USER","parts":[{"data":{"a":1},"mediaType":"application/json"}],"metadata":{"skill":"voie.chat.classic"}}}}`)
+	failure, _ := result["error"].(map[string]any)
+	if failure["code"] != float64(-32003) {
+		t.Fatalf("error = %+v, want -32003", failure)
+	}
+}
+
+func TestInvalidJSONRPCVersionIsRejected(t *testing.T) {
+	handler := NewHandler(a2aTestService(t))
+	result := rpcRequest(t, handler, `{"jsonrpc":"1.0","id":1,"method":"GetExtendedAgentCard","params":{}}`)
+	failure, _ := result["error"].(map[string]any)
+	if failure["code"] != float64(-32600) {
+		t.Fatalf("error = %+v, want -32600", failure)
+	}
+}
+
+func TestListTasksPagination(t *testing.T) {
+	h := NewHandler(a2aTestService(t))
+	for _, id := range []string{"t1", "t2", "t3"} {
+		h.store.create(id, "", context.Background(), func() {})
+	}
+	result := rpcRequest(t, h, `{"jsonrpc":"2.0","id":1,"method":"ListTasks","params":{"pageSize":2}}`)
+	page, _ := result["result"].(map[string]any)
+	tasks, _ := page["tasks"].([]any)
+	if len(tasks) != 2 || page["nextPageToken"] == "" {
+		t.Fatalf("page = %+v, want two tasks and a token", page)
+	}
+}
+
+func TestTaskStoreIsOwnerScoped(t *testing.T) {
+	h := NewHandler(a2aTestService(t))
+	h.store.create("shared", "owner-a", context.Background(), func() {})
+	if _, ok := h.store.get("shared", "owner-b"); ok {
+		t.Fatal("task from another owner was visible")
+	}
+	if _, ok := h.store.get("shared", "owner-a"); !ok {
+		t.Fatal("owner's own task was hidden")
+	}
+}
+
+func TestTaskIDsDoNotCollideAcrossOwners(t *testing.T) {
+	h := NewHandler(a2aTestService(t))
+	h.store.create("shared", "a", context.Background(), func() {})
+	h.store.setStatus("shared", "TASK_STATE_WORKING")
+	h.store.create("shared", "b", context.Background(), func() {})
+	first, ok := h.store.get("shared", "a")
+	if !ok || first.Status.State != "TASK_STATE_WORKING" {
+		t.Fatalf("owner a task = %+v ok=%v", first, ok)
+	}
+	second, ok := h.store.get("shared", "b")
+	if !ok || second.Status.State == "TASK_STATE_WORKING" {
+		t.Fatalf("owner b task = %+v ok=%v", second, ok)
+	}
+}

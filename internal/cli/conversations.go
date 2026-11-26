@@ -9,6 +9,7 @@ import (
 )
 
 func newConversationsCommand(getService func() (*app.Service, error)) *cobra.Command {
+	var limit, offset int
 	cmd := &cobra.Command{Use: "conversations", Short: "Manage local conversations"}
 	cmd.AddCommand(&cobra.Command{Use: "create", Args: cobra.NoArgs, Short: "Create a conversation", RunE: func(c *cobra.Command, _ []string) error {
 		s, e := getService()
@@ -22,12 +23,12 @@ func newConversationsCommand(getService func() (*app.Service, error)) *cobra.Com
 		_, e = fmt.Fprintln(c.OutOrStdout(), v.ID)
 		return e
 	}})
-	cmd.AddCommand(&cobra.Command{Use: "list", Args: cobra.NoArgs, Short: "List conversations", RunE: func(c *cobra.Command, _ []string) error {
+	listCommand := &cobra.Command{Use: "list", Args: cobra.NoArgs, Short: "List conversations", RunE: func(c *cobra.Command, _ []string) error {
 		s, e := getService()
 		if e != nil {
 			return e
 		}
-		items, e := s.ListConversations(c.Context(), 100, 0)
+		items, e := s.ListConversations(c.Context(), limit, offset)
 		if e != nil {
 			return e
 		}
@@ -37,7 +38,10 @@ func newConversationsCommand(getService func() (*app.Service, error)) *cobra.Com
 			}
 		}
 		return nil
-	}})
+	}}
+	listCommand.Flags().IntVar(&limit, "limit", 100, "maximum conversations to list")
+	listCommand.Flags().IntVar(&offset, "offset", 0, "number of conversations to skip")
+	cmd.AddCommand(listCommand)
 	cmd.AddCommand(&cobra.Command{Use: "show ID", Args: cobra.ExactArgs(1), Short: "Show a conversation transcript", RunE: func(c *cobra.Command, args []string) error {
 		s, e := getService()
 		if e != nil {

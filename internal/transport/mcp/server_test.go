@@ -63,7 +63,7 @@ func TestMCPToolsExposeStableSchemasAndStructuredResults(t *testing.T) {
 	for _, tool := range result.Tools {
 		names = append(names, tool.Name)
 	}
-	want := []string{"chat_completion", "create_conversation", "delete_conversation", "get_conversation", "list_conversations", "list_models", "list_providers"}
+	want := []string{"chat_completion", "create_conversation", "delete_conversation", "get_conversation", "health", "list_conversations", "list_models", "list_providers"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
@@ -547,8 +547,8 @@ func TestMCPModelsUseSharedModelInfoShape(t *testing.T) {
 	if len(output.Models) == 0 {
 		t.Fatal("no models")
 	}
-	if output.Models[0].Tier == "" || output.Models[0].Price == nil || output.Models[0].Price.Currency == "" {
-		t.Fatalf("model = %+v, want shared ModelInfo shape", output.Models[0])
+	if output.Models[0].Tier == "" || output.Models[0].Price == nil || output.Models[0].Price.Currency == "" || output.Models[0].Provider == "" {
+		t.Fatalf("model = %+v, want shared ModelInfo shape with provider", output.Models[0])
 	}
 }
 
@@ -563,5 +563,40 @@ func TestMCPErrorIncludesTypeAndCode(t *testing.T) {
 	encoded, _ := json.Marshal(result.StructuredContent)
 	if !strings.Contains(string(encoded), `"type"`) || !strings.Contains(string(encoded), `"code"`) {
 		t.Fatalf("structured = %s, want error type and code", encoded)
+	}
+}
+
+func TestMCPListConversationsSupportsPagination(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	for i := 0; i < 3; i++ {
+		if _, err := service.CreateConversation(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_conversations", Arguments: map[string]any{"limit": 1, "offset": 1}})
+	if err != nil || result.StructuredContent == nil {
+		t.Fatalf("result = %+v err = %v", result, err)
+	}
+	encoded, _ := json.Marshal(result.StructuredContent)
+	var out struct {
+		Conversations []app.Conversation `json:"conversations"`
+	}
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Conversations) != 1 {
+		t.Fatalf("conversations = %d, want one", len(out.Conversations))
+	}
+}
+
+func TestMCPHealthTool(t *testing.T) {
+	service, _ := mcpTestService(t, nil, time.Second)
+	session, closeSessions := connectTestClient(t, NewServer(service))
+	defer closeSessions()
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: "health", Arguments: map[string]any{}})
+	if err != nil || result.IsError || result.StructuredContent == nil {
+		t.Fatalf("health = %+v err = %v", result, err)
 	}
 }

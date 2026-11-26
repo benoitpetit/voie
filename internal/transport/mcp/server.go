@@ -21,9 +21,10 @@ const (
 	listConversationsToolName  = "list_conversations"
 	getConversationToolName    = "get_conversation"
 	deleteConversationToolName = "delete_conversation"
+	healthToolName             = "health"
 )
 
-var toolNames = []string{listModelsToolName, listProvidersToolName, chatCompletionToolName, createConversationToolName, listConversationsToolName, getConversationToolName, deleteConversationToolName}
+var toolNames = []string{listModelsToolName, listProvidersToolName, chatCompletionToolName, createConversationToolName, listConversationsToolName, getConversationToolName, deleteConversationToolName, healthToolName}
 
 type emptyInput struct{}
 
@@ -70,6 +71,11 @@ type chatCompletionOutput struct {
 	Provider       string           `json:"provider"`
 	ConversationID string           `json:"conversation_id,omitempty"`
 	Routing        *app.RoutingInfo `json:"routing,omitempty"`
+}
+
+type conversationListInput struct {
+	Limit  int `json:"limit,omitempty" jsonschema:"optional maximum number of conversations, default 100"`
+	Offset int `json:"offset,omitempty" jsonschema:"optional number of conversations to skip"`
 }
 
 type conversationIDInput struct {
@@ -186,10 +192,17 @@ func NewServer(service *app.Service) *mcp.Server {
 		}
 		return textToolResult(c.ID), c, nil
 	}))
-	mcp.AddTool(server, &mcp.Tool{Name: listConversationsToolName, Description: "List local conversations without transcript contents."}, logToolCall(listConversationsToolName, func(ctx context.Context, _ *mcp.CallToolRequest, _ emptyInput) (*mcp.CallToolResult, struct {
+	mcp.AddTool(server, &mcp.Tool{Name: listConversationsToolName, Description: "List local conversations without transcript contents."}, logToolCall(listConversationsToolName, func(ctx context.Context, _ *mcp.CallToolRequest, input conversationListInput) (*mcp.CallToolResult, struct {
 		Conversations []app.ConversationSummary `json:"conversations"`
 	}, error) {
-		items, err := service.ListConversations(ctx, 100, 0)
+		limit, offset := input.Limit, input.Offset
+		if limit < 1 || limit > 200 {
+			limit = 100
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		items, err := service.ListConversations(ctx, limit, offset)
 		out := struct {
 			Conversations []app.ConversationSummary `json:"conversations"`
 		}{items}
@@ -211,6 +224,18 @@ func NewServer(service *app.Service) *mcp.Server {
 			return nil, emptyInput{}, err
 		}
 		return textToolResult("Conversation deleted."), emptyInput{}, nil
+	}))
+	mcp.AddTool(server, &mcp.Tool{Name: healthToolName, Description: "Report local server readiness and catalogue sizes."}, logToolCall(healthToolName, func(context.Context, *mcp.CallToolRequest, emptyInput) (*mcp.CallToolResult, struct {
+		Status    string `json:"status"`
+		Providers int    `json:"providers"`
+		Models    int    `json:"models"`
+	}, error) {
+		out := struct {
+			Status    string `json:"status"`
+			Providers int    `json:"providers"`
+			Models    int    `json:"models"`
+		}{Status: "ok", Providers: len(service.ListProviderMetadata()), Models: len(service.ListModels())}
+		return textToolResult("ok"), out, nil
 	}))
 	return server
 }

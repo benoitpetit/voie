@@ -93,8 +93,11 @@ type RPCError struct {
 
 // Part is a unified A2A 1.0 content part.
 type Part struct {
-	Text      string `json:"text,omitempty"`
-	MediaType string `json:"mediaType,omitempty"`
+	Text      string         `json:"text,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
+	URL       string         `json:"url,omitempty"`
+	Raw       string         `json:"raw,omitempty"`
+	MediaType string         `json:"mediaType,omitempty"`
 }
 
 // Message is one A2A conversation turn.

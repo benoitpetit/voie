@@ -775,3 +775,33 @@ func TestChatStreamActuallyUsesStreamingPath(t *testing.T) {
 		t.Fatalf("stdout = %q, want streaming path only", stdout.String())
 	}
 }
+
+func TestConversationsListSupportsPaginationFlags(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conv.db", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	registry := app.NewRegistry()
+	service, err := app.NewService(registry, app.ServiceOptions{Conversations: store, HealthProbe: func(context.Context, string) bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := service.CreateConversation(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stdout, stderr bytes.Buffer
+	command := newConversationsCommand(func() (*app.Service, error) { return service, nil })
+	command.SetOut(&stdout)
+	command.SetErr(&stderr)
+	command.SetArgs([]string{"list", "--limit", "1", "--offset", "1"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(stdout.String(), "\n") != 1 {
+		t.Fatalf("output = %q, want one conversation", stdout.String())
+	}
+}

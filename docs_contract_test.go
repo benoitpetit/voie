@@ -259,3 +259,12 @@ func TestDocsDescribeA2A(t *testing.T) {
 		}
 	}
 }
+
+func TestDocsDescribeFinalSurfaceContracts(t *testing.T) {
+	for _, needle := range []string{"health", "limit", "offset"} {
+		assertContains(t, "docs/mcp.md", readDoc(t, "docs/mcp.md"), needle)
+	}
+	for _, needle := range []string{"--limit", "--offset"} {
+		assertContains(t, "docs/cli.md", readDoc(t, "docs/cli.md"), needle)
+	}
+}

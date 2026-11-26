@@ -127,6 +127,18 @@ func ReadA2ACard(name string) (a2a.AgentCard, error) {
 	if path == "" {
 		return a2a.AgentCard{}, fmt.Errorf("cannot resolve user config directory")
 	}
+	info, statErr := os.Stat(path)
+	if statErr == nil && time.Since(info.ModTime()) > 24*time.Hour {
+		// Refresh a stale card using the stored endpoint and token.
+		if store, loadErr := config.LoadCredentials(); loadErr == nil {
+			if endpoint := store.A2AAgentURL(name); endpoint != "" {
+				if refreshErr := ConnectA2A(store, name, endpoint, store.Token(name)); refreshErr == nil {
+					info, statErr = os.Stat(path)
+				}
+			}
+		}
+	}
+	_ = statErr
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return a2a.AgentCard{}, err

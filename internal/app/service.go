@@ -555,7 +555,7 @@ func (s *Service) ListModelsFiltered(providerFilter string, tier ModelTier) []Mo
 			}
 			model := ModelInfo{
 				ID: publicID, Object: "model", Created: time.Now().Unix(), OwnedBy: ownerInfo.Label,
-				Tier: modelTier, Group: ownerInfo.Label,
+				Provider: ownerName, Tier: modelTier, Group: ownerInfo.Label,
 				Permission: []interface{}{}, Root: upstreamID,
 				Meta: map[string]interface{}{"provider": ownerName, "url": ownerInfo.URL},
 			}

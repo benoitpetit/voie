@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/benoitpetit/voie/internal/app"
@@ -14,11 +15,15 @@ import (
 )
 
 const (
-	codeInvalidParams  = -32602
+	codeInvalidRequest = -32600
 	codeMethodNotFound = -32601
+	codeInvalidParams  = -32602
 	codeInternal       = -32603
 	codeTaskNotFound   = -32001
-	codeUnavailable    = -32002
+	codeUnsupported    = -32002
+	codeContentType    = -32003
+	codeInvalidState   = -32004
+	codeUnavailable    = -32005
 )
 
 // Handler serves A2A JSON-RPC requests using the shared service.
@@ -50,6 +55,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeRPC(w, r, RPCResponse{JSONRPC: "2.0", Error: &RPCError{Code: codeInvalidParams, Message: "invalid JSON-RPC request"}})
 		return
 	}
+	if request.JSONRPC != "2.0" {
+		writeRPCError(w, request.ID, &RPCError{Code: codeInvalidRequest, Message: "jsonrpc must be 2.0"})
+		return
+	}
 	id := request.ID
 	if len(id) == 0 {
 		id = json.RawMessage("null")
@@ -77,7 +86,7 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request, request RPCRe
 	case "GetExtendedAgentCard", "agent/getAuthenticatedExtendedCard":
 		return h.card, nil, false
 	case "SendMessage", "message/send":
-		task, rpcErr := h.send(r.Context(), params.Message, owner, nil)
+		task, rpcErr := h.send(r.Context(), params.Message, owner)
 		if rpcErr != nil {
 			return nil, rpcErr, false
 		}
@@ -98,10 +107,27 @@ func (h *Handler) dispatch(w http.ResponseWriter, r *http.Request, request RPCRe
 		var query struct {
 			ContextID string `json:"contextId"`
 			State     string `json:"status"`
+			PageSize  int    `json:"pageSize"`
+			PageToken string `json:"pageToken"`
 		}
 		_ = json.Unmarshal(request.Params, &query)
 		tasks := h.store.list(owner, query.ContextID, query.State)
-		return map[string]any{"tasks": tasks, "nextPageToken": "", "pageSize": len(tasks), "totalSize": len(tasks)}, nil, false
+		if query.PageSize < 1 || query.PageSize > 100 {
+			query.PageSize = 50
+		}
+		start := 0
+		if query.PageToken != "" {
+			start, _ = strconv.Atoi(query.PageToken)
+			if start < 0 || start > len(tasks) {
+				start = 0
+			}
+		}
+		end := min(start+query.PageSize, len(tasks))
+		next := ""
+		if end < len(tasks) {
+			next = strconv.Itoa(end)
+		}
+		return map[string]any{"tasks": tasks[start:end], "nextPageToken": next, "pageSize": query.PageSize, "totalSize": len(tasks)}, nil, false
 	case "CancelTask", "tasks/cancel":
 		var query struct {
 			ID string `json:"id"`
@@ -136,7 +162,7 @@ func ownerFor(r *http.Request) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (h *Handler) send(ctx context.Context, message Message, owner string, onChunk func(string)) (Task, *RPCError) {
+func (h *Handler) send(ctx context.Context, message Message, owner string) (Task, *RPCError) {
 	request, err := h.completionRequest(message)
 	if err != nil {
 		return Task{}, err
@@ -158,25 +184,14 @@ func (h *Handler) send(ctx context.Context, message Message, owner string, onChu
 	h.store.appendHistory(id, message)
 	h.store.setStatus(id, "TASK_STATE_WORKING")
 	var answer string
-	if onChunk == nil {
-		response, callErr := h.service.Complete(callCtx, request)
-		if callErr != nil {
-			h.store.setStatus(id, "TASK_STATE_FAILED")
-			return Task{}, failureFor(callErr)
-		}
-		if len(response.Choices) > 0 {
-			answer = response.Choices[0].Message.Content
-			request.ConversationID = response.ConversationID
-		}
-	} else {
-		callErr := h.service.CompleteStreamWithInfo(callCtx, request, func(chunk string, _ *app.RoutingInfo) {
-			answer += chunk
-			onChunk(chunk)
-		})
-		if callErr != nil {
-			h.store.setStatus(id, "TASK_STATE_FAILED")
-			return Task{}, failureFor(callErr)
-		}
+	response, callErr := h.service.Complete(callCtx, request)
+	if callErr != nil {
+		h.store.setStatus(id, "TASK_STATE_FAILED")
+		return Task{}, failureFor(callErr)
+	}
+	if len(response.Choices) > 0 {
+		answer = response.Choices[0].Message.Content
+		request.ConversationID = response.ConversationID
 	}
 	if answer == "" {
 		h.store.setStatus(id, "TASK_STATE_FAILED")
@@ -305,6 +320,9 @@ func (h *Handler) completionRequest(message Message) (app.CompletionRequest, *RP
 	}
 	for _, part := range message.Parts {
 		if part.Text == "" {
+			if part.Data != nil || part.URL != "" || part.Raw != "" {
+				return app.CompletionRequest{}, &RPCError{Code: codeContentType, Message: "unsupported content type"}
+			}
 			continue
 		}
 		role := strings.ToLower(message.Role)

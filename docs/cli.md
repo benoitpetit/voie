@@ -152,3 +152,6 @@ ACP-backed CLI providers publish the models advertised by the agent itself (cach
 ## A2A agents
 
 `voie connect a2a:<name> --url https://agent.example [--token TOKEN]` discovers and caches the remote `/.well-known/agent-card.json`, and exposes its skills as `a2a-<name>-<skill>` model IDs. `voie models --provider a2a:<name>` lists them. `voie chat --model a2a-<name>-<skill> --stream PROMPT` streams chunks; the same messages are sent to the remote agent with JSON-RPC `SendMessage` (or `SendStreamingMessage`). The local HTTP server also accepts A2A calls at `POST /a2a` and publishes its own card at `/.well-known/agent-card.json`.
+
+`voie conversations list` accepts `--limit` and `--offset` for paginated local history; it defaults to `100, 0` like the HTTP and MCP surfaces.
+

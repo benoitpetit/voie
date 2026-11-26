@@ -49,9 +49,9 @@ func TestMCPStdioBinaryProtocolUsesStdoutAndDiagnosticsUseStderr(t *testing.T) {
 		_ = session.Close()
 		t.Fatalf("list MCP tools: %v (stderr: %s)", err, stderr.String())
 	}
-	if len(tools.Tools) != 7 {
+	if len(tools.Tools) != 8 {
 		_ = session.Close()
-		t.Fatalf("tools = %v, want seven tools including conversations", tools.Tools)
+		t.Fatalf("tools = %v, want eight tools including health and conversations", tools.Tools)
 	}
 	models, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "list_models", Arguments: map[string]any{}})
 	if err != nil || models.IsError || models.StructuredContent == nil {

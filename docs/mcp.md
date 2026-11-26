@@ -132,3 +132,6 @@ ACP-backed CLI providers publish the models advertised by the agent itself (cach
 ## A2A and MCP
 
 MCP is for tools and resources; A2A is for agent-to-agent work. voie supports both: `chat_completion` accepts `stream: true`, and `list_models` returns the same structured model objects (including the `price` object) as CLI and HTTP. Errors carry a stable `type` and `code`. An external A2A agent is reachable through the same registry as `a2a-<name>-<skill>` models; the local A2A card is at `/.well-known/agent-card.json` and JSON-RPC method `SendMessage` mirrors `chat_completion`.
+
+`list_conversations` accepts optional `limit` and `offset` (default `100, 0`). The `health` tool reports local readiness, provider count and model count without probing upstream inference.
+
