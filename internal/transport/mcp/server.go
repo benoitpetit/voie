@@ -33,10 +33,7 @@ type listModelsInput struct {
 	Provider string `json:"provider,omitempty" jsonschema:"optional provider name filter"`
 }
 
-// modelItem is the shared app.ModelInfo so MCP, CLI and HTTP expose the same
-// tier/price object and metadata fields.
-type modelItem = app.ModelInfo
-
+// modelGroup groups model entries in the list_models response.
 type modelGroup struct {
 	Name   string          `json:"name"`
 	Models []app.ModelInfo `json:"models"`

@@ -2,7 +2,7 @@
 
 ![voie free ai api](docs/voie-banner.png)
 
-`voie` is a free, OpenAI-compatible API relay. One Go executable relays requests to public model providers and exposes the same provider registry through an HTTP API, a CLI, and an MCP server over stdio. Those interfaces share provider selection, routing, validation, timeouts, and error handling.
+`voie` is a free, OpenAI-compatible API relay. One Go executable relays requests to public model providers and exposes the same provider registry through an HTTP API, a CLI, an MCP server over stdio, and an A2A endpoint. Those interfaces share provider selection, routing, validation, timeouts, and error handling.
 
 voie does not run models. Inference stays on the services it forwards to. Some providers are keyless, some need a token, and some start a local gateway or CLI toolchain on demand (`voie install` / `voie connect`).
 

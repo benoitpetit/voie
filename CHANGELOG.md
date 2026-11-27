@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.5 - 2026-11-27
 
 ### Added
 
@@ -20,6 +20,12 @@
 
 - Free/paid model tiers: `voie models` shows `TIER` and `PRICE` columns with `--free`, `--paid`, `--all` and `--provider` filters; `GET /v1/models?tier=&provider=` and MCP `list_models` carry the same fields.
 - Hidden paid models from gateway allowlists, the free-model catalogue and Perplexity are now callable and listed as `paid`. Public per-token prices are fetched from OpenRouter when available; otherwise paid models show `price unknown`.
+- 16 token-based OpenAI-compatible providers (OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run, Runcrate) declared in one catalogue.
+- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for 16 opt-in third-party gateways.
+- Model IDs carry a provider prefix and list their provider in `voie models`, `GET /v1/models` and MCP `list_models`.
+- `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing. Connecting Antigravity, Kiro or Cline installs their missing toolchain automatically; `voie install <provider>` does the same explicitly.
+- OpenRouter and OrcaRouter providers with stable free-model aliases (`orfree`, `orcafree`).
+- Local gateway providers for Antigravity (CLIProxyAPI), Kiro (official-CLI ACP bridge), and Cline (built-in ACP bridge that denies agent tools). Gateways start automatically and stop with the runtime.
 
 ### Fixed
 
@@ -54,16 +60,6 @@
 - ACP bridges: each agent uses its own catalogue, no Cline-only flags, per-request model pinning, trailing chunks are kept, loopback ports are identity-checked, and cancellation is prompt.
 - Gateway refresh, npm/CLIProxyAPI installer checksums, model ownership/prefix collisions, Docker token default, and CLI usage/error streams.
 - Docs contract now derives provider counts, env vars and CI requirements from code; chain/debate, conversation CRUD, store, config and updater paths gained regression tests.
-
-### Added
-
-- 16 token-based OpenAI-compatible providers (OpenRouter, OrcaRouter, Groq, Google AI Studio, NVIDIA NIM, Z.ai, Mistral, Cloudflare Workers AI, Cohere trial, Requesty, AIHubMix, AnyAPI, BeatAPI, iFlytek Spark, VLM Run, Runcrate) declared in one catalogue.
-- Six ACP providers over official coding-agent CLIs (CodeBuddy, MiniMax Code, Devin, Qoder, Copilot CLI, Cursor) using the generalized in-process bridge, plus declarative specs for 16 opt-in third-party gateways.
-- Model IDs carry a provider prefix and list their provider in `voie models`, `GET /v1/models` and MCP `list_models`.
-
-- `voie connect` stores provider tokens in a `0600` credential file with environment overrides; unconfigured providers are hidden from the catalogue and routing. Connecting Antigravity, Kiro or Cline installs their missing toolchain automatically; `voie install <provider>` does the same explicitly.
-- OpenRouter and OrcaRouter providers with stable free-model aliases (`orfree`, `orcafree`).
-- Local gateway providers for Antigravity (CLIProxyAPI), Kiro (official-CLI ACP bridge), and Cline (built-in ACP bridge that denies agent tools). Gateways start automatically and stop with the runtime.
 
 ### Changed
 

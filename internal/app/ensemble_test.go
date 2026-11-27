@@ -261,7 +261,6 @@ type recordingProvider struct {
 	info     ProviderInfo
 	response *ChatCompletionResponse
 	segments [][]Message
-	messages [][]Message
 	calls    int
 	failFrom int
 	delay    time.Duration

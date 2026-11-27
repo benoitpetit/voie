@@ -1,6 +1,6 @@
 # Architecture
 
-`voie` is one Go program with three entry points: an HTTP API, a local CLI, and an MCP stdio server. Each adapter calls the same application service and provider registry.
+`voie` is one Go program with four entry points: an HTTP API, a local CLI, an MCP stdio server, and an A2A endpoint. Each adapter calls the same application service and provider registry.
 
 Every interface forwards the request to a third-party provider; there is no local inference and no local model weight.
 
@@ -13,14 +13,15 @@ Every interface forwards the request to a third-party provider; there is no loca
 | `providers` | Concrete upstream implementations and the default provider registry |
 | `internal/runtime` | Configuration validation and construction of the registry, service, HTTP server, and MCP server |
 | `internal/transport/httpapi` | OpenAI-compatible JSON/SSE routes, response mapping, CORS, and bearer authentication |
-| `internal/cli` | `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `connect`, `install`, `completion`, `version`, and `update` command dispatch and formatting |
+| `internal/cli` | `serve`, `chat`, `conversations`, `models`, `providers`, `mcp`, `healthcheck`, `connect`, `install`, `keys`, `completion`, `version`, and `update` command dispatch and formatting |
 | `internal/transport/mcp` | MCP tools and stdio transport using the official Go SDK |
+| `internal/transport/a2a` | A2A agent card, JSON-RPC chat/task methods, streaming, and inbound conversation mapping |
 | `config` | Environment parsing, defaults, and bind validation |
 
 ## Request flow
 
 ```text
-HTTP / CLI / MCP
+HTTP / CLI / MCP / A2A
        ↓
       app.Service
   validate → route → timeout
@@ -69,7 +70,7 @@ Every strategy shares the same fallback policy. Failures are classified as trans
 
 Fallback candidates resolve deterministically: an explicit request list replaces the configured and inferred pools; otherwise the configured per-model list is used, followed by the profile/provider-filtered pool. Ensemble replacement agents exclude already used models, the synthesizer, and the router. The synthesis step keeps its own configured fallback budget; replacement calls cannot consume it. Debate rounds keep an agent's previous draft when that agent's revision fails. Responses carry an `attempts` array that records every agent, debate, synthesis, retry, and fallback provider call. Ensemble routing also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`.
 
-`ROUTER_MODEL`, `SYNTHESIS_MODEL`, `ROUTING_CONFIG_PATH`, `CONVERSATION_DB_PATH`, and `CONVERSATION_TTL` are shared by HTTP, CLI, and MCP. See the API and interface guides for request examples.
+`ROUTER_MODEL`, `SYNTHESIS_MODEL`, `ROUTING_CONFIG_PATH`, `CONVERSATION_DB_PATH`, and `CONVERSATION_TTL` are shared by HTTP, CLI, MCP, and A2A. See the API and interface guides for request examples.
 
 The service owns model and provider selection. An explicit model must resolve to a registered ID or alias. A provider/model mismatch is rejected. The generic `openai` ID, or an omitted API model, uses the configured `DEFAULT_PROVIDER`; when none is configured it resolves to the first registered provider that reports itself working. A provider specified with the generic ID uses that provider's declared default model.
 
@@ -79,7 +80,7 @@ Each completion shares the caller's context and the configured end-to-end `TIMEO
 
 ## Security and deployment
 
-The HTTP listener defaults to loopback. Binding to another address requires `API_TOKEN`, and all API routes require its bearer token. The HTTP server caps chat request bodies at 2 MiB and bounds header/body read time and idle connections; it leaves response writes unbounded so long-lived SSE streams can flush. `healthcheck` probes the local health route and is used by the container health check. MCP uses local stdio and does not open a network listener. All three modes are built into the root `voie` executable.
+The HTTP listener defaults to loopback. Binding to another address requires `API_TOKEN`, and all API routes require its bearer token. The HTTP server caps chat request bodies at 2 MiB and bounds header/body read time and idle connections; it leaves response writes unbounded so long-lived SSE streams can flush. `healthcheck` probes the local health route and is used by the container health check. MCP uses local stdio and does not open a network listener. All four surfaces are built into the root `voie` executable.
 
 The provider catalogue is runtime data. Use `voie models --json` or `GET /v1/models` rather than copying model counts into other integrations.
 

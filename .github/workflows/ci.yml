@@ -22,6 +22,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      - name: Staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+
       - name: Check formatting
         run: test -z "$(gofmt -l .)"
 

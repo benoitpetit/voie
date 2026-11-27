@@ -691,7 +691,7 @@ func NewExternalGateway(spec ExternalGatewaySpec) *ExternalGateway {
 		cfg.BodyHint = pplxProxyErrorHint
 		cfg.ResponseHint = func(content string) error {
 			if strings.Contains(content, "Sign up and repeat your request.") {
-				return fmt.Errorf("Perplexity cookie expired or invalid; run `voie connect pplx-proxy`")
+				return fmt.Errorf("perplexity cookie expired or invalid; run `voie connect pplx-proxy`")
 			}
 			return nil
 		}

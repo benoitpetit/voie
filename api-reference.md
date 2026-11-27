@@ -236,15 +236,17 @@ Errors use this JSON envelope:
 | --- | --- |
 | `400` | Invalid input, unknown model, provider/model mismatch, or invalid fallback bounds/IDs |
 | `401` | Missing or invalid bearer token, or missing required hosted conversation scope |
-| `413` | Chat request body exceeds 2 MiB |
+| `403` | Origin host or port does not match the request host |
 | `404` | Unknown provider, unknown conversation, or unmatched route |
+| `405` | Unsupported method on a route that checks methods |
 | `408` | Request canceled |
-| `503` | Provider disabled |
-| `502` | Upstream provider failure |
-| `504` | Completion timed out |
 | `409` | Conversation changed during a concurrent turn |
 | `410` | Conversation expired (tombstone retained) |
+| `413` | Chat request body exceeds 2 MiB |
 | `500` | Local conversation storage failure |
+| `502` | Upstream provider failure |
+| `503` | Provider disabled |
+| `504` | Completion timed out |
 
 Completions use the configured end-to-end `TIMEOUT` (seconds), defaulting to 120 seconds. Unknown model IDs are rejected instead of being silently sent to another provider.
 

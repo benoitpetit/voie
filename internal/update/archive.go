@@ -45,7 +45,7 @@ func extractTarGzExecutable(archive []byte, executableName string) ([]byte, erro
 		switch header.Typeflag {
 		case tar.TypeDir:
 			continue
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if header.Size < 0 || header.Size > maxExecutableSize {
 				return nil, fmt.Errorf("archive entry %q exceeds size limit", header.Name)
 			}

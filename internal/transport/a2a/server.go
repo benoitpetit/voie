@@ -325,10 +325,7 @@ func (h *Handler) completionRequest(message Message) (app.CompletionRequest, *RP
 			}
 			continue
 		}
-		role := strings.ToLower(message.Role)
-		if strings.HasPrefix(role, "role_") {
-			role = strings.TrimPrefix(role, "role_")
-		}
+		role := strings.TrimPrefix(strings.ToLower(message.Role), "role_")
 		if role != "user" && role != "assistant" {
 			role = "user"
 		}

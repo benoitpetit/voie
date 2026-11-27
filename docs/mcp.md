@@ -25,9 +25,9 @@ Build it with `go build -o voie .`. The same executable also provides the CLI an
 
 ## Tools
 
-### The structured `list_models` result includes `models[]` with `id`, `provider`, `owned_by` and optional `group`, plus a `groups[]` grouping array.
+The structured `list_models` result includes `models[]` with `id`, `provider`, `owned_by` and optional `group`, plus a `groups[]` grouping array.
 
-`list_models`
+### `list_models`
 
 Takes an empty object. Returns a human-readable list plus structured model entries with `id`, `provider`, and `owned_by`. Use this at runtime; the available catalogue can change.
 

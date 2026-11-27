@@ -248,7 +248,6 @@ func TestHTTPRoutesPreserveJSONAndSSEShapes(t *testing.T) {
 }
 
 func TestHTTPConversationLifecycle(t *testing.T) {
-	service, _ := httpTestService(t)
 	store, err := sqlitestore.NewSQLiteStore(t.TempDir()+"/conversations.db", time.Hour)
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +257,7 @@ func TestHTTPConversationLifecycle(t *testing.T) {
 	registry := app.NewRegistry()
 	provider := &httpTestProvider{}
 	registry.Register("test", provider)
-	service, err = app.NewService(registry, app.ServiceOptions{Conversations: store})
+	service, err := app.NewService(registry, app.ServiceOptions{Conversations: store})
 	if err != nil {
 		t.Fatal(err)
 	}

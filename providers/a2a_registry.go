@@ -132,13 +132,10 @@ func ReadA2ACard(name string) (a2a.AgentCard, error) {
 		// Refresh a stale card using the stored endpoint and token.
 		if store, loadErr := config.LoadCredentials(); loadErr == nil {
 			if endpoint := store.A2AAgentURL(name); endpoint != "" {
-				if refreshErr := ConnectA2A(store, name, endpoint, store.Token(name)); refreshErr == nil {
-					info, statErr = os.Stat(path)
-				}
+				_ = ConnectA2A(store, name, endpoint, store.Token(name))
 			}
 		}
 	}
-	_ = statErr
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return a2a.AgentCard{}, err
