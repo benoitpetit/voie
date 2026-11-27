@@ -4,12 +4,23 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/benoitpetit/voie/internal/app"
 )
 
 func TestOpenCodeZenMetadataAndModelSupport(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("VOIE_OPENCODE_GATEWAY_URL", server.URL)
+
 	info := NewOpenCodeZen().GetInfo()
 	if info.Name != "opencode-zen" || info.DefaultModel != "oc2a-hy4-flash-free" {
 		t.Fatalf("GetInfo() = %#v", info)

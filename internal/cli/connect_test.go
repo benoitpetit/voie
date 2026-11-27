@@ -189,18 +189,26 @@ func TestConnectAcceptsExtraField(t *testing.T) {
 
 func TestConnectInstallsGatewayToolchain(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	previous := connectInstaller
-	defer func() { connectInstaller = previous }()
+	previousInstaller, previousStart := connectInstaller, startClineBridge
+	defer func() { connectInstaller, startClineBridge = previousInstaller, previousStart }()
 	var installed string
 	connectInstaller = func(_ context.Context, provider string) (string, error) {
 		installed = provider
 		return "/tmp/tool", nil
+	}
+	bridgeStarted := false
+	startClineBridge = func(context.Context) error {
+		bridgeStarted = true
+		return nil
 	}
 	if _, _, err := runConnect(t, []string{"cline", "--token", "voie-local"}, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if installed != "cline" {
 		t.Errorf("installer called with %q, want cline", installed)
+	}
+	if !bridgeStarted {
+		t.Error("Cline ACP bridge was not started")
 	}
 }
 

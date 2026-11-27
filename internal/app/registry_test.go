@@ -10,8 +10,9 @@ import (
 )
 
 func TestRegistryRoutesOnlySupportedModels(t *testing.T) {
+	t.Setenv("VOIE_OPENROUTER_KEY", "test-token")
 	registry := providers.NewRegistry()
-	for _, model := range []string{"gpt-5.6-luna", "claude-3-haiku", "or-nvidia-nemotron-3-ultra-550b-a55b-free"} {
+	for _, model := range []string{"gpt-5.6-luna", "claude-3-haiku", "orfree"} {
 		if got := registry.GetForModel(model); got == nil {
 			t.Errorf("GetForModel(%q) = nil, want registered provider", model)
 		}

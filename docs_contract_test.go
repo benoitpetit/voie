@@ -157,7 +157,8 @@ func TestCIRunsNpmTestsRaceAndWindowsBuild(t *testing.T) {
 	assertContains(t, "ci.yml", workflow, "npm test")
 	assertContains(t, "ci.yml", workflow, "go test -race ./...")
 	assertContains(t, "ci.yml", workflow, "windows-latest")
-	assertContains(t, "ci.yml", workflow, "GOOS=windows")
+	assertContains(t, "ci.yml", workflow, `$env:GOOS = "windows"`)
+	assertContains(t, "ci.yml", workflow, `$env:GOARCH = "amd64"`)
 	assertContains(t, "ci.yml", workflow, "TestReplaceExecutableWindows")
 }
 
