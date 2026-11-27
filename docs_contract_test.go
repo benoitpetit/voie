@@ -144,11 +144,11 @@ func TestEnvExampleListsRequiredVariables(t *testing.T) {
 	}
 }
 
-func TestReadmeDocumentsAllProviderKeyEnvVars(t *testing.T) {
-	readme := readDoc(t, "README.md")
+func TestConfigurationDocumentsAllProviderKeyEnvVars(t *testing.T) {
+	configuration := readDoc(t, "docs/configuration.md")
 	for _, spec := range providers.ExternalGateways {
 		name := "VOIE_" + strings.ToUpper(strings.ReplaceAll(spec.Name, "-", "_")) + "_KEY"
-		assertContains(t, "README.md", readme, name)
+		assertContains(t, "docs/configuration.md", configuration, name)
 	}
 }
 
@@ -168,8 +168,8 @@ func TestDocsAndSkillMatchSurfaces(t *testing.T) {
 	mcp := readDoc(t, "docs/mcp.md")
 	assertContains(t, "docs/mcp.md", mcp, "groups")
 	assertContains(t, "docs/mcp.md", mcp, "expires_at")
-	readme := readDoc(t, "README.md")
-	assertContains(t, "README.md", readme, "DEBUG=true")
+	configuration := readDoc(t, "docs/configuration.md")
+	assertContains(t, "docs/configuration.md", configuration, "DEBUG=true")
 	cli := readDoc(t, "docs/cli.md")
 	assertOmits(t, "docs/cli.md", cli, "owner column")
 }
@@ -198,7 +198,7 @@ func TestDocsDescribeModelTiers(t *testing.T) {
 }
 
 func TestDocsDescribePPLXProxyGateway(t *testing.T) {
-	for _, file := range []string{"README.md", "docs/cli.md"} {
+	for _, file := range []string{"docs/providers.md", "docs/cli.md"} {
 		content := readDoc(t, file)
 		assertContains(t, file, content, "pplx-proxy")
 		assertContains(t, file, content, "cookie")

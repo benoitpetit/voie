@@ -18,11 +18,11 @@ Public providers receive the prompts sent to them; avoid confidential data unles
 3. If MCP is unavailable and the local executable is available, run `voie models --json`, then `voie chat --model MODEL_ID "PROMPT"`.
 4. If only the HTTP API is available, call `GET /v1/models`, then `POST /v1/chat/completions` with the exact model ID and messages. Send the configured bearer token when the API requires authentication.
 
-When automatic selection is requested, use `strategy: "auto"` to select one model or `strategy: "ensemble"` to combine several. The optional `task` hint accepts `coding`, `reasoning`, `writing`, `translation`, `summarization`, or `general`. For an ensemble with explicit model IDs, use `ensemble.models` in MCP/HTTP or repeatable `--ensemble-model` in the CLI; the root-level `models` field is legacy. A task hint does not change that explicit list.
+When automatic selection is requested, use `strategy: "auto"` to select one model or `strategy: "ensemble"` to combine several. The optional `task` hint names a routing profile; built-ins include `coding`, `reasoning`, `writing`, `translation`, `summarization`, and `general`. For an ensemble with explicit model IDs, use `ensemble.models` in MCP/HTTP or repeatable `--ensemble-model` in the CLI; the root-level `models` field is legacy. A task hint does not change that explicit list.
 
 ## Install the CLI
 
-Treat installation as separate from making a model call. Do not install the CLI just because the MCP server and executable are unavailable; use a configured HTTP API or ask whether the user wants installation help. When installation is requested, use the system installer documented in the [README installation guide](https://github.com/benoitpetit/voie#install-a-release). The scripts install the latest public release and verify its SHA-256 checksum. Linux and macOS support amd64/arm64; Windows supports amd64. They leave `PATH` configuration to the user.
+Treat installation as separate from making a model call. Do not install the CLI just because the MCP server and executable are unavailable; use a configured HTTP API or ask whether the user wants installation help. When installation is requested, use the system installer documented in the [installation guide](https://github.com/benoitpetit/voie/blob/main/docs/install.md). The scripts install the latest public release and verify its SHA-256 checksum. Linux and macOS support amd64/arm64; Windows supports amd64. They leave `PATH` configuration to the user.
 
 ## CLI version and updates
 

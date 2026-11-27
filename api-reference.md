@@ -1,107 +1,96 @@
 # HTTP API reference
 
-The `voie` HTTP transport exposes an OpenAI-compatible chat endpoint and provider/model discovery. For CLI and MCP interfaces, see the [CLI guide](docs/cli.md) and [MCP guide](docs/mcp.md).
+The HTTP transport exposes an OpenAI-compatible chat endpoint and
+provider/model discovery. Start it with `voie serve`; the default base URL is
+`http://127.0.0.1:8080`.
 
-Every interface forwards the request to a third-party provider; there is no local inference and no local model weight.
+Every interface forwards the request to a third-party provider; there is no local inference and no local model weight. For the CLI and MCP surfaces, see the [CLI guide](docs/cli.md) and [MCP guide](docs/mcp.md).
 
-## Base URL and authentication
+## Authentication
 
-The default base URL is `http://127.0.0.1:8080`. Configure it with `HOST` and `PORT`.
-
-Loopback binds do not require a token. A non-loopback `HOST` requires `API_TOKEN`; send it on every protected request:
+Loopback binds need no token. A non-loopback `HOST` requires `API_TOKEN`; send
+it on every protected request:
 
 ```http
 Authorization: Bearer <API_TOKEN>
 ```
 
-Hosted deployments also set `REQUIRE_CONVERSATION_SCOPE=true`. In that mode every `/v1/*` route requires a valid 64-character lowercase hexadecimal `X-Voie-Conversation-Scope` supplied by the trusted Worker. The Worker derives it from the active API key record and replaces any client-supplied value; hosted API clients should not set this header themselves. Keys attached to the same repository receive different conversation scopes, while rate limiting remains at project level.
+Hosted deployments set `REQUIRE_CONVERSATION_SCOPE=true`. Every `/v1/*` route
+then requires a 64-character lowercase hexadecimal
+`X-Voie-Conversation-Scope` header supplied by the trusted Worker. The Worker
+derives it from the active API key and replaces any client-supplied value;
+hosted clients should not set it. Keys for the same repository get separate
+scopes while rate limiting stays at project level.
 
-Cross-origin browser requests are rejected. Requests without an `Origin` header (including CLI and MCP clients) are unaffected; browser clients should call the API from the same host origin.
+Cross-origin browser requests are rejected. Requests without an `Origin`
+header, including CLI and MCP clients, are unaffected.
 
 ## `POST /v1/chat/completions`
-
-Creates a completion. Classic requests use a supported `model` ID or alias; `auto` and `ensemble` choose models from a routing profile. The generic `openai` model or an omitted classic model uses `DEFAULT_PROVIDER` when configured, otherwise the first registered provider that reports itself working. An explicit `provider` must support the requested model or every explicit ensemble candidate.
-
-### Request
 
 ```json
 {
   "model": "MODEL_ID",
-  "provider": "optional-provider-name",
-  "strategy": "classic",
-  "fallback": {
-    "enabled": true,
-    "max_retries": 1,
-    "max_fallback_models": 1,
-    "models": ["MODEL_B"]
-  },
-  "conversation_id": "optional-local-session-id",
-  "messages": [
-    {"role": "user", "content": "Hello"}
-  ],
+  "messages": [{"role": "user", "content": "Hello"}],
   "stream": false
 }
 ```
 
-`messages` is required and must contain objects with a supported `role` (`system`, `developer`, `user`, `assistant`, or `tool`). Messages require `content`, except an assistant message may provide `tool_calls` with empty content. `provider`, `strategy`, `task`, `models`, `ensemble`, `conversation_id`, and `stream` are optional, subject to the selected strategy. For ensembles, prefer `ensemble.models`; root-level `models` remains supported for existing clients. When a model ID is supported by more than one provider, the explicit `provider` selects which one handles the request; discovery reports the default route.
+`messages` is required; roles are `system`, `developer`, `user`, `assistant`,
+and `tool`. Messages require `content`, except an assistant message may provide
+`tool_calls` with empty content. `model` is required for classic requests.
 
-Chat request bodies are limited to 2 MiB. The server limits request read time and idle connections; response writes remain unbounded for SSE streams.
+Optional fields: `provider`, `strategy`, `task`, `ensemble`, `fallback`,
+`conversation_id`, and `stream`. `provider` must support the requested model or
+every explicit ensemble candidate.
 
-`strategy` defaults to `classic`, preserving model/provider selection. `auto` selects one eligible model from a routing profile. The optional `task` field names that profile; when omitted, `default_profile` from `routing.json` applies. Local selection is deterministic by default: preferred models are considered first, followed by model ID. A profile can set `selection` to `router` to use `ROUTER_MODEL` for a semantic choice within its eligible candidates.
+Chat bodies are capped at 2 MiB. Request reads and idle connections are bounded;
+SSE response writes are not.
 
-`ensemble` runs two to five agents and synthesizes their work. `ensemble.candidate_count` chooses how many candidates to select automatically for this request. `ensemble.models` supplies an exact list of agent model IDs instead; if both fields are present, the count must match the list length. If neither is supplied, `candidate_count` from `routing.json` applies (default 3). Root-level `models` remains a legacy way to provide that exact list and cannot be combined with `ensemble.models`. `ensemble.mode` is `independent`, `chain`, or `debate`; it defaults to the configured value (initially `independent`). Independent agents answer in parallel. In chain mode, each later agent reviews the previous draft; `candidate_count` sets its length, while `chain_agents` remains supported for compatibility. Debate starts with parallel drafts, then each agent reviews the others' latest drafts; `debate_turns` sets the review rounds (0–5), and zero skips review rounds before synthesis. `SYNTHESIS_MODEL` produces the final answer and falls back to `ROUTER_MODEL`. The `provider` constraint applies to automatic candidates and is validated against every explicit ensemble model.
+### Strategies
 
-When supplying `ensemble.models` explicitly, list 2–5 distinct candidates; the synthesis model must be separate. `model` is not used by `auto` or `ensemble`, and strategy-specific fields are rejected when they do not apply.
+`strategy` defaults to `classic`, which uses `model` and `provider`. The generic
+`openai` model, or an omitted classic model, uses `DEFAULT_PROVIDER` or the
+first provider that reports itself working.
 
-`fallback` is an optional per-request override of the global fallback policy. Omitted fields inherit the policy; `enabled` (boolean), `max_retries`, and `max_fallback_models` (each `0`–`3`) override the configured bounds, and `models` supplies candidate model IDs in fallback order, replacing the configured per-model list. An empty `models` list clears every candidate. `max_retries: 0` skips same-model retries, `max_fallback_models: 0` skips fallback, and `enabled: false` disables both. Bounds and model IDs are validated before any provider is called, so an invalid override returns `400`. Retries and fallback only happen before the first streamed content chunk.
-
-```json
-{"model":"MODEL_ID","fallback":{"enabled":false},"messages":[{"role":"user","content":"Hello"}]}
-```
-
-```json
-{"model":"MODEL_ID","fallback":{"models":["MODEL_B"]},"messages":[{"role":"user","content":"Hello"}]}
-```
-
-A `routing` object identifies the strategy, selected profile, per-model results, and the `attempts` array. For ensembles it also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`. Each `attempts` entry records one provider call: `model`, `provider`, `attempt` index, `outcome`, and `duration_ms` when known. `conversation_id` appears when the request used local conversation tracking. Streaming responses put available routing and conversation metadata on the first SSE chunk.
-
-Automatic routing:
+`auto` selects one eligible model from a routing profile:
 
 ```json
 {"strategy":"auto","task":"coding","messages":[{"role":"user","content":"Review this code"}]}
 ```
 
-Ensemble with automatic candidate selection and a task hint:
+`task` names a profile from `routing.json`; omitted, `default_profile` applies.
+Selection is deterministic unless the profile sets `selection: "router"`.
+
+`ensemble` runs two to five agents and synthesizes their work:
 
 ```json
 {"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent","candidate_count":4},"messages":[{"role":"user","content":"Compare these approaches"}]}
 ```
 
-Ensemble with an exact list of three agent models:
+`ensemble.mode` is `independent`, `chain`, or `debate`; it defaults to the
+configured value. `candidate_count` selects agents automatically, while
+`ensemble.models` supplies an exact list. If both are present, the count must
+match the list length. `debate_turns` accepts 0–5. `SYNTHESIS_MODEL` produces the
+final answer, falling back to `ROUTER_MODEL`. Root-level `models` remains a
+legacy alias for the explicit list and cannot be combined with
+`ensemble.models`. Explicit candidates must be 2–5 distinct models and must not
+include the synthesizer.
+
+### Fallback
+
+`fallback` overrides the global policy for one request. Omitted fields inherit;
+`enabled`, `max_retries`, and `max_fallback_models` (each 0–3) override bounds;
+`models` replaces the configured candidate list.
 
 ```json
-{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"independent","candidate_count":3,"models":["MODEL_A","MODEL_B","MODEL_C"]},"messages":[{"role":"user","content":"Compare these approaches"}]}
+{"model":"MODEL_ID","fallback":{"enabled":false},"messages":[{"role":"user","content":"Hello"}]}
 ```
 
-Sequential review chain with a request-level agent count:
-
-```json
-{"strategy":"ensemble","task":"code-review","ensemble":{"mode":"chain","candidate_count":4},"messages":[{"role":"user","content":"Review this proposal"}]}
-```
-
-Mutual debate with request-level review rounds:
-
-```json
-{"strategy":"ensemble","task":"reasoning","ensemble":{"mode":"debate","debate_turns":2},"messages":[{"role":"user","content":"Compare these approaches"}]}
-```
-
-To select exact ensemble candidates, provide them in `ensemble.models`; in that case, `task` does not change the explicit list.
-
-Use `GET /v1/models` to discover current IDs. Some providers return complete responses rather than streaming tokens, so a request with `stream: true` may receive the completed answer as one content chunk.
+An empty `models` list clears every candidate. Invalid bounds or IDs return
+`400` before any provider call. Retries and fallback happen only before the
+first streamed content chunk.
 
 ### Non-streaming response
-
-Successful responses keep the OpenAI-compatible `chat.completion` shape. `provider` identifies the selected upstream provider.
 
 ```json
 {
@@ -117,11 +106,7 @@ Successful responses keep the OpenAI-compatible `chat.completion` shape. `provid
       "finish_reason": "stop"
     }
   ],
-  "usage": {
-    "prompt_tokens": 4,
-    "completion_tokens": 2,
-    "total_tokens": 6
-  },
+  "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
   "routing": {
     "strategy": "classic",
     "attempts": [
@@ -132,9 +117,14 @@ Successful responses keep the OpenAI-compatible `chat.completion` shape. `provid
 }
 ```
 
+`routing` identifies the strategy and records each provider call. For ensembles
+it also reports `ensemble_mode`, `agents`, `turns`, and `synthesis_model`.
+`conversation_id` appears when conversation tracking is used.
+
 ### Streaming response
 
-Set `stream` to `true`. The server returns `text/event-stream` with OpenAI-compatible `chat.completion.chunk` JSON events followed by `data: [DONE]`.
+Set `stream` to `true` to receive `text/event-stream` with
+`chat.completion.chunk` events followed by `data: [DONE]`.
 
 ```bash
 curl -N http://127.0.0.1:8080/v1/chat/completions \
@@ -142,11 +132,15 @@ curl -N http://127.0.0.1:8080/v1/chat/completions \
   -d '{"model":"MODEL_ID","stream":true,"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-If an error occurs before the stream starts, the server returns a normal JSON error status. Errors after the first SSE event are sent as an SSE `error` event. Retries and fallback occur only before the first content chunk; once content has been delivered, a subsequent failure ends the stream without substituting another model.
+Errors before the stream starts use a normal JSON status; later errors arrive
+as an SSE `error` event. Some providers return a complete answer, so a streamed
+request may receive one content chunk. With `stream_options.include_usage`, a
+final chunk carries estimated usage.
 
 ## `GET /v1/models`
 
-Lists the current model catalogue. Do not rely on a fixed count; provider catalogues can change.
+Lists the current catalogue. Provider catalogues change, so discover at
+runtime instead of pinning a count.
 
 ```json
 {
@@ -166,9 +160,18 @@ Lists the current model catalogue. Do not rely on a fixed count; provider catalo
 }
 ```
 
+Each item has a `tier` (`free` or `paid`), an optional `price` object
+(`currency`, `prompt_per_token`, `completion_per_token`), and `group`. Filter
+with `?tier=free|paid` and `?provider=NAME`; an invalid tier or unknown provider
+returns `400` or `404`. Free models show `USD 0/0`; paid models without a public
+price show `price unknown`. ACP-backed CLI providers show `subscribe`.
+OrcaRouter publishes its authenticated catalogue as `paid`; OpenRouter supplies
+public per-token prices where available.
+
 ## `GET /v1/providers`
 
-Lists registered providers and checks reachability with HTTP GET. Checks run concurrently and each has a three-second timeout.
+Lists providers and checks reachability with concurrent HTTP GETs (three-second
+timeout).
 
 ```json
 {
@@ -181,7 +184,9 @@ Lists registered providers and checks reachability with HTTP GET. Checks run con
       "label": "Provider label",
       "url": "https://provider.example",
       "working": true,
+      "ready": true,
       "alive": true,
+      "free_models": ["MODEL_ID"],
       "supported_models": ["MODEL_ID"],
       "default_model": "MODEL_ID",
       "supports_stream": true,
@@ -193,34 +198,46 @@ Lists registered providers and checks reachability with HTTP GET. Checks run con
 }
 ```
 
-`alive` is `true` when an HTTP response is received, including 4xx and 5xx statuses. It indicates URL reachability only; it does not verify model inference.
+`alive` is true when any HTTP response is received, including 4xx and 5xx. It
+means URL reachability only, not working inference. `free_models` is always
+present: non-empty lists verified free IDs; empty means none are free.
 
 ## `GET /health`
 
-Returns local registry health without probing provider websites. The response includes `status`, `timestamp`, `version`, `providers_total`, `providers_working`, `working_providers`, and `total_models`.
+Returns local readiness without probing upstreams: `status`, `timestamp`,
+`version`, `providers_total`, `providers_working`, `working_providers`, and
+`total_models`.
 
 ## Conversations
 
-Conversation storage is SQLite, configured by `CONVERSATION_DB_PATH` (default `<user-config-dir>/voie/conversations.db`; on Linux, typically `~/.config/voie/conversations.db`). macOS and Windows use their standard per-user configuration directories. `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only tombstone retained for 30 days. Local binary use keeps the default single-user namespace. In a hosted deployment, the Worker supplies an opaque scope for the active API key, and every conversation operation is isolated to that key, including when multiple keys belong to the same repository. Existing project-scoped hosted rows are not reassigned to keys; they become inaccessible through the hosted API and expire through normal cleanup.
+`CONVERSATION_DB_PATH` selects the SQLite file; the default is
+`<user-config-dir>/voie/conversations.db` (`~/.config/voie/conversations.db` on
+Linux). `CONVERSATION_TTL` defaults to `720h` of inactivity. Successful turns
+refresh expiry; reads do not. Expired transcripts are deleted, with an ID-only
+tombstone kept for 30 days. Hosted keys receive isolated scopes.
 
-- `POST /v1/conversations` creates a conversation and returns `201` with its ID and timestamps.
-- `GET /v1/conversations` returns summary rows without transcript contents.
+- `POST /v1/conversations` creates one and returns `201` with timestamps.
+- `GET /v1/conversations` lists summaries without transcripts.
 - `GET /v1/conversations/{id}` returns the transcript.
-- `DELETE /v1/conversations/{id}` removes it and returns `204`.
+- `DELETE /v1/conversations/{id}` returns `204`.
 
-Send `conversation_id` in a completion request to append a turn and include saved turns as context. The ID must already exist — create it with `POST /v1/conversations` first; an unknown ID returns `404`. Only successful completions are saved. Conversations are capped at 200 messages and 2 MiB. A stale concurrent turn returns `409`; expired IDs return `410` during the 30-day tombstone period and then `404`. Requests without `conversation_id` never open the local conversation database.
+Send `conversation_id` in a completion to append a turn. Create it first; an
+unknown ID returns `404`. Only successful completions are saved. Conversations
+cap at 200 messages and 2 MiB. A stale concurrent turn returns `409`; expired
+IDs return `410` during the tombstone period, then `404`. Requests without
+`conversation_id` do not open the database.
 
 ## `GET /`
 
-Returns API name, version, route names, registered provider count, model count, and the `openai_compatible` flag.
+Returns the API name, version, route names, provider count, model count, and the
+`openai_compatible` flag.
 
 ## Errors
 
-### Server request logs
-
-Each HTTP request, including authentication failures, is logged to stderr with a short request ID, method, URL path, final status, and elapsed time. Chat records also include the routing summary or a typed failure category. Logs omit query values, headers, request and response bodies, prompts, answers, token counts, and client IPs. SSE responses continue to flush each chunk as it is produced; logging does not buffer the response.
-
-Errors use this JSON envelope:
+Each request is logged to stderr with a short request ID, method, path, status,
+and duration. Chat logs add the routing summary or a typed failure category.
+Logs omit query values, headers, bodies, prompts, answers, token counts, and
+client IPs.
 
 ```json
 {
@@ -235,55 +252,42 @@ Errors use this JSON envelope:
 | HTTP status | Meaning |
 | --- | --- |
 | `400` | Invalid input, unknown model, provider/model mismatch, or invalid fallback bounds/IDs |
-| `401` | Missing or invalid bearer token, or missing required hosted conversation scope |
+| `401` | Missing or invalid bearer token, or missing hosted conversation scope |
 | `403` | Origin host or port does not match the request host |
-| `404` | Unknown provider, unknown conversation, or unmatched route |
+| `404` | Unknown provider, conversation, or route |
 | `405` | Unsupported method on a route that checks methods |
 | `408` | Request canceled |
 | `409` | Conversation changed during a concurrent turn |
 | `410` | Conversation expired (tombstone retained) |
-| `413` | Chat request body exceeds 2 MiB |
+| `413` | Chat body exceeds 2 MiB |
 | `500` | Local conversation storage failure |
 | `502` | Upstream provider failure |
 | `503` | Provider disabled |
 | `504` | Completion timed out |
 
-Completions use the configured end-to-end `TIMEOUT` (seconds), defaulting to 120 seconds. Unknown model IDs are rejected instead of being silently sent to another provider.
+Completions use the configured end-to-end `TIMEOUT` (default 120 seconds).
+Unknown model IDs are rejected instead of being sent to another provider.
 
-Routing and conversation configuration: `ROUTER_MODEL` is used only by profiles with `selection: "router"` and as the ensemble synthesis fallback; `SYNTHESIS_MODEL` produces ensemble output. `ROUTING_CONFIG_PATH` defaults to `<user-config-dir>/voie/routing.json`, `CONVERSATION_DB_PATH` defaults to `<user-config-dir>/voie/conversations.db`, and `CONVERSATION_TTL` defaults to `720h`.
+## Supported OpenAI subset
 
-
-When `stream_options.include_usage` is true, a final SSE chunk carries an estimated `usage` object (token counts are computed from character counts, not reported by the upstream provider).
-
-## Supported OpenAI request subset
-
-The chat endpoint accepts `model`, `messages`, `stream`, `provider`, `strategy`,
-`task`, `ensemble`, `fallback`, and `conversation_id`. It also forwards these
-OpenAI-compatible fields when the selected provider is OpenAI-compatible:
+The endpoint accepts `model`, `messages`, `stream`, `provider`, `strategy`,
+`task`, `ensemble`, `fallback`, and `conversation_id`. It forwards
 `temperature`, `max_tokens`, `top_p`, `stop`, `tools`, `tool_choice`, and
-`stream_options`. Providers that do not implement a field ignore it. Only one
-completion choice is supported: `n` greater than 1 is rejected with `400`.
+`stream_options` when the selected provider is OpenAI-compatible; providers
+that do not implement a field ignore it. Only one completion choice is supported:
+`n` greater than 1 returns `400`.
 
 Non-streaming responses include `message.tool_calls` when the upstream returns
-them. Streamed responses emit additional `chat.completion.chunk` events with
-`delta.tool_calls` before the `finish_reason` chunk. Token counts remain
-estimates unless the upstream reports them.
-
-
-### GET /v1/models filters
-
-`GET /v1/models` accepts `?tier=free|paid` and `?provider=NAME`. An invalid `tier` returns `400`. Each model in `data` has a `tier` field (`free` or `paid`) and an optional `price` object with `currency`, `prompt_per_token` and `completion_per_token` when a public price is known; paid models with no public price display `price unknown` in human-facing surfaces.
-
-## Model and provider discovery fields
-
-Each item in `GET /v1/models` includes `tier` (`"free"` or `"paid"`), an optional `price` object (`currency`, `prompt_per_token`, `completion_per_token`) when a public price is known, and `group`. Filter with `?tier=free|paid` and `?provider=NAME`; an unknown provider returns `404`. Each item in `GET /v1/providers` also includes `ready`, `free_models` and `supports_stream`. `free_models` is always present: a non-empty array lists verified free IDs, an empty array means none are free.
-
-Every `free` model exposes `USD 0/0` as its price (zero cost to the caller); public upstream prices replace that value when available. Paid models with no public price show `price unknown`.
-
-OpenRouter also exposes its public catalogue of paid models as `paid`, with real per-token USD prices from its public API; verified `:free` aliases remain `free` with `USD 0/0`.
-
-ACP-backed CLI providers publish the models advertised by the agent itself (cached for 24 h after a connection) alongside their `*-auto` alias; they run on your own subscription and show `subscribe` in the PRICE column. OrcaRouter publishes its authenticated model catalogue as `paid` with real per-token USD prices; unpriced router aliases stay `free`.
+them. Streamed responses emit `delta.tool_calls` chunks before `finish_reason`.
+Token counts are estimates unless the upstream reports them.
 
 ## A2A endpoints
 
-`GET /.well-known/agent-card.json` returns the public Agent Card (no bearer token required). `POST /a2a` accepts JSON-RPC 2.0 methods `SendMessage`, `SendStreamingMessage` (SSE), `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask` and `GetExtendedAgentCard`; legacy aliases `message/send`, `message/stream`, `tasks/get`, `tasks/list`, `tasks/cancel` and `tasks/resubscribe` are accepted. `SendMessage` takes a message with text parts and optional `metadata` (`strategy`, `task`, `model`, `skill`, `ensemble`) and returns a Task with a text artifact. Connected remote agents appear as `a2a-<name>-<skill>` model IDs and respond to the standard chat endpoints as well.
+`GET /.well-known/agent-card.json` returns the public Agent Card without a
+bearer token. `POST /a2a` accepts JSON-RPC 2.0 `SendMessage`,
+`SendStreamingMessage` (SSE), `GetTask`, `ListTasks`, `CancelTask`,
+`SubscribeToTask`, and `GetExtendedAgentCard`; legacy method aliases are
+accepted. `SendMessage` takes text parts and optional `metadata` (`strategy`,
+`task`, `model`, `skill`, `ensemble`) and returns a Task with a text artifact.
+Connected remote agents appear as `a2a-<name>-<skill>` model IDs and work
+through the standard chat endpoint.
