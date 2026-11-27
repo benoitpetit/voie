@@ -96,10 +96,11 @@ func TestDocumentedCommandsAndStatusCodes(t *testing.T) {
 	}
 }
 
-func TestDockerfileDeclaresAPIToken(t *testing.T) {
+func TestDockerfileRequiresExplicitAPIToken(t *testing.T) {
 	dockerfile := readDoc(t, "Dockerfile")
 	assertContains(t, "Dockerfile", dockerfile, "HOST=0.0.0.0")
-	assertContains(t, "Dockerfile", dockerfile, "API_TOKEN=")
+	assertOmits(t, "Dockerfile", dockerfile, "API_TOKEN=")
+	assertContains(t, "Dockerfile", dockerfile, "REQUIRE_CONVERSATION_SCOPE=true")
 	assertContains(t, "docs/deploy-coolify.md", readDoc(t, "docs/deploy-coolify.md"), "API_TOKEN")
 }
 

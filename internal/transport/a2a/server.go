@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ const (
 	codeContentType    = -32003
 	codeInvalidState   = -32004
 	codeUnavailable    = -32005
+	maxA2ARequestBytes = 2 << 20
 )
 
 // Handler serves A2A JSON-RPC requests using the shared service.
@@ -50,9 +52,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxA2ARequestBytes)
 	var request RPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	if err := decoder.Decode(&request); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "request body is too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		writeRPC(w, r, RPCResponse{JSONRPC: "2.0", Error: &RPCError{Code: codeInvalidParams, Message: "invalid JSON-RPC request"}})
+		return
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "request body is too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		writeRPCError(w, request.ID, &RPCError{Code: codeInvalidRequest, Message: "request must contain one JSON-RPC value"})
 		return
 	}
 	if request.JSONRPC != "2.0" {
@@ -180,13 +199,15 @@ func (h *Handler) send(ctx context.Context, message Message, owner string) (Task
 	}
 	callCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	h.store.create(id, owner, callCtx, cancel)
-	h.store.appendHistory(id, message)
-	h.store.setStatus(id, "TASK_STATE_WORKING")
+	if _, ok := h.store.create(id, owner, callCtx, cancel); !ok {
+		return Task{}, &RPCError{Code: codeUnavailable, Message: "task ID is already present or task store is at capacity"}
+	}
+	h.store.appendHistory(id, owner, message)
+	h.store.setStatus(id, owner, "TASK_STATE_WORKING")
 	var answer string
 	response, callErr := h.service.Complete(callCtx, request)
 	if callErr != nil {
-		h.store.setStatus(id, "TASK_STATE_FAILED")
+		h.store.setStatus(id, owner, "TASK_STATE_FAILED")
 		return Task{}, failureFor(callErr)
 	}
 	if len(response.Choices) > 0 {
@@ -194,7 +215,7 @@ func (h *Handler) send(ctx context.Context, message Message, owner string) (Task
 		request.ConversationID = response.ConversationID
 	}
 	if answer == "" {
-		h.store.setStatus(id, "TASK_STATE_FAILED")
+		h.store.setStatus(id, owner, "TASK_STATE_FAILED")
 		return Task{}, &RPCError{Code: codeUnavailable, Message: "upstream returned no text"}
 	}
 	task := Task{
@@ -203,7 +224,7 @@ func (h *Handler) send(ctx context.Context, message Message, owner string) (Task
 		Status:    TaskStatus{State: "TASK_STATE_COMPLETED", Timestamp: timestamp()},
 		Artifacts: []Artifact{{ArtifactID: uuid.NewString(), Parts: []Part{{Text: answer, MediaType: "text/plain"}}}},
 	}
-	h.store.setTask(id, task)
+	h.store.setTask(id, owner, task)
 	return task, nil
 }
 
@@ -225,9 +246,11 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, message Message
 	}
 	callCtx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	h.store.create(taskID, owner, callCtx, cancel)
-	h.store.appendHistory(taskID, message)
-	h.store.setStatus(taskID, "TASK_STATE_WORKING")
+	if _, ok := h.store.create(taskID, owner, callCtx, cancel); !ok {
+		return &RPCError{Code: codeUnavailable, Message: "task ID is already present or task store is at capacity"}
+	}
+	h.store.appendHistory(taskID, owner, message)
+	h.store.setStatus(taskID, owner, "TASK_STATE_WORKING")
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -244,7 +267,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, message Message
 		writeSSE(w, flusher, event)
 	})
 	if callErr != nil {
-		h.store.setStatus(taskID, "TASK_STATE_FAILED")
+		h.store.setStatus(taskID, owner, "TASK_STATE_FAILED")
 		writeSSE(w, flusher, statusEvent(taskID, contextID, "TASK_STATE_FAILED"))
 		return nil
 	}
@@ -254,7 +277,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, message Message
 		Status:    TaskStatus{State: "TASK_STATE_COMPLETED", Timestamp: timestamp()},
 		Artifacts: []Artifact{{ArtifactID: taskID + "-artifact", Parts: []Part{{Text: answer.String(), MediaType: "text/plain"}}}},
 	}
-	h.store.setTask(taskID, task)
+	h.store.setTask(taskID, owner, task)
 	writeSSE(w, flusher, statusEvent(taskID, contextID, "TASK_STATE_COMPLETED"))
 	return nil
 }

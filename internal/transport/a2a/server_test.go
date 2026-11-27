@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -130,8 +131,9 @@ func TestSendStreamingMessageEmitsTaskEvents(t *testing.T) {
 func TestCancelTaskMarksWorkingTaskCanceled(t *testing.T) {
 	h := NewHandler(a2aTestService(t))
 	handler := http.Handler(h)
-	h.store.create("task-1", "", context.Background(), func() {})
-	h.store.setStatus("task-1", "TASK_STATE_WORKING")
+	owner := ownerFor(httptest.NewRequest(http.MethodPost, "/a2a", nil))
+	h.store.create("task-1", owner, context.Background(), func() {})
+	h.store.setStatus("task-1", owner, "TASK_STATE_WORKING")
 	result := rpcRequest(t, handler, `{"jsonrpc":"2.0","id":1,"method":"CancelTask","params":{"id":"task-1"}}`)
 	task, _ := result["result"].(map[string]any)
 	status, _ := task["status"].(map[string]any)
@@ -170,8 +172,9 @@ func TestContextIdRoundTripUsesRealConversation(t *testing.T) {
 
 func TestSubscribeToTaskStreamsTerminalState(t *testing.T) {
 	h := NewHandler(a2aTestService(t))
-	h.store.create("done", "", context.Background(), func() {})
-	h.store.setStatus("done", "TASK_STATE_COMPLETED")
+	owner := ownerFor(httptest.NewRequest(http.MethodPost, "/a2a", nil))
+	h.store.create("done", owner, context.Background(), func() {})
+	h.store.setStatus("done", owner, "TASK_STATE_COMPLETED")
 	recorder := httptest.NewRecorder()
 	h.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"SubscribeToTask","params":{"id":"done"}}`)))
 	body := recorder.Body.String()
@@ -200,8 +203,9 @@ func TestInvalidJSONRPCVersionIsRejected(t *testing.T) {
 
 func TestListTasksPagination(t *testing.T) {
 	h := NewHandler(a2aTestService(t))
+	owner := ownerFor(httptest.NewRequest(http.MethodPost, "/a2a", nil))
 	for _, id := range []string{"t1", "t2", "t3"} {
-		h.store.create(id, "", context.Background(), func() {})
+		h.store.create(id, owner, context.Background(), func() {})
 	}
 	result := rpcRequest(t, h, `{"jsonrpc":"2.0","id":1,"method":"ListTasks","params":{"pageSize":2}}`)
 	page, _ := result["result"].(map[string]any)
@@ -225,14 +229,107 @@ func TestTaskStoreIsOwnerScoped(t *testing.T) {
 func TestTaskIDsDoNotCollideAcrossOwners(t *testing.T) {
 	h := NewHandler(a2aTestService(t))
 	h.store.create("shared", "a", context.Background(), func() {})
-	h.store.setStatus("shared", "TASK_STATE_WORKING")
 	h.store.create("shared", "b", context.Background(), func() {})
+	h.store.setStatus("shared", "a", "TASK_STATE_WORKING")
+	h.store.appendHistory("shared", "a", Message{Role: "ROLE_USER", Parts: []Part{{Text: "private to a"}}})
+	h.store.setTask("shared", "a", Task{
+		ID:      "shared",
+		Status:  TaskStatus{State: "TASK_STATE_COMPLETED"},
+		History: []Message{{Role: "ROLE_USER", Parts: []Part{{Text: "private to a"}}}},
+	})
 	first, ok := h.store.get("shared", "a")
-	if !ok || first.Status.State != "TASK_STATE_WORKING" {
+	if !ok || first.Status.State != "TASK_STATE_COMPLETED" || len(first.History) != 1 || first.History[0].Parts[0].Text != "private to a" {
 		t.Fatalf("owner a task = %+v ok=%v", first, ok)
 	}
 	second, ok := h.store.get("shared", "b")
-	if !ok || second.Status.State == "TASK_STATE_WORKING" {
+	if !ok || second.Status.State != "TASK_STATE_SUBMITTED" || len(second.History) != 0 || len(second.Artifacts) != 0 {
 		t.Fatalf("owner b task = %+v ok=%v", second, ok)
+	}
+}
+
+func TestTaskStoreRejectsDuplicateTaskIDWithinOwner(t *testing.T) {
+	store := newTaskStore()
+	if _, ok := store.create("duplicate", "owner", context.Background(), nil); !ok {
+		t.Fatal("could not create initial task")
+	}
+	if _, ok := store.create("duplicate", "owner", context.Background(), nil); ok {
+		t.Fatal("created a second task with the same owner and id")
+	}
+	if len(store.tasks) != 1 {
+		t.Fatalf("retained %d tasks, want one", len(store.tasks))
+	}
+}
+
+func TestServeHTTPRejectsOversizedJSONRPCBody(t *testing.T) {
+	h := NewHandler(a2aTestService(t))
+	body := `{"jsonrpc":"2.0","id":1,"method":"GetExtendedAgentCard","params":{}}` + strings.Repeat(" ", 2*1024*1024)
+	recorder := httptest.NewRecorder()
+	h.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(body)))
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestServeHTTPRejectsTrailingJSONRPCValue(t *testing.T) {
+	h := NewHandler(a2aTestService(t))
+	body := `{"jsonrpc":"2.0","id":1,"method":"GetExtendedAgentCard","params":{}} {}`
+	recorder := httptest.NewRecorder()
+	h.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/a2a", strings.NewReader(body)))
+	var response map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("response %q: %v", recorder.Body.String(), err)
+	}
+	failure, _ := response["error"].(map[string]any)
+	if failure["code"] != float64(codeInvalidRequest) {
+		t.Fatalf("error = %+v, want JSON-RPC invalid request", failure)
+	}
+}
+
+func TestTaskStoreRejectsWhenAllRetainedTasksAreActive(t *testing.T) {
+	store := newTaskStore()
+	for i := 0; i < 256; i++ {
+		id := fmt.Sprintf("task-%03d", i)
+		store.create(id, "", context.Background(), nil)
+		store.setStatus(id, "", "TASK_STATE_WORKING")
+	}
+	store.create("overflow", "", context.Background(), nil)
+	if len(store.tasks) > 256 || store.tasks[store.key("overflow", "")] != nil {
+		t.Fatalf("active task store exceeded its cap: %d entries", len(store.tasks))
+	}
+}
+
+func TestTaskStoreEvictsTerminalTasksAtCapacity(t *testing.T) {
+	store := newTaskStore()
+	for i := 0; i < 256; i++ {
+		id := fmt.Sprintf("task-%03d", i)
+		store.create(id, "", context.Background(), nil)
+		store.setStatus(id, "", "TASK_STATE_WORKING")
+	}
+	store.setStatus("task-000", "", "TASK_STATE_COMPLETED")
+	store.create("replacement", "", context.Background(), nil)
+	if len(store.tasks) != 256 || store.tasks[store.key("replacement", "")] == nil {
+		t.Fatalf("new task was not retained within the cap: %d entries", len(store.tasks))
+	}
+	if _, ok := store.get("task-000", ""); ok {
+		t.Fatal("terminal task was not evicted")
+	}
+}
+
+func TestTaskStoreCleanupCancelsExpiredWork(t *testing.T) {
+	store := newTaskStore()
+	cancelled := false
+	entry, ok := store.create("expired", "", context.Background(), func() { cancelled = true })
+	if !ok {
+		t.Fatal("could not create initial task")
+	}
+	entry.updated = time.Now().Add(-taskTTL - time.Second)
+	store.setStatus("expired", "", "TASK_STATE_WORKING")
+	entry.updated = time.Now().Add(-taskTTL - time.Second)
+	store.create("replacement", "", context.Background(), nil)
+	if !cancelled {
+		t.Fatal("cleanup did not cancel expired active work")
+	}
+	if store.tasks[store.key("expired", "")] != nil {
+		t.Fatal("expired task remained in the store")
 	}
 }
